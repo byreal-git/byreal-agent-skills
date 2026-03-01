@@ -21,7 +21,6 @@
     "test": "vitest",
     "test:run": "vitest run",
     "clean": "rm -rf dist",
-    "prepare": "test -f dist/index.cjs || npm run build",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

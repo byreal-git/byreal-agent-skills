@@ -1,0 +1,10 @@
+# npm ignore - overrides .gitignore for packaging
+# Only dist/index.cjs and skills/ are needed (controlled by "files" in package.json)
+node_modules/
+src/
+DOCS/
+.github/
+*.ts
+*.log
+.env*
+coverage/
