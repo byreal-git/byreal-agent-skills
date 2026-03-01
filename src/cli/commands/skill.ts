@@ -43,6 +43,8 @@ byreal-cli --version
 | Open position | \`byreal-cli positions open --pool <addr> --price-lower <p> --price-upper <p> --base <token> --amount <amount> --confirm -o json\` |
 | Close position | \`byreal-cli positions close --nft-mint <addr> --confirm -o json\` |
 | Claim fees | \`byreal-cli positions claim --nft-mints <addrs> --confirm -o json\` |
+| Analyze pool | \`byreal-cli pools analyze <pool-id> -o json\` |
+| Analyze position | \`byreal-cli positions analyze <nft-mint> -o json\` |
 | Wallet address | \`byreal-cli wallet address -o json\` |
 | Wallet balance | \`byreal-cli wallet balance -o json\` |
 | Set keypair | \`byreal-cli wallet set <keypair-path>\` |
@@ -310,6 +312,60 @@ Options:
   --confirm                Execute the claim
 \`\`\`
 
+### pools analyze
+Comprehensive pool analysis: metrics, volatility, multi-range APR comparison, risk assessment, and investment projection.
+
+\`\`\`bash
+byreal-cli pools analyze <pool-id> [options]
+
+Options:
+  --amount <usd>       Simulated investment amount in USD (default: 1000)
+  --ranges <percents>  Custom range percentages, comma-separated (default: 1,5,10,20,50)
+\`\`\`
+
+Response includes:
+- **pool**: Basic info (address, pair, category, currentPrice, feeRate, tickSpacing)
+- **metrics**: TVL, volume (24h/7d), fees (24h/7d), feeApr24h, volumeToTvl ratio
+- **volatility**: Price changes (1h/24h/7d), 24h price range and range percent
+- **rewards**: Active reward programs (token, endTime)
+- **rangeAnalysis**: For each range %, shows priceLower/Upper, estimated fee APR, in-range likelihood, rebalance frequency
+- **riskFactors**: TVL risk, volatility risk, category risk, and human-readable summary
+- **investmentProjection**: Daily/weekly/monthly fee estimates for given investment amount
+
+Examples:
+\`\`\`bash
+# Default analysis (1000 USD, ranges: 1,5,10,20,50)
+byreal-cli pools analyze 9GTj99g9tbz9U6UYDsX6YeRTgUnkYG6GTnHv3qLa5aXq -o json
+
+# Custom amount and ranges
+byreal-cli pools analyze 9GTj99g9tbz9U6UYDsX6YeRTgUnkYG6GTnHv3qLa5aXq --amount 5000 --ranges 2,5,15 -o json
+\`\`\`
+
+### positions analyze
+Analyze an existing position: performance, range health, pool context, and unclaimed fees.
+
+\`\`\`bash
+byreal-cli positions analyze <nft-mint> -o json
+\`\`\`
+
+Response includes:
+- **position**: NFT mint, pool, pair, price range, status, inRange
+- **performance**: liquidityUsd, earnedUsd/%, pnlUsd/%, netReturnUsd/%
+- **rangeHealth**: currentPrice, distance to lower/upper bounds, rangeWidth, outOfRangeRisk
+- **poolContext**: feeApr24h, volume24h, tvl, priceChange24h
+- **unclaimedFees**: tokenA and tokenB unclaimed fee amounts
+
+## Workflow: Analyze → Open Position
+
+Recommended workflow for informed position opening:
+
+1. **Find pools**: \`byreal-cli pools list --sort-field apr24h -o json\`
+2. **Analyze pool**: \`byreal-cli pools analyze <pool-id> -o json\` — get full analysis
+3. **Interpret rangeAnalysis**: Conservative → larger range (20-50%), Aggressive → smaller range (1-5%)
+4. **Check riskFactors**: Evaluate if TVL, volatility, and category risks are acceptable
+5. **Preview position**: \`byreal-cli positions open --pool <id> --price-lower <p> --price-upper <p> --base MintA --amount <amt> --dry-run -o json\`
+6. **Execute**: \`byreal-cli positions open ... --confirm -o json\`
+
 ## Amount Handling
 
 **All token amounts (--amount) use UI format by default.** For example, \`--amount 0.1\` means 0.1 tokens, not 0.1 lamports. The CLI automatically resolves token decimals based on the mint address:
@@ -387,10 +443,12 @@ byreal-cli catalog show dex.pool.list -o json
 | dex.pool.list | Query pool list with sorting/filtering |
 | dex.pool.info | Get pool details |
 | dex.pool.klines | Get K-line data |
+| dex.pool.analyze | Comprehensive pool analysis |
 | dex.token.list | Query tokens with search |
 | dex.overview.global | Global statistics |
 | dex.swap.execute | Preview or execute a token swap |
 | dex.position.list | List user's CLMM positions |
+| dex.position.analyze | Analyze existing position |
 | dex.position.open | Open a new CLMM position |
 | dex.position.close | Close a position |
 | dex.position.claim | Claim accumulated fees |

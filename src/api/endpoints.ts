@@ -335,13 +335,16 @@ function transformPool(apiPool: ApiSimplePoolInfo): Pool {
       price_usd: parseFloat(apiPool.quoteMint?.price || apiPool.mintB?.price || '0'),
     },
     tvl_usd: parseFloat(apiPool.tvl || '0'),
-    volume_24h_usd: parseFloat(apiPool.volumeUsd24h || '0'),
+    volume_24h_usd: parseFloat(apiPool.volumeUsd1d || apiPool.volumeUsd24h || '0'),
     volume_7d_usd: parseFloat(apiPool.volumeUsd7d || '0'),
-    fee_rate_bps: parseInt(apiPool.feeRate?.fixFeeRate || '0', 10),
-    fee_24h_usd: parseFloat(apiPool.feeUsd24h || '0'),
+    fee_rate_bps: parseInt(apiPool.feeRate?.fixFeeRate || '0', 10) / 100, // fixFeeRate is in 1/100 bps
+    fee_24h_usd: parseFloat(apiPool.feeUsd1d || apiPool.feeUsd24h || '0'),
     apr: parseFloat(apiPool.feeApr24h || '0') * 100, // 转换为百分比
     current_price: poolPrice,
     created_at: apiPool.openTime ? new Date(apiPool.openTime).toISOString() : '',
+    price_change_1h: apiPool.priceChange1h ? parseFloat(apiPool.priceChange1h) * 100 : undefined,
+    price_change_24h: apiPool.priceChange1d ? parseFloat(apiPool.priceChange1d) * 100 : undefined,
+    price_change_7d: apiPool.priceChange7d ? parseFloat(apiPool.priceChange7d) * 100 : undefined,
   };
 }
 
@@ -406,6 +409,7 @@ export async function listPools(
     sortType: params.sortType || 'desc',
     category: params.category,
     status: params.status,
+    poolAddress: params.poolAddress,
   });
 
   if (!result.ok) {
@@ -456,6 +460,16 @@ export async function getPoolInfo(
   }
 
   const pool = transformPool(poolData);
+
+  // Map rewards
+  const rewards = (poolData.rewards || []).map((r) => ({
+    mint: r.mint?.address || '',
+    symbol: r.mint?.symbol || '',
+    rewardPerSecond: r.rewardPerSecond || '0',
+    openTime: r.rewardOpenTime || 0,
+    endTime: r.rewardEndTime || 0,
+  }));
+
   return {
     ok: true,
     value: {
@@ -464,6 +478,12 @@ export async function getPoolInfo(
         low: parseFloat(poolData.dayPriceRange?.lowPrice || '0'),
         high: parseFloat(poolData.dayPriceRange?.highPrice || '0'),
       },
+      price_change_1h: parseFloat(poolData.priceChange1h || '0') * 100,
+      price_change_24h: parseFloat(poolData.priceChange1d || '0') * 100,
+      price_change_7d: parseFloat(poolData.priceChange7d || '0') * 100,
+      fee_7d_usd: parseFloat(poolData.feeUsd7d || '0'),
+      category: poolData.category,
+      rewards: rewards.length > 0 ? rewards : undefined,
     },
   };
 }
@@ -750,6 +770,37 @@ export async function encodeFee(
   return { ok: true, value: data };
 }
 
+/**
+ * 批量查询 token 价格
+ * GET /mint/price?mints=mint1,mint2,...
+ * 返回 { [mint]: price_usd }
+ */
+export async function getTokenPrices(
+  mints: string[]
+): Promise<Result<Record<string, number>, ByrealError>> {
+  if (mints.length === 0) {
+    return { ok: true, value: {} };
+  }
+
+  const result = await apiClient.get<ApiResponse<Record<string, string>>>(
+    API_ENDPOINTS.TOKEN_PRICE,
+    { mints: mints.join(',') }
+  );
+
+  if (!result.ok) return result;
+
+  const data = result.value.result?.data;
+  if (!data) {
+    return { ok: true, value: {} };
+  }
+
+  const prices: Record<string, number> = {};
+  for (const [mint, priceStr] of Object.entries(data)) {
+    prices[mint] = parseFloat(priceStr || '0');
+  }
+  return { ok: true, value: prices };
+}
+
 // Export all API functions
 export const api = {
   listPools,
@@ -762,4 +813,5 @@ export const api = {
   executeSwapRfq,
   listPositions,
   encodeFee,
+  getTokenPrices,
 };

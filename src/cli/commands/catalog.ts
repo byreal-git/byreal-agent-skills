@@ -73,6 +73,19 @@ const CAPABILITIES: Capability[] = [
     ],
   },
   {
+    id: 'dex.pool.analyze',
+    name: 'Pool Analysis',
+    description: 'Comprehensive pool analysis: metrics, volatility, multi-range APR comparison, risk assessment, and investment projection',
+    category: 'analyze',
+    auth_required: false,
+    command: 'byreal-cli pools analyze <pool-id>',
+    params: [
+      { name: 'pool-id', type: 'string', required: true, description: 'Pool address' },
+      { name: 'amount', type: 'string', required: false, description: 'Simulated investment amount in USD', default: '1000' },
+      { name: 'ranges', type: 'string', required: false, description: 'Custom range percentages, comma-separated', default: '1,5,10,20,50' },
+    ],
+  },
+  {
     id: 'dex.token.list',
     name: 'List Tokens',
     description: 'Query available tokens with search and sorting',
@@ -195,6 +208,17 @@ const CAPABILITIES: Capability[] = [
       { name: 'sort-type', type: 'string', required: false, description: 'Sort direction', enum: ['asc', 'desc'] },
       { name: 'pool', type: 'string', required: false, description: 'Filter by pool address' },
       { name: 'status', type: 'string', required: false, description: 'Filter by status: 0=closed, 1=active' },
+    ],
+  },
+  {
+    id: 'dex.position.analyze',
+    name: 'Position Analysis',
+    description: 'Analyze existing position: performance (earned, PnL, net return), range health, pool context, and unclaimed fees',
+    category: 'analyze',
+    auth_required: true,
+    command: 'byreal-cli positions analyze <nft-mint>',
+    params: [
+      { name: 'nft-mint', type: 'string', required: true, description: 'Position NFT mint address' },
     ],
   },
   {

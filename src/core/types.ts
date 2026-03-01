@@ -60,6 +60,18 @@ export interface Pool {
   apr: number;
   current_price: number;  // 池子价格 (token_a / token_b)
   created_at: string;
+  // Price change fields (available from list API)
+  price_change_1h?: number;
+  price_change_24h?: number;
+  price_change_7d?: number;
+}
+
+export interface PoolReward {
+  mint: string;
+  symbol: string;
+  rewardPerSecond: string;
+  openTime: number;
+  endTime: number;
 }
 
 export interface PoolDetail extends Pool {
@@ -67,6 +79,13 @@ export interface PoolDetail extends Pool {
     low: number;
     high: number;
   };
+  // Analysis fields (populated from API detail response)
+  price_change_1h?: number;
+  price_change_24h?: number;
+  price_change_7d?: number;
+  fee_7d_usd?: number;
+  category?: number;
+  rewards?: PoolReward[];
 }
 
 // ============================================
@@ -145,6 +164,7 @@ export interface PoolListParams {
   // 过滤
   category?: string;  // 池子分类
   status?: number;    // 池子状态
+  poolAddress?: string;  // 按池子地址过滤
 }
 
 export interface TokenListParams {

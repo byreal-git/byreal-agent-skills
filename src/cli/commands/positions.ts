@@ -36,6 +36,7 @@ import {
   outputPositionClosePreview,
   outputPositionClaimPreview,
   outputTransactionResult,
+  outputPositionAnalysisTable,
 } from '../output/formatters.js';
 
 // ============================================
@@ -691,6 +692,196 @@ function createPositionsClaimCommand(): Command {
 }
 
 // ============================================
+// positions analyze
+// ============================================
+
+function createPositionsAnalyzeCommand(): Command {
+  return new Command('analyze')
+    .description('Analyze an existing position (performance, range health, unclaimed fees)')
+    .argument('<nft-mint>', 'Position NFT mint address')
+    .action(async (nftMintStr: string, _options: unknown, cmdObj: Command) => {
+      const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
+      const format = globalOptions.output;
+      const startTime = Date.now();
+
+      // Resolve address (required for positions list lookup)
+      const addrResult = resolveAddress(globalOptions.keypairPath);
+      if (!addrResult.ok) {
+        if (format === 'json') {
+          outputErrorJson(addrResult.error);
+        } else {
+          outputErrorTable(addrResult.error);
+        }
+        process.exit(1);
+      }
+
+      try {
+        // 1. Find position from positions list API
+        const listResult = await api.listPositions({
+          userAddress: addrResult.value.address,
+          page: 1,
+          pageSize: 100,
+        });
+
+        if (!listResult.ok) {
+          if (format === 'json') {
+            outputErrorJson(listResult.error);
+          } else {
+            outputErrorTable(listResult.error);
+          }
+          process.exit(1);
+        }
+
+        const posItem = listResult.value.positions.find(
+          (p) => p.nftMintAddress === nftMintStr
+        );
+
+        if (!posItem) {
+          const errMsg = `Position not found for NFT mint: ${nftMintStr}`;
+          if (format === 'json') {
+            outputErrorJson({ code: 'POSITION_NOT_FOUND', type: 'BUSINESS', message: errMsg, retryable: false });
+          } else {
+            console.error(chalk.red(`\nError: ${errMsg}`));
+            console.log(chalk.gray('  Use "byreal-cli positions list" to see your NFT mint addresses'));
+          }
+          process.exit(1);
+        }
+
+        // 2. Get pool info from API
+        const poolResult = await api.getPoolInfo(posItem.poolAddress);
+        if (!poolResult.ok) {
+          if (format === 'json') {
+            outputErrorJson(poolResult.error);
+          } else {
+            outputErrorTable(poolResult.error);
+          }
+          process.exit(1);
+        }
+        const pool = poolResult.value;
+
+        // 3. Get on-chain position info via SDK for price range and fee amounts
+        const { getChain } = await import('../../sdk/init.js');
+        const chain = getChain();
+        const nftMint = new PublicKey(nftMintStr);
+        const positionInfo = await chain.getPositionInfoByNftMint(nftMint);
+
+        if (!positionInfo) {
+          const errMsg = `Position not found on-chain for NFT mint: ${nftMintStr}`;
+          if (format === 'json') {
+            outputErrorJson({ code: 'POSITION_NOT_FOUND', type: 'BUSINESS', message: errMsg, retryable: false });
+          } else {
+            console.error(chalk.red(`\nError: ${errMsg}`));
+          }
+          process.exit(1);
+        }
+
+        // 4. Calculate range health
+        const currentPrice = pool.current_price;
+        const priceLower = parseFloat(positionInfo.uiPriceLower);
+        const priceUpper = parseFloat(positionInfo.uiPriceUpper);
+        const rangeWidth = priceUpper - priceLower;
+        const rangeWidthPercent = currentPrice > 0 ? (rangeWidth / currentPrice) * 100 : 0;
+        const distanceToLower = currentPrice > 0 ? ((currentPrice - priceLower) / currentPrice) * 100 : 0;
+        const distanceToUpper = currentPrice > 0 ? ((priceUpper - currentPrice) / currentPrice) * 100 : 0;
+        const inRange = currentPrice >= priceLower && currentPrice <= priceUpper;
+
+        // Out of range risk based on distance to nearest boundary
+        const nearestBoundaryDist = Math.min(Math.abs(distanceToLower), Math.abs(distanceToUpper));
+        let outOfRangeRisk: 'low' | 'medium' | 'high';
+        if (!inRange) {
+          outOfRangeRisk = 'high';
+        } else if (nearestBoundaryDist < 2) {
+          outOfRangeRisk = 'high';
+        } else if (nearestBoundaryDist < 5) {
+          outOfRangeRisk = 'medium';
+        } else {
+          outOfRangeRisk = 'low';
+        }
+
+        // 5. Performance from API data
+        // API returns percent as decimal: 0.0129 = 1.29%
+        const liquidityUsd = parseFloat(posItem.liquidityUsd || '0');
+        const earnedUsd = parseFloat(posItem.earnedUsd || '0');
+        const earnedPercent = posItem.earnedUsdPercent
+          ? (parseFloat(posItem.earnedUsdPercent) * 100).toFixed(2)
+          : (liquidityUsd > 0 ? ((earnedUsd / liquidityUsd) * 100).toFixed(2) : '0');
+        const pnlUsd = parseFloat(posItem.pnlUsd || '0');
+        const pnlPercent = posItem.pnlUsdPercent
+          ? (parseFloat(posItem.pnlUsdPercent) * 100).toFixed(2)
+          : (liquidityUsd > 0 ? ((pnlUsd / liquidityUsd) * 100).toFixed(2) : '0');
+        const netReturnUsd = earnedUsd + pnlUsd;
+        const netReturnPercent = liquidityUsd > 0 ? ((netReturnUsd / liquidityUsd) * 100).toFixed(2) : '0';
+
+        // 6. Resolve symbols
+        const symbolA = posItem.tokenSymbolA || pool.token_a.symbol || 'TokenA';
+        const symbolB = posItem.tokenSymbolB || pool.token_b.symbol || 'TokenB';
+
+        // 7. Build output
+        const analysisData = {
+          position: {
+            nftMint: nftMintStr,
+            pool: posItem.poolAddress,
+            pair: posItem.pair || pool.pair,
+            priceLower: positionInfo.uiPriceLower,
+            priceUpper: positionInfo.uiPriceUpper,
+            status: posItem.status === 0 ? 'active' : 'closed',
+            inRange,
+          },
+          performance: {
+            liquidityUsd: liquidityUsd.toFixed(2),
+            earnedUsd: earnedUsd.toFixed(2),
+            earnedPercent: `${parseFloat(String(earnedPercent)).toFixed(2)}%`,
+            pnlUsd: pnlUsd.toFixed(2),
+            pnlPercent: `${parseFloat(String(pnlPercent)).toFixed(2)}%`,
+            netReturnUsd: netReturnUsd.toFixed(2),
+            netReturnPercent: `${parseFloat(netReturnPercent).toFixed(2)}%`,
+          },
+          rangeHealth: {
+            currentPrice: currentPrice.toFixed(8).replace(/0+$/, '').replace(/\.$/, ''),
+            distanceToLower: `${distanceToLower.toFixed(2)}%`,
+            distanceToUpper: `${distanceToUpper.toFixed(2)}%`,
+            rangeWidth: `${rangeWidthPercent.toFixed(2)}%`,
+            outOfRangeRisk,
+          },
+          poolContext: {
+            feeApr24h: `${pool.apr.toFixed(2)}%`,
+            volume24h: pool.volume_24h_usd.toFixed(2),
+            tvl: pool.tvl_usd.toFixed(2),
+            priceChange24h: `${(pool.price_change_24h || 0).toFixed(2)}%`,
+          },
+          unclaimedFees: {
+            tokenA: {
+              symbol: symbolA,
+              amount: positionInfo.tokenA.uiFeeAmount,
+            },
+            tokenB: {
+              symbol: symbolB,
+              amount: positionInfo.tokenB.uiFeeAmount,
+            },
+          },
+        };
+
+        if (format === 'json') {
+          outputJson(analysisData, startTime);
+        } else {
+          outputPositionAnalysisTable(analysisData);
+        }
+      } catch (e) {
+        const message = (e as Error).message || 'Unknown SDK error';
+        if (format === 'json') {
+          outputErrorJson({ code: 'SDK_ERROR', type: 'SYSTEM', message, retryable: false });
+        } else {
+          console.error(chalk.red(`\nSDK Error: ${message}`));
+          if (process.env.DEBUG) {
+            console.error((e as Error).stack);
+          }
+        }
+        process.exit(1);
+      }
+    });
+}
+
+// ============================================
 // positions (parent command)
 // ============================================
 
@@ -702,6 +893,7 @@ export function createPositionsCommand(): Command {
   cmd.addCommand(createPositionsOpenCommand());
   cmd.addCommand(createPositionsCloseCommand());
   cmd.addCommand(createPositionsClaimCommand());
+  cmd.addCommand(createPositionsAnalyzeCommand());
 
   return cmd;
 }

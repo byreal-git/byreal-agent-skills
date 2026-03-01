@@ -584,6 +584,185 @@ export function outputTransactionResult(title: string, data: {
 }
 
 // ============================================
+// Pool Analysis Formatter
+// ============================================
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export function outputPoolAnalysisTable(data: any): void {
+  // Header
+  console.log(chalk.cyan.bold(`\nPool Analysis: ${data.pool.pair}`));
+  console.log(chalk.gray(`Address: ${data.pool.address}`));
+  console.log(chalk.gray(`Category: ${data.pool.category} | Fee Rate: ${data.pool.feeRate} | Tick Spacing: ${data.pool.tickSpacing}\n`));
+
+  // Metrics
+  console.log(chalk.cyan.bold('Metrics'));
+  const metricsTable = createTable(['Metric', 'Value']);
+  metricsTable.push(
+    ['TVL', `$${data.metrics.tvl}`],
+    ['Volume (24h)', `$${data.metrics.volume24h}`],
+    ['Volume (7d)', `$${data.metrics.volume7d}`],
+    ['Fees (24h)', `$${data.metrics.fee24h}`],
+    ['Fees (7d)', `$${data.metrics.fee7d}`],
+    ['Fee APR (24h)', data.metrics.feeApr24h],
+    ['Volume/TVL', data.metrics.volumeToTvl],
+  );
+  console.log(metricsTable.toString());
+
+  // Volatility
+  console.log(chalk.cyan.bold('\nVolatility'));
+  const volTable = createTable(['Metric', 'Value']);
+  volTable.push(
+    ['Day Price Range', `${data.volatility.dayPriceRange.low} — ${data.volatility.dayPriceRange.high}`],
+    ['Day Range %', data.volatility.dayPriceRangePercent],
+  );
+  console.log(volTable.toString());
+
+  // Rewards
+  if (data.rewards && data.rewards.length > 0) {
+    console.log(chalk.cyan.bold('\nRewards'));
+    const rewardsTable = createTable(['Token', 'End Date']);
+    for (const r of data.rewards) {
+      rewardsTable.push([r.token, r.endTime]);
+    }
+    console.log(rewardsTable.toString());
+  }
+
+  // Range Analysis
+  console.log(chalk.cyan.bold('\nRange Analysis'));
+  const rangeTable = createTable([
+    'Range %', 'Price Lower', 'Price Upper', 'Fee APR', 'In-Range', 'Rebalance',
+  ]);
+  for (const r of data.rangeAnalysis) {
+    const likelihood = r.inRangeLikelihood === 'high' ? chalk.green(r.inRangeLikelihood)
+      : r.inRangeLikelihood === 'medium' ? chalk.yellow(r.inRangeLikelihood)
+      : chalk.red(r.inRangeLikelihood);
+    const rebalance = r.rebalanceFrequency === 'low' ? chalk.green(r.rebalanceFrequency)
+      : r.rebalanceFrequency === 'medium' ? chalk.yellow(r.rebalanceFrequency)
+      : chalk.red(r.rebalanceFrequency);
+    rangeTable.push([
+      `±${r.rangePercent}%`,
+      r.priceLower,
+      r.priceUpper,
+      r.estimatedFeeApr,
+      likelihood,
+      rebalance,
+    ]);
+  }
+  console.log(rangeTable.toString());
+
+  // Risk Factors
+  console.log(chalk.cyan.bold('\nRisk Assessment'));
+  const riskTable = createTable(['Factor', 'Level']);
+  const colorRisk = (level: string) => {
+    if (level === 'low') return chalk.green(level);
+    if (level === 'medium') return chalk.yellow(level);
+    return chalk.red(level);
+  };
+  riskTable.push(
+    ['TVL Risk', colorRisk(data.riskFactors.tvlRisk)],
+    ['Volatility Risk', colorRisk(data.riskFactors.volatilityRisk)],
+  );
+  console.log(riskTable.toString());
+  for (const line of data.riskFactors.summary) {
+    console.log(chalk.gray(`  • ${line}`));
+  }
+
+  // Wallet Balance (if available)
+  if (data.wallet) {
+    console.log(chalk.cyan.bold('\nWallet'));
+    const walletTable = createTable(['Metric', 'Value']);
+    walletTable.push(
+      ['Address', chalk.gray(data.wallet.address)],
+      ['Balance', `$${data.wallet.balanceUsd}`],
+    );
+    console.log(walletTable.toString());
+    if (data.wallet.warning) {
+      console.log(chalk.yellow(`  ${data.wallet.warning}`));
+    }
+  }
+
+  // Investment Projection
+  console.log(chalk.cyan.bold('\nInvestment Projection'));
+  const proj = data.investmentProjection;
+  const projTable = createTable(['Metric', 'Value']);
+  projTable.push(
+    ['Investment', `$${proj.amountUsd}`],
+    ['Range', `±${proj.rangePercent}% (${proj.priceLower} — ${proj.priceUpper})`],
+    ['Daily Fee Est.', `$${proj.dailyFeeEstimate}`],
+    ['Weekly Fee Est.', `$${proj.weeklyFeeEstimate}`],
+    ['Monthly Fee Est.', `$${proj.monthlyFeeEstimate}`],
+  );
+  console.log(projTable.toString());
+  console.log(chalk.gray(`  ${proj.note}`));
+}
+
+// ============================================
+// Position Analysis Formatter
+// ============================================
+
+export function outputPositionAnalysisTable(data: any): void {
+  // Header
+  console.log(chalk.cyan.bold(`\nPosition Analysis: ${data.position.pair}`));
+  console.log(chalk.gray(`NFT Mint: ${data.position.nftMint}`));
+  console.log(chalk.gray(`Pool: ${data.position.pool}`));
+
+  const statusColor = data.position.status === 'active' ? chalk.green : chalk.gray;
+  const rangeColor = data.position.inRange ? chalk.green : chalk.red;
+  console.log(statusColor(`Status: ${data.position.status}`) + ' | ' + rangeColor(`In Range: ${data.position.inRange ? 'Yes' : 'No'}`));
+  console.log();
+
+  // Performance
+  console.log(chalk.cyan.bold('Performance'));
+  const perfTable = createTable(['Metric', 'Value']);
+  const pnlColor = parseFloat(data.performance.pnlUsd) >= 0 ? chalk.green : chalk.red;
+  const netColor = parseFloat(data.performance.netReturnUsd) >= 0 ? chalk.green : chalk.red;
+  perfTable.push(
+    ['Liquidity', `$${data.performance.liquidityUsd}`],
+    ['Earned Fees', `$${data.performance.earnedUsd} (${data.performance.earnedPercent})`],
+    ['PnL (IL)', pnlColor(`$${data.performance.pnlUsd} (${data.performance.pnlPercent})`)],
+    ['Net Return', netColor(`$${data.performance.netReturnUsd} (${data.performance.netReturnPercent})`)],
+  );
+  console.log(perfTable.toString());
+
+  // Range Health
+  console.log(chalk.cyan.bold('\nRange Health'));
+  const rangeTable = createTable(['Metric', 'Value']);
+  const riskColor = data.rangeHealth.outOfRangeRisk === 'low' ? chalk.green
+    : data.rangeHealth.outOfRangeRisk === 'medium' ? chalk.yellow
+    : chalk.red;
+  rangeTable.push(
+    ['Current Price', data.rangeHealth.currentPrice],
+    ['Price Range', `${data.position.priceLower} — ${data.position.priceUpper}`],
+    ['Distance to Lower', data.rangeHealth.distanceToLower],
+    ['Distance to Upper', data.rangeHealth.distanceToUpper],
+    ['Range Width', data.rangeHealth.rangeWidth],
+    ['Out-of-Range Risk', riskColor(data.rangeHealth.outOfRangeRisk)],
+  );
+  console.log(rangeTable.toString());
+
+  // Pool Context
+  console.log(chalk.cyan.bold('\nPool Context'));
+  const poolTable = createTable(['Metric', 'Value']);
+  poolTable.push(
+    ['Fee APR (24h)', data.poolContext.feeApr24h],
+    ['Volume (24h)', `$${data.poolContext.volume24h}`],
+    ['TVL', `$${data.poolContext.tvl}`],
+    ['Price Change (24h)', data.poolContext.priceChange24h],
+  );
+  console.log(poolTable.toString());
+
+  // Unclaimed Fees
+  console.log(chalk.cyan.bold('\nUnclaimed Fees'));
+  const feeTable = createTable(['Token', 'Amount']);
+  feeTable.push(
+    [data.unclaimedFees.tokenA.symbol, data.unclaimedFees.tokenA.amount],
+    [data.unclaimedFees.tokenB.symbol, data.unclaimedFees.tokenB.amount],
+  );
+  console.log(feeTable.toString());
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+// ============================================
 // Generic Output
 // ============================================
 

@@ -398,6 +398,83 @@ export function calculateRangeAprs(params: {
 }
 
 /**
+ * Estimate APR for a given price range without requiring a specific investment amount.
+ * Uses unit liquidity to calculate proportional returns.
+ * Copied from frontend SDK: byreal-frontend-monorepo/libs/clmm-sdk/src/client/chain/utils.ts
+ */
+export function estimateApr(params: {
+  fee24hUsdValue: number; // 24h fee or reward received
+  tokenAPriceUsd: number; // USD value of tokenA
+  tokenBPriceUsd: number; // USD value of tokenB
+  tickLower: number; // Tick corresponding to the lower price
+  tickUpper: number; // Tick corresponding to the upper price
+  poolInfo: IPoolLayoutWithId; // Pool information
+  tvlUsd?: number; // Target TVL in USD, default $1
+}): number {
+  const {
+    fee24hUsdValue,
+    tokenAPriceUsd,
+    tokenBPriceUsd,
+    poolInfo,
+    tickLower,
+    tickUpper,
+    tvlUsd = 1,
+  } = params;
+
+  // Prepare sqrt prices for bounds
+  const sqrtPriceLowerX64 = SqrtPriceMath.getSqrtPriceX64FromTick(tickLower);
+  const sqrtPriceUpperX64 = SqrtPriceMath.getSqrtPriceX64FromTick(tickUpper);
+
+  // Use a small but practical unit liquidity to avoid rounding to zero
+  const unitLiquidity = new BN(1_000_000); // 1e6
+
+  // Get token amounts for the unit liquidity
+  const { amountA: unitAmountA, amountB: unitAmountB } = LiquidityMath.getAmountsFromLiquidity(
+    poolInfo.sqrtPriceX64,
+    sqrtPriceLowerX64,
+    sqrtPriceUpperX64,
+    unitLiquidity,
+    false,
+  );
+
+  // Convert unit amounts to USD value
+  const unitAmountAUsd = new Decimal(unitAmountA.toString())
+    .div(new Decimal(10).pow(poolInfo.mintDecimalsA))
+    .mul(tokenAPriceUsd);
+  const unitAmountBUsd = new Decimal(unitAmountB.toString())
+    .div(new Decimal(10).pow(poolInfo.mintDecimalsB))
+    .mul(tokenBPriceUsd);
+
+  const unitCostUsd = unitAmountAUsd.plus(unitAmountBUsd);
+  if (unitCostUsd.lte(0)) return 0;
+
+  // Determine required liquidity for given TVL
+  const liquidityMultiplier = new Decimal(tvlUsd).div(unitCostUsd);
+  const requiredLiquidity = unitLiquidity.mul(new BN(liquidityMultiplier.toFixed(0)));
+
+  // Recalculate amounts for required liquidity
+  const { amountA, amountB } = LiquidityMath.getAmountsFromLiquidity(
+    poolInfo.sqrtPriceX64,
+    sqrtPriceLowerX64,
+    sqrtPriceUpperX64,
+    requiredLiquidity,
+    false,
+  );
+
+  // Call APR calculator
+  return _calculateApr({
+    fee24hUsdValue,
+    positionUsdValue: tvlUsd,
+    amountA,
+    amountB,
+    tickLower,
+    tickUpper,
+    poolInfo,
+    scene: 'create',
+  });
+}
+
+/**
  * 获取 mint 对应的 token program ID
  */
 export async function getTokenProgramId(
