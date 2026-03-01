@@ -1,9 +1,8 @@
 # Dependencies
 node_modules/
 
-# Build output
-dist/*
-!dist/index.cjs
+# Build output (dist/index.cjs is committed for GitHub distribution)
+# Do NOT add dist/ or dist/* here - npm git installs break with negation patterns
 
 # IDE
 .idea/
