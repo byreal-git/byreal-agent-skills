@@ -15,8 +15,12 @@ import type {
   Kline,
   WalletInfo,
   WalletBalance,
-  ByrealConfig
+  ByrealConfig,
+  SwapQuote,
+  PositionItem,
+  FeeEncodeEntry
 } from '../../core/types.js';
+import { rawToUi } from '../../core/amounts.js';
 
 // ============================================
 // Success Response Wrapper
@@ -378,6 +382,205 @@ export function outputErrorTable(error: CliError): void {
       }
     }
   }
+}
+
+// ============================================
+// Swap Formatters
+// ============================================
+
+export function outputSwapQuoteTable(quote: SwapQuote, uiInAmount: string, uiOutAmount: string): void {
+  console.log(chalk.cyan.bold('\nSwap Quote\n'));
+
+  const table = createTable(['Field', 'Value']);
+  table.push(
+    ['Input Mint', chalk.gray(quote.inputMint)],
+    ['Output Mint', chalk.gray(quote.outputMint)],
+    ['Input Amount', `${uiInAmount} ${chalk.gray(`(${quote.inAmount} raw)`)}`],
+    ['Output Amount', chalk.green.bold(uiOutAmount) + ` ${chalk.gray(`(${quote.outAmount} raw)`)}`],
+    ['Router Type', quote.routerType],
+  );
+
+  if (quote.priceImpactPct) {
+    const impact = parseFloat(quote.priceImpactPct);
+    const color = impact > 1 ? chalk.red : impact > 0.5 ? chalk.yellow : chalk.green;
+    table.push(['Price Impact', color(`${impact.toFixed(4)}%`)]);
+  }
+
+  if (quote.poolAddresses.length > 0) {
+    table.push(['Pool(s)', quote.poolAddresses.map(a => chalk.gray(a)).join('\n')]);
+  }
+
+  if (quote.orderId) {
+    table.push(['Order ID', chalk.gray(quote.orderId)]);
+  }
+  if (quote.quoteId) {
+    table.push(['Quote ID', chalk.gray(quote.quoteId)]);
+  }
+
+  console.log(table.toString());
+}
+
+export function outputSwapResultTable(
+  data: { signatures?: string[]; txSignature?: string; state?: string },
+  uiInAmount?: string,
+  uiOutAmount?: string,
+  priceImpactPct?: string,
+): void {
+  console.log(chalk.green.bold('\nSwap Executed Successfully\n'));
+
+  const table = createTable(['Field', 'Value']);
+
+  if (uiInAmount) {
+    table.push(['Input Amount', uiInAmount]);
+  }
+  if (uiOutAmount) {
+    table.push(['Output Amount', chalk.green.bold(uiOutAmount)]);
+  }
+  if (priceImpactPct) {
+    const impact = parseFloat(priceImpactPct);
+    const color = impact > 1 ? chalk.red : impact > 0.5 ? chalk.yellow : chalk.green;
+    table.push(['Price Impact', color(`${impact.toFixed(4)}%`)]);
+  }
+
+  const sigs = data.signatures || (data.txSignature ? [data.txSignature] : []);
+  for (let i = 0; i < sigs.length; i++) {
+    const label = sigs.length > 1 ? `Signature ${i + 1}` : 'Signature';
+    table.push([label, chalk.gray(sigs[i])]);
+    table.push(['Explorer', chalk.blue(`https://solscan.io/tx/${sigs[i]}`)]);
+  }
+
+  if (data.state) {
+    table.push(['State', data.state]);
+  }
+
+  console.log(table.toString());
+}
+
+// ============================================
+// Position Formatters
+// ============================================
+
+export function outputPositionsTable(positions: PositionItem[], total: number): void {
+  console.log(chalk.cyan.bold('\nPositions\n'));
+
+  const table = createTable([
+    'Pair',
+    'NFT Mint',
+    'Pool',
+    'Liquidity',
+    'Earned',
+    'PnL',
+    'APR',
+    'Status',
+  ]);
+
+  for (const pos of positions) {
+    const statusLabel = pos.status === 0 ? chalk.green('Active') : chalk.gray('Closed');
+    const pnlColor = pos.pnlUsd && parseFloat(pos.pnlUsd) >= 0 ? chalk.green : chalk.red;
+
+    table.push([
+      chalk.white.bold(pos.pair || '?/?'),
+      chalk.gray(pos.nftMintAddress),
+      chalk.gray(pos.poolAddress),
+      pos.liquidityUsd ? formatUsd(parseFloat(pos.liquidityUsd)) : '-',
+      pos.earnedUsd ? formatUsd(parseFloat(pos.earnedUsd)) : '-',
+      pos.pnlUsd ? pnlColor(formatUsd(parseFloat(pos.pnlUsd))) : '-',
+      pos.apr ? `${parseFloat(pos.apr).toFixed(2)}%` : '-',
+      statusLabel,
+    ]);
+  }
+
+  console.log(table.toString());
+  console.log(chalk.gray(`\nShowing ${positions.length} of ${total} positions`));
+}
+
+export function outputPositionOpenPreview(data: {
+  poolAddress: string;
+  tickLower: number;
+  tickUpper: number;
+  priceLower: string;
+  priceUpper: string;
+  baseAmount: string;
+  baseToken: string;
+  otherAmount: string;
+  otherToken: string;
+}): void {
+  console.log(chalk.cyan.bold('\nOpen Position Preview\n'));
+
+  const table = createTable(['Field', 'Value']);
+  table.push(
+    ['Pool', chalk.gray(data.poolAddress)],
+    ['Tick Range', `${data.tickLower} → ${data.tickUpper}`],
+    ['Price Range', `${data.priceLower} → ${data.priceUpper}`],
+    ['Base Amount', `${data.baseAmount} ${data.baseToken}`],
+    ['Other Amount', `${data.otherAmount} ${data.otherToken}`],
+  );
+
+  console.log(table.toString());
+}
+
+export function outputPositionClosePreview(data: {
+  nftMint: string;
+  poolAddress: string;
+  priceLower: string;
+  priceUpper: string;
+  tokenAmountA: string;
+  tokenAmountB: string;
+  feeAmountA: string;
+  feeAmountB: string;
+  symbolA: string;
+  symbolB: string;
+}): void {
+  console.log(chalk.cyan.bold('\nClose Position Preview\n'));
+
+  const table = createTable(['Field', 'Value']);
+  table.push(
+    ['NFT Mint', chalk.gray(data.nftMint)],
+    ['Pool', chalk.gray(data.poolAddress)],
+    ['Price Range', `${data.priceLower} → ${data.priceUpper}`],
+    ['Token A to Receive', `${data.tokenAmountA} ${data.symbolA}`],
+    ['Token B to Receive', `${data.tokenAmountB} ${data.symbolB}`],
+    ['Fee A to Claim', `${data.feeAmountA} ${data.symbolA}`],
+    ['Fee B to Claim', `${data.feeAmountB} ${data.symbolB}`],
+  );
+
+  console.log(table.toString());
+}
+
+export function outputPositionClaimPreview(entries: FeeEncodeEntry[]): void {
+  console.log(chalk.cyan.bold('\nFee Claim Preview\n'));
+
+  for (const entry of entries) {
+    console.log(chalk.white.bold(`  Position: ${entry.positionAddress}`));
+    for (const token of entry.tokens) {
+      const uiAmount = rawToUi(String(token.tokenAmount), token.tokenDecimals);
+      console.log(chalk.gray(`    ${uiAmount} ${token.tokenSymbol} (${token.tokenAddress})`));
+    }
+    console.log();
+  }
+
+  console.log(chalk.gray(`  ${entries.length} position(s) to claim`));
+}
+
+export function outputTransactionResult(title: string, data: {
+  signature: string;
+  confirmed: boolean;
+  nftAddress?: string;
+}): void {
+  console.log(chalk.green.bold(`\n${title}\n`));
+
+  const table = createTable(['Field', 'Value']);
+  table.push(
+    ['Signature', chalk.gray(data.signature)],
+    ['Explorer', chalk.blue(`https://solscan.io/tx/${data.signature}`)],
+    ['Confirmed', data.confirmed ? chalk.green('Yes') : chalk.yellow('Pending')],
+  );
+
+  if (data.nftAddress) {
+    table.push(['NFT Address', chalk.gray(data.nftAddress)]);
+  }
+
+  console.log(table.toString());
 }
 
 // ============================================

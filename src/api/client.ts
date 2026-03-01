@@ -54,7 +54,7 @@ export async function get<T>(
     const data = await response.json<T>();
     return ok(data);
   } catch (error) {
-    return err(handleRequestError(error));
+    return err(await handleRequestError(error));
   }
 }
 
@@ -70,7 +70,7 @@ export async function post<T>(
     const data = await response.json<T>();
     return ok(data);
   } catch (error) {
-    return err(handleRequestError(error));
+    return err(await handleRequestError(error));
   }
 }
 
@@ -78,10 +78,16 @@ export async function post<T>(
 // Error Handling
 // ============================================
 
-function handleRequestError(error: unknown): ByrealError {
+async function handleRequestError(error: unknown): Promise<ByrealError> {
   if (error instanceof HTTPError) {
     const status = error.response.status;
     const statusText = error.response.statusText;
+    if (process.env.DEBUG) {
+      try {
+        const body = await error.response.text();
+        console.error(`[DEBUG] Response body: ${body}`);
+      } catch { /* ignore */ }
+    }
     return apiError(`${status} ${statusText}`, status);
   }
 

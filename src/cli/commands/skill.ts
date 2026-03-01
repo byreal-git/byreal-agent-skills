@@ -37,6 +37,12 @@ byreal-cli --version
 | List tokens | \`byreal-cli tokens list -o json\` |
 | Global stats | \`byreal-cli overview -o json\` |
 | K-line data | \`byreal-cli pools klines <pool-id> -o json\` |
+| Swap preview | \`byreal-cli swap execute --input-mint <mint> --output-mint <mint> --amount <amount> --dry-run -o json\` |
+| Swap execute | \`byreal-cli swap execute --input-mint <mint> --output-mint <mint> --amount <amount> --confirm -o json\` |
+| List positions | \`byreal-cli positions list -o json\` |
+| Open position | \`byreal-cli positions open --pool <addr> --price-lower <p> --price-upper <p> --base <token> --amount <amount> --confirm -o json\` |
+| Close position | \`byreal-cli positions close --nft-mint <addr> --confirm -o json\` |
+| Claim fees | \`byreal-cli positions claim --nft-mints <addrs> --confirm -o json\` |
 | Wallet address | \`byreal-cli wallet address -o json\` |
 | Wallet balance | \`byreal-cli wallet balance -o json\` |
 | Set keypair | \`byreal-cli wallet set <keypair-path>\` |
@@ -203,6 +209,129 @@ Interactive first-time setup. Prompts user to paste their private key (JSON byte
 byreal-cli setup
 \`\`\`
 
+### swap execute
+Preview or execute a token swap. **All amounts use UI format** (e.g., 0.1 means 0.1 tokens) — decimals are auto-resolved by the CLI based on token mint.
+
+\`\`\`bash
+byreal-cli swap execute [options]
+
+Options:
+  --input-mint <address>   Input token mint address (required)
+  --output-mint <address>  Output token mint address (required)
+  --amount <amount>        Amount to swap, UI format (required). Decimals auto-resolved.
+  --swap-mode <mode>       Swap mode: in or out (default: in)
+  --slippage <bps>         Slippage tolerance in basis points
+  --raw                    Amount is already in raw (smallest unit) format
+  --dry-run                Preview the swap without executing
+  --confirm                Execute the swap
+\`\`\`
+
+Examples:
+\`\`\`bash
+# Preview swap: 0.1 SOL → USDC
+byreal-cli swap execute --input-mint So11111111111111111111111111111111111111112 \\
+  --output-mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v \\
+  --amount 0.1 --dry-run -o json
+
+# Execute swap
+byreal-cli swap execute --input-mint So11111111111111111111111111111111111111112 \\
+  --output-mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v \\
+  --amount 0.1 --confirm -o json
+\`\`\`
+
+### positions list
+List user's CLMM positions.
+
+\`\`\`bash
+byreal-cli positions list [options]
+
+Options:
+  --page <n>             Page number (default: 1)
+  --page-size <n>        Page size (default: 20)
+  --sort-field <field>   Sort field
+  --sort-type <type>     Sort direction: asc or desc
+  --pool <address>       Filter by pool address
+  --status <status>      Filter by status: 0=closed, 1=active
+\`\`\`
+
+### positions open
+Open a new CLMM position. **All amounts use UI format** — decimals are auto-resolved.
+
+\`\`\`bash
+byreal-cli positions open [options]
+
+Options:
+  --pool <address>         Pool address (required)
+  --price-lower <price>    Lower price bound (required)
+  --price-upper <price>    Upper price bound (required)
+  --base <token>           Base token: MintA or MintB (required)
+  --amount <amount>        Amount of base token, UI format (required). Decimals auto-resolved.
+  --slippage <bps>         Slippage tolerance in basis points
+  --raw                    Amount is already in raw (smallest unit) format
+  --dry-run                Preview the position without opening
+  --confirm                Open the position
+\`\`\`
+
+**Balance Check**: \`--dry-run\` automatically checks if your wallet has sufficient balance for both tokens. If balance is insufficient, the response includes \`balanceWarnings\` (JSON) or a red warning (table) with the deficit amount and a suggested \`swap execute\` command.
+
+Examples:
+\`\`\`bash
+# Preview opening a position (includes balance check)
+byreal-cli positions open --pool <pool-address> \\
+  --price-lower 100 --price-upper 200 --base MintA --amount 10 --dry-run -o json
+
+# Execute open
+byreal-cli positions open --pool <pool-address> \\
+  --price-lower 100 --price-upper 200 --base MintA --amount 10 --confirm -o json
+\`\`\`
+
+### positions close
+Close a position (remove all liquidity).
+
+\`\`\`bash
+byreal-cli positions close [options]
+
+Options:
+  --nft-mint <address>     Position NFT mint address (required)
+  --slippage <bps>         Slippage tolerance in basis points
+  --dry-run                Preview the close without executing
+  --confirm                Close the position
+\`\`\`
+
+### positions claim
+Claim accumulated fees from one or more positions.
+
+\`\`\`bash
+byreal-cli positions claim [options]
+
+Options:
+  --nft-mints <addresses>  Comma-separated NFT mint addresses (required, from positions list)
+  --dry-run                Preview the claim without executing
+  --confirm                Execute the claim
+\`\`\`
+
+## Amount Handling
+
+**All token amounts (--amount) use UI format by default.** For example, \`--amount 0.1\` means 0.1 tokens, not 0.1 lamports. The CLI automatically resolves token decimals based on the mint address:
+- Common tokens (SOL, USDC, USDT, etc.) are resolved instantly from built-in registry
+- Uncommon tokens are resolved via on-chain RPC lookup
+
+You do NOT need to pass token decimals or convert amounts manually. Use \`--raw\` only if you explicitly need to pass raw (smallest unit) amounts.
+
+## Workflow: Open Position with Insufficient Balance
+
+When \`positions open --dry-run\` reports insufficient balance (\`balanceWarnings\` in JSON), follow this workflow:
+
+1. **Read the deficit**: Check which token(s) are insufficient and the exact deficit amount
+2. **Decide swap source**: Choose which token to swap FROM. Recommended strategy:
+   - Prefer swapping from the token with the highest available balance
+   - Prefer stablecoins (USDC, USDT) as source when possible
+   - If unsure, ask the user which token to use as source
+3. **Execute swap**: Use \`byreal-cli swap execute --input-mint <source-mint> --output-mint <deficit-token-mint> --amount <deficit-amount> --dry-run\` to preview, then \`--confirm\` to execute
+4. **Re-run open**: After swap completes, re-run \`positions open --dry-run\` to verify balances, then \`--confirm\`
+
+**Important**: The CLI only reports the deficit — the LLM must decide the swap strategy (source token, amount, slippage). Do NOT assume a fixed swap path.
+
 ## Output Format
 
 All commands support \`-o json\` for structured output:
@@ -260,6 +389,11 @@ byreal-cli catalog show dex.pool.list -o json
 | dex.pool.klines | Get K-line data |
 | dex.token.list | Query tokens with search |
 | dex.overview.global | Global statistics |
+| dex.swap.execute | Preview or execute a token swap |
+| dex.position.list | List user's CLMM positions |
+| dex.position.open | Open a new CLMM position |
+| dex.position.close | Close a position |
+| dex.position.claim | Claim accumulated fees |
 | wallet.address | Show wallet address |
 | wallet.balance | Query wallet balance |
 | wallet.info | Detailed wallet info |
@@ -286,6 +420,8 @@ byreal-cli catalog show dex.pool.list -o json
 3. **For write operations**: Always preview with --dry-run first, then --confirm
 4. **Large amounts (> $10,000)**: Require explicit user confirmation
 5. **High slippage (> 200 bps)**: Warn user before proceeding
+6. **Token amounts use UI format** - pass amounts as human-readable values (e.g., 0.1 for 0.1 SOL). Never manually convert to raw/lamport units. The CLI handles all decimals internally.
+7. **No need to pass token decimals** - the CLI auto-resolves decimals from mint address
 
 ## Error Handling
 

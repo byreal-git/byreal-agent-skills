@@ -272,3 +272,100 @@ export interface TokenBalance {
   is_native: boolean;
   is_token_2022: boolean;
 }
+
+// ============================================
+// Swap Types
+// ============================================
+
+export interface SwapQuoteParams {
+  inputMint: string;
+  outputMint: string;
+  amount: string;
+  swapMode: 'in' | 'out';
+  slippageBps: number;
+  userPublicKey?: string;
+}
+
+export interface SwapQuote {
+  outAmount: string;
+  inAmount: string;
+  inputMint: string;
+  outputMint: string;
+  transaction: string;
+  priceImpactPct?: string;
+  routerType: string;
+  orderId?: string;
+  quoteId?: string;
+  poolAddresses: string[];
+}
+
+export interface SwapAmmExecuteParams {
+  preData: string[];
+  data: string[];
+  userSignTime: number;
+}
+
+export interface SwapRfqExecuteParams {
+  quoteId: string;
+  requestId: string;
+  transaction: string;
+}
+
+// ============================================
+// Position Types
+// ============================================
+
+export interface PositionListParams {
+  userAddress: string;
+  page?: number;
+  pageSize?: number;
+  sortField?: string;
+  sortType?: 'asc' | 'desc';
+  poolAddress?: string;
+  status?: number;
+}
+
+export interface PositionItem {
+  positionAddress: string;
+  nftMintAddress: string;
+  poolAddress: string;
+  tickLower: number;
+  tickUpper: number;
+  status: number;
+  liquidityUsd?: string;
+  earnedUsd?: string;
+  earnedUsdPercent?: string;
+  pnlUsd?: string;
+  pnlUsdPercent?: string;
+  apr?: string;
+  bonusUsd?: string;
+  // From poolMap
+  pair?: string;
+  tokenSymbolA?: string;
+  tokenSymbolB?: string;
+}
+
+export interface PositionListResult {
+  positions: PositionItem[];
+  total: number;
+}
+
+// ============================================
+// Fee Claim Types
+// ============================================
+
+export interface FeeEncodeParams {
+  walletAddress: string;
+  positionAddresses: string[];
+}
+
+export interface FeeEncodeEntry {
+  positionAddress: string;
+  txPayload: string;
+  tokens: {
+    tokenAddress: string;
+    tokenAmount: string;
+    tokenDecimals: number;
+    tokenSymbol: string;
+  }[];
+}

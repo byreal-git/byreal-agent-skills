@@ -5,7 +5,7 @@
 
 import { apiClient } from './client.js';
 import { API_ENDPOINTS } from '../core/constants.js';
-import { poolNotFoundError } from '../core/errors.js';
+import { poolNotFoundError, apiError } from '../core/errors.js';
 import type {
   Pool,
   PoolDetail,
@@ -16,6 +16,15 @@ import type {
   TokenListParams,
   KlineParams,
   Result,
+  SwapQuoteParams,
+  SwapQuote,
+  SwapAmmExecuteParams,
+  SwapRfqExecuteParams,
+  PositionListParams,
+  PositionItem,
+  PositionListResult,
+  FeeEncodeParams,
+  FeeEncodeEntry,
 } from '../core/types.js';
 import type { ByrealError } from '../core/errors.js';
 
@@ -190,6 +199,108 @@ interface ApiKlineData {
 }
 
 type ApiKlineResponse = ApiResponse<ApiKlineData[]>;
+
+// ============================================
+// Swap Response Types (Router 格式 - 双层嵌套)
+// ============================================
+
+interface ApiSwapQuoteResponse {
+  retCode: number;
+  retMsg: string;
+  result: {
+    success: boolean;
+    version: string;
+    timestamp: number;
+    ret_code: number;
+    ret_msg: string | null;
+    result: {
+      data: {
+        outAmount: string;
+        inAmount: string;
+        inputMint: string;
+        outputMint: string;
+        transaction: string;
+        priceImpactPct?: string;
+        routerType: string;
+        orderId?: string;
+        quoteId?: string;
+        poolAddresses?: string[];
+      };
+    };
+  };
+  retExtInfo: Record<string, unknown>;
+  time: number;
+}
+
+// ============================================
+// Swap Execute Response Types
+// ============================================
+
+interface ApiSwapAmmExecuteResponse extends ApiResponse<string[]> {}
+
+interface ApiSwapRfqExecuteResponse extends ApiResponse<{ txSignature: string; state: string }> {}
+
+// ============================================
+// Position Response Types
+// ============================================
+
+interface ApiPositionItem {
+  poolAddress: string;
+  positionAddress: string;
+  nftMintAddress: string;
+  upperTick: number;
+  lowerTick: number;
+  status: number;
+  liquidityUsd?: string;
+  earnedUsd?: string;
+  earnedUsdPercent?: string;
+  pnlUsd?: string;
+  pnlUsdPercent?: string;
+  apr?: string;
+  bonusUsd?: string;
+}
+
+interface ApiPositionListResponse {
+  retCode: number;
+  retMsg: string;
+  result: {
+    success: boolean;
+    version: string;
+    timestamp: number;
+    ret_code: number;
+    ret_msg: string | null;
+    data: {
+      total: number;
+      pageNum?: number;
+      pageSize?: number;
+      positions?: ApiPositionItem[];
+      records?: ApiPositionItem[];
+      poolMap?: Record<string, {
+        mintA?: { symbol?: string; decimals?: number; address?: string };
+        mintB?: { symbol?: string; decimals?: number; address?: string };
+      }>;
+    };
+  };
+  retExtInfo: Record<string, unknown>;
+  time: number;
+}
+
+// ============================================
+// Fee Encode Response Types
+// ============================================
+
+interface ApiFeeEncodeEntry {
+  positionAddress: string;
+  txPayload: string;
+  tokens: {
+    tokenAddress: string;
+    tokenAmount: string;
+    tokenDecimals: number;
+    tokenSymbol: string;
+  }[];
+}
+
+interface ApiFeeEncodeResponse extends ApiResponse<ApiFeeEncodeEntry[]> {}
 
 // ============================================
 // Transform Functions
@@ -466,6 +577,179 @@ export async function getKlines(
   };
 }
 
+// ============================================
+// Swap API Functions
+// ============================================
+
+/**
+ * Get swap quote from router
+ * Router 格式: result.result.data (双层嵌套)
+ */
+export async function getSwapQuote(
+  params: SwapQuoteParams
+): Promise<Result<SwapQuote, ByrealError>> {
+  const result = await apiClient.post<ApiSwapQuoteResponse>(API_ENDPOINTS.SWAP_QUOTE, {
+    inputMint: params.inputMint,
+    outputMint: params.outputMint,
+    amount: params.amount,
+    swapMode: params.swapMode,
+    slippageBps: String(params.slippageBps),
+    userPublicKey: params.userPublicKey,
+  });
+
+  if (!result.ok) return result;
+
+  // Router 格式: 数据直接在 result 上 (inputMint, outAmount 等)
+  // result.result 是内层状态 { retCode, retMsg }
+  const outerResult = result.value.result as Record<string, unknown> | undefined;
+  if (!outerResult || !outerResult.inputMint) {
+    return { ok: false, error: apiError('No swap quote data returned from router') };
+  }
+
+  return {
+    ok: true,
+    value: {
+      outAmount: String(outerResult.outAmount || ''),
+      inAmount: String(outerResult.inAmount || ''),
+      inputMint: String(outerResult.inputMint || ''),
+      outputMint: String(outerResult.outputMint || ''),
+      transaction: String(outerResult.transaction || ''),
+      priceImpactPct: outerResult.priceImpactPct != null ? String(outerResult.priceImpactPct) : undefined,
+      routerType: String(outerResult.routerType || 'AMM'),
+      orderId: outerResult.orderId ? String(outerResult.orderId) : undefined,
+      quoteId: outerResult.quoteId ? String(outerResult.quoteId) : undefined,
+      poolAddresses: Array.isArray(outerResult.poolAddresses) ? outerResult.poolAddresses as string[] : [],
+    },
+  };
+}
+
+/**
+ * Execute swap via AMM (DEX 格式)
+ */
+export async function executeSwapAmm(
+  params: SwapAmmExecuteParams
+): Promise<Result<{ signatures: string[] }, ByrealError>> {
+  const result = await apiClient.post<ApiSwapAmmExecuteResponse>(API_ENDPOINTS.SWAP_EXECUTE_AMM, {
+    preData: params.preData,
+    data: params.data,
+    userSignTime: params.userSignTime,
+  });
+
+  if (!result.ok) return result;
+
+  const data = result.value.result?.data;
+  if (!data || !Array.isArray(data) || data.length === 0) {
+    return { ok: true, value: { signatures: [] } };
+  }
+
+  return { ok: true, value: { signatures: data } };
+}
+
+/**
+ * Execute swap via RFQ
+ */
+export async function executeSwapRfq(
+  params: SwapRfqExecuteParams
+): Promise<Result<{ txSignature: string; state: string }, ByrealError>> {
+  const result = await apiClient.post<ApiSwapRfqExecuteResponse>(API_ENDPOINTS.SWAP_EXECUTE_RFQ, {
+    quoteId: params.quoteId,
+    requestId: params.requestId,
+    transaction: params.transaction,
+  });
+
+  if (!result.ok) return result;
+
+  const data = result.value.result?.data;
+  if (!data) {
+    return { ok: false, error: apiError('No RFQ swap result returned') };
+  }
+
+  return { ok: true, value: data };
+}
+
+// ============================================
+// Position API Functions
+// ============================================
+
+/**
+ * List positions for a user (DEX 格式)
+ */
+export async function listPositions(
+  params: PositionListParams
+): Promise<Result<PositionListResult, ByrealError>> {
+  const result = await apiClient.get<ApiPositionListResponse>(API_ENDPOINTS.POSITIONS_LIST, {
+    userAddress: params.userAddress,
+    page: params.page || 1,
+    pageSize: params.pageSize || 20,
+    sortField: params.sortField,
+    sortType: params.sortType,
+    poolAddress: params.poolAddress,
+    status: params.status,
+  });
+
+  if (!result.ok) return result;
+
+  const data = result.value.result?.data;
+  if (!data) {
+    return { ok: true, value: { positions: [], total: 0 } };
+  }
+
+  const poolMap = data.poolMap || {};
+  const positions: PositionItem[] = (data.positions || data.records || []).map((item: ApiPositionItem) => {
+    const poolInfo = poolMap[item.poolAddress];
+    const symbolA = poolInfo?.mintA?.symbol || '';
+    const symbolB = poolInfo?.mintB?.symbol || '';
+    return {
+      positionAddress: item.positionAddress,
+      nftMintAddress: item.nftMintAddress,
+      poolAddress: item.poolAddress,
+      tickLower: item.lowerTick,
+      tickUpper: item.upperTick,
+      status: item.status,
+      liquidityUsd: item.liquidityUsd,
+      earnedUsd: item.earnedUsd,
+      earnedUsdPercent: item.earnedUsdPercent,
+      pnlUsd: item.pnlUsd,
+      pnlUsdPercent: item.pnlUsdPercent,
+      apr: item.apr,
+      bonusUsd: item.bonusUsd,
+      pair: symbolA && symbolB ? `${symbolA}/${symbolB}` : undefined,
+      tokenSymbolA: symbolA || undefined,
+      tokenSymbolB: symbolB || undefined,
+    };
+  });
+
+  return {
+    ok: true,
+    value: { positions, total: data.total },
+  };
+}
+
+// ============================================
+// Fee API Functions
+// ============================================
+
+/**
+ * Encode fee claim transactions (DEX 格式)
+ */
+export async function encodeFee(
+  params: FeeEncodeParams
+): Promise<Result<FeeEncodeEntry[], ByrealError>> {
+  const result = await apiClient.post<ApiFeeEncodeResponse>(API_ENDPOINTS.FEE_ENCODE, {
+    walletAddress: params.walletAddress,
+    positionAddresses: params.positionAddresses,
+  });
+
+  if (!result.ok) return result;
+
+  const data = result.value.result?.data;
+  if (!data) {
+    return { ok: true, value: [] };
+  }
+
+  return { ok: true, value: data };
+}
+
 // Export all API functions
 export const api = {
   listPools,
@@ -473,4 +757,9 @@ export const api = {
   listTokens,
   getGlobalOverview,
   getKlines,
+  getSwapQuote,
+  executeSwapAmm,
+  executeSwapRfq,
+  listPositions,
+  encodeFee,
 };

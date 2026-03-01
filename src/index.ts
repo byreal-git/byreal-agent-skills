@@ -13,6 +13,8 @@ import { createCatalogCommand } from './cli/commands/catalog.js';
 import { createWalletCommand } from './cli/commands/wallet.js';
 import { createConfigCommand } from './cli/commands/config.js';
 import { createSetupCommand } from './cli/commands/setup.js';
+import { createSwapCommand } from './cli/commands/swap.js';
+import { createPositionsCommand } from './cli/commands/positions.js';
 
 // ============================================
 // Main Program
@@ -48,6 +50,8 @@ program.addCommand(createCatalogCommand());
 program.addCommand(createWalletCommand());
 program.addCommand(createConfigCommand());
 program.addCommand(createSetupCommand());
+program.addCommand(createSwapCommand());
+program.addCommand(createPositionsCommand());
 
 // ============================================
 // Error Handling

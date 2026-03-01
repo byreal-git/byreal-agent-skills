@@ -34,6 +34,10 @@ export const API_ENDPOINTS = {
   SWAP_QUOTE: '/byreal/api/router/v1/router-service/swap',
   SWAP_EXECUTE_AMM: '/byreal/api/dex/v2/send-swap-tx',
   SWAP_EXECUTE_RFQ: '/byreal/api/rfq/v1/swap',
+
+  // Position endpoints
+  POSITIONS_LIST: '/byreal/api/dex/v2/position/list',
+  FEE_ENCODE: '/byreal/api/dex/v2/incentive/encode-fee',
 } as const;
 
 // ============================================

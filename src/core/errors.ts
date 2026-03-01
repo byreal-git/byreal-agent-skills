@@ -39,6 +39,9 @@ export const ErrorCodes = {
 
   // System errors
   RPC_ERROR: 'RPC_ERROR',
+  TRANSACTION_FAILED: 'TRANSACTION_FAILED',
+  TRANSACTION_TIMEOUT: 'TRANSACTION_TIMEOUT',
+  SDK_ERROR: 'SDK_ERROR',
   UNKNOWN_ERROR: 'UNKNOWN_ERROR',
 } as const;
 
@@ -253,6 +256,101 @@ export function walletNotConfiguredError(): ByrealError {
         action: 'flag',
         description: 'Or use --keypair-path flag for one-time use',
         command: 'byreal-cli --keypair-path <path> wallet address',
+      },
+    ],
+    retryable: false,
+  });
+}
+
+export function transactionError(message: string, signature?: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.TRANSACTION_FAILED,
+    type: 'SYSTEM',
+    message: `Transaction failed: ${message}`,
+    details: signature ? { signature } : undefined,
+    suggestions: signature ? [
+      {
+        action: 'view',
+        description: 'View transaction on Solscan',
+        command: `https://solscan.io/tx/${signature}`,
+      },
+    ] : undefined,
+    retryable: false,
+  });
+}
+
+export function transactionTimeoutError(signature?: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.TRANSACTION_TIMEOUT,
+    type: 'SYSTEM',
+    message: 'Transaction confirmation timed out',
+    details: signature ? { signature } : undefined,
+    suggestions: [
+      {
+        action: 'check',
+        description: 'The transaction may still be processed. Check the explorer.',
+        command: signature ? `https://solscan.io/tx/${signature}` : undefined,
+      },
+    ],
+    retryable: true,
+  });
+}
+
+export function sdkError(message: string, details?: Record<string, unknown>): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.SDK_ERROR,
+    type: 'SYSTEM',
+    message: `SDK error: ${message}`,
+    details,
+    retryable: false,
+  });
+}
+
+export function insufficientBalanceError(details?: Record<string, unknown>): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.INSUFFICIENT_BALANCE,
+    type: 'BUSINESS',
+    message: 'Insufficient balance for this operation',
+    details,
+    suggestions: [
+      {
+        action: 'check',
+        description: 'Check your wallet balance',
+        command: 'byreal-cli wallet balance',
+      },
+    ],
+    retryable: false,
+  });
+}
+
+export function slippageExceededError(expected: string, actual: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.SLIPPAGE_EXCEEDED,
+    type: 'BUSINESS',
+    message: `Slippage exceeded: expected ${expected}, got ${actual}`,
+    details: { expected, actual },
+    suggestions: [
+      {
+        action: 'increase',
+        description: 'Try increasing slippage tolerance',
+        command: 'byreal-cli config set defaults.slippage_bps <value>',
+      },
+    ],
+    retryable: true,
+  });
+}
+
+export function positionNotFoundError(nftMint: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.POSITION_NOT_FOUND,
+    type: 'BUSINESS',
+    message: `Position not found: ${nftMint}`,
+    details: { nft_mint: nftMint },
+    suggestions: [
+      {
+        action: 'list',
+        description: 'List your positions',
+        command: 'byreal-cli positions list -o json',
       },
     ],
     retryable: false,
