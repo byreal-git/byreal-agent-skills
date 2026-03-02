@@ -9,7 +9,7 @@ import type { GlobalOptions } from '../../core/types.js';
 import { api } from '../../api/endpoints.js';
 import { resolveKeypair, resolveAddress } from '../../auth/keypair.js';
 import { uiToRaw, rawToUi } from '../../core/amounts.js';
-import { getSlippageBps } from '../../core/solana.js';
+import { getSlippageBps, getConnection } from '../../core/solana.js';
 import { resolveDecimals } from '../../core/token-registry.js';
 import {
   resolveExecutionMode,
@@ -22,6 +22,7 @@ import {
   signTransaction,
   serializeTransaction,
 } from '../../core/transaction.js';
+import { transactionError } from '../../core/errors.js';
 import {
   outputJson,
   outputErrorJson,
@@ -221,6 +222,55 @@ function createSwapExecuteCommand(): Command {
           process.exit(1);
         }
 
+        // Verify transaction on-chain
+        const execValue = executeResult.value as { signatures?: string[]; txSignature?: string; state?: string };
+        const signatures = execValue.signatures
+          || (execValue.txSignature ? [execValue.txSignature] : []);
+
+        let confirmed = true;
+        if (signatures.length > 0) {
+          const connection = getConnection();
+          try {
+            for (const sig of signatures) {
+              const result = await connection.confirmTransaction(
+                {
+                  signature: sig,
+                  blockhash: signedTx.message.recentBlockhash,
+                  lastValidBlockHeight: (await connection.getLatestBlockhash()).lastValidBlockHeight,
+                },
+                'confirmed'
+              );
+
+              if (result.value.err) {
+                const txErr = transactionError(
+                  `Transaction confirmed but failed on-chain: ${JSON.stringify(result.value.err)}`,
+                  sig
+                );
+                if (format === 'json') {
+                  outputErrorJson(txErr.toJSON());
+                } else {
+                  outputErrorTable(txErr.toJSON());
+                }
+                process.exit(1);
+              }
+            }
+          } catch (e) {
+            const message = (e as Error).message || 'Unknown error';
+            if (message.includes('timeout') || message.includes('Timeout')) {
+              // Timeout: transaction may still succeed, show unconfirmed state
+              confirmed = false;
+            } else {
+              const txErr = transactionError(message, signatures[0]);
+              if (format === 'json') {
+                outputErrorJson(txErr.toJSON());
+              } else {
+                outputErrorTable(txErr.toJSON());
+              }
+              process.exit(1);
+            }
+          }
+        }
+
         if (format === 'json') {
           outputJson({
             ...executeResult.value,
@@ -230,9 +280,10 @@ function createSwapExecuteCommand(): Command {
             uiOutAmount,
             priceImpactPct: quote.priceImpactPct,
             routerType: quote.routerType,
+            confirmed,
           }, startTime);
         } else {
-          outputSwapResultTable(executeResult.value, uiInAmount, uiOutAmount, quote.priceImpactPct);
+          outputSwapResultTable(executeResult.value, uiInAmount, uiOutAmount, quote.priceImpactPct, confirmed);
         }
       } catch (e) {
         const message = (e as Error).message || 'Failed to resolve token decimals';

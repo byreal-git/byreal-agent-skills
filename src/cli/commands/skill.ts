@@ -556,6 +556,35 @@ Error responses:
 \`\`\`
 
 
+## Swap Troubleshooting
+
+When a swap fails, try these strategies before giving up:
+
+1. **Switch swap-mode**: If \`--swap-mode in\` (default) fails, try \`--swap-mode out\`. Different modes may find different routes (e.g., single-pool AMM vs multi-hop) that can succeed.
+   \`\`\`bash
+   # Default mode failed, try out mode
+   byreal-cli swap execute --input-mint <A> --output-mint <B> --amount <amt> --swap-mode out --dry-run
+   \`\`\`
+
+2. **Use an intermediate token**: If a direct A→B swap fails (low liquidity, no route), try splitting into two hops via SOL or a stablecoin (USDC/USDT):
+   \`\`\`bash
+   # Step 1: Swap A → SOL (or USDC)
+   byreal-cli swap execute --input-mint <A> --output-mint So11111111111111111111111111111111111111112 --amount <amt> --confirm
+   # Step 2: Swap SOL (or USDC) → B
+   byreal-cli swap execute --input-mint So11111111111111111111111111111111111111112 --output-mint <B> --amount <received> --confirm
+   \`\`\`
+   Common intermediate tokens:
+   - **SOL**: \`So11111111111111111111111111111111111111112\`
+   - **USDC**: \`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\`
+   - **USDT**: \`Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB\`
+
+3. **Increase slippage**: For volatile tokens, the default slippage may be too tight. Try increasing it:
+   \`\`\`bash
+   byreal-cli swap execute --input-mint <A> --output-mint <B> --amount <amt> --slippage 300 --dry-run
+   \`\`\`
+
+4. **Reduce amount**: Large swaps may exceed pool liquidity. Try a smaller amount or split into multiple swaps.
+
 ## Error Handling
 
 When an error occurs, check \`error.suggestions\` for recovery actions:

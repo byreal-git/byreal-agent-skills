@@ -425,8 +425,14 @@ export function outputSwapResultTable(
   uiInAmount?: string,
   uiOutAmount?: string,
   priceImpactPct?: string,
+  confirmed?: boolean,
 ): void {
-  console.log(chalk.green.bold('\nSwap Executed Successfully\n'));
+  if (confirmed === false) {
+    console.log(chalk.yellow.bold('\nSwap Submitted (Unconfirmed)\n'));
+    console.log(chalk.yellow('Transaction was submitted but confirmation timed out. Check explorer for status.\n'));
+  } else {
+    console.log(chalk.green.bold('\nSwap Executed Successfully\n'));
+  }
 
   const table = createTable(['Field', 'Value']);
 
