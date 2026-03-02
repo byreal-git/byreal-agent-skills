@@ -13,7 +13,7 @@ npx skills add byreal-git/byreal-cli
 Install cli only:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/byreal-git/byreal-cli/main/install.sh | bash
+npm install -g https://github.com/byreal-git/byreal-cli/releases/latest/download/byreal-cli.tgz
 ```
 
 ## Features

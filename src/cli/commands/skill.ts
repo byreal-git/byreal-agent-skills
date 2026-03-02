@@ -23,7 +23,7 @@ Byreal DEX (Solana) all-in-one CLI: query pools/tokens/TVL, analyze pool APR & r
 which byreal-cli && byreal-cli --version
 
 # Install (one-time)
-curl -fsSL https://raw.githubusercontent.com/byreal-git/byreal-cli/main/install.sh | bash
+npm install -g https://github.com/byreal-git/byreal-cli/releases/latest/download/byreal-cli.tgz
 \`\`\`
 
 ## Check for Updates
