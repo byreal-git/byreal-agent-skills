@@ -35,7 +35,7 @@ const RELEASE_URL = `https://github.com/${GITHUB_REPO}/releases`;
 
 function getInstallCommand(version?: string): string {
   if (version) {
-    return `npm install -g ${RELEASE_URL}/download/v${version}/byreal-cli-${version}.tgz`;
+    return `npm install -g ${RELEASE_URL}/download/v${version}/byreal-cli.tgz`;
   }
   return `npm install -g ${RELEASE_URL}/latest/download/byreal-cli.tgz`;
 }

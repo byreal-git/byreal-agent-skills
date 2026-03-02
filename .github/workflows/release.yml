@@ -17,6 +17,12 @@ jobs:
         with:
           node-version: 18
 
+      - name: Sync version from git tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm version "$VERSION" --no-git-tag-version
+          sed -i "s/export const VERSION = '.*'/export const VERSION = '$VERSION'/" src/core/constants.ts
+
       - run: npm ci
 
       - run: npm run build
