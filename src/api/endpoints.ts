@@ -23,6 +23,9 @@ import type {
   PositionListParams,
   PositionItem,
   PositionListResult,
+  TopPositionsParams,
+  TopPositionItem,
+  TopPositionsResult,
   FeeEncodeParams,
   FeeEncodeEntry,
 } from '../core/types.js';
@@ -286,6 +289,54 @@ interface ApiPositionListResponse {
 }
 
 // ============================================
+// Top Positions Response Types
+// ============================================
+
+interface ApiTopPositionItem {
+  poolAddress: string;
+  positionAddress: string;
+  nftMintAddress: string;
+  upperTick: number;
+  lowerTick: number;
+  walletAddress: string;
+  status: number;
+  liquidityUsd?: string;
+  earnedUsd?: string;
+  earnedUsdPercent?: string;
+  pnlUsd?: string;
+  pnlUsdPercent?: string;
+  bonusUsd?: string;
+  copies?: number;
+  positionAgeMs?: number;
+  totalDeposit?: string;
+  totalClaimedFeesRewards?: string;
+}
+
+interface ApiTopPositionsResponse {
+  retCode: number;
+  retMsg: string;
+  result: {
+    success: boolean;
+    version: string;
+    timestamp: number;
+    ret_code: number;
+    ret_msg: string | null;
+    data: {
+      records: ApiTopPositionItem[];
+      poolMap?: Record<string, {
+        mintA?: { symbol?: string; address?: string };
+        mintB?: { symbol?: string; address?: string };
+      }>;
+      total: number;
+      pageNum: number;
+      pageSize: number;
+    };
+  };
+  retExtInfo: Record<string, unknown>;
+  time: number;
+}
+
+// ============================================
 // Fee Encode Response Types
 // ============================================
 
@@ -372,8 +423,7 @@ function transformOverview(data: ApiOverviewGlobalDTO): GlobalOverview {
     fee_24h_usd: parseFloat(data.feeUsd24h || '0'),
     fee_change_24h: parseFloat(data.feeUsd24hChange || '0'),
     fee_all: parseFloat(data.feeAll || '0'),
-    pools_count: 0,        // API 未返回
-    active_positions: 0,   // API 未返回
+    pools_count: 0,        // 由 getGlobalOverview 从 pools list 填充
   };
 }
 
@@ -536,13 +586,19 @@ export async function listTokens(
  * 响应参考：OverviewGlobalDTO (overviewGlobalDTO.ts)
  */
 export async function getGlobalOverview(): Promise<Result<GlobalOverview, ByrealError>> {
-  const result = await apiClient.get<ApiOverviewResponse>(API_ENDPOINTS.OVERVIEW_GLOBAL);
+  // 并行请求：overview 数据 + pools 总数（pageSize=1 最小化开销）
+  const [overviewResult, poolsResult] = await Promise.all([
+    apiClient.get<ApiOverviewResponse>(API_ENDPOINTS.OVERVIEW_GLOBAL),
+    apiClient.get<ApiPoolsResponse>(API_ENDPOINTS.POOLS_LIST, { page: 1, pageSize: 1 }),
+  ]);
 
-  if (!result.ok) {
-    return result;
+  if (!overviewResult.ok) {
+    return overviewResult;
   }
 
-  const data = result.value.result?.data;
+  const data = overviewResult.value.result?.data;
+  const poolsTotal = poolsResult.ok ? (poolsResult.value.result?.data?.total ?? 0) : 0;
+
   if (!data) {
     return {
       ok: true,
@@ -555,15 +611,16 @@ export async function getGlobalOverview(): Promise<Result<GlobalOverview, Byreal
         fee_24h_usd: 0,
         fee_change_24h: 0,
         fee_all: 0,
-        pools_count: 0,
-        active_positions: 0,
+        pools_count: poolsTotal,
       },
     };
   }
 
+  const overview = transformOverview(data);
+  overview.pools_count = poolsTotal;
   return {
     ok: true,
-    value: transformOverview(data),
+    value: overview,
   };
 }
 
@@ -779,6 +836,75 @@ export async function listPositions(
 }
 
 // ============================================
+// Top Positions API Functions
+// ============================================
+
+/**
+ * List top positions for a pool (Copy Farmer)
+ */
+export async function listTopPositions(
+  params: TopPositionsParams
+): Promise<Result<TopPositionsResult, ByrealError>> {
+  const page = params.page || 1;
+  const pageSize = params.pageSize || 20;
+
+  const result = await apiClient.post<ApiTopPositionsResponse>(API_ENDPOINTS.COPYFARMER_TOP_POSITIONS, {
+    poolAddress: params.poolAddress,
+    page,
+    pageSize,
+    sortField: params.sortField || 'liquidity',
+    sortType: params.sortType || 'desc',
+    status: params.status ?? 0,
+  });
+
+  if (!result.ok) return result;
+
+  const data = result.value.result?.data;
+  if (!data) {
+    return { ok: true, value: { positions: [], total: 0, page, pageSize } };
+  }
+
+  const poolMap = data.poolMap || {};
+  const positions: TopPositionItem[] = (data.records || []).map((item: ApiTopPositionItem) => {
+    const poolInfo = poolMap[item.poolAddress];
+    const symbolA = poolInfo?.mintA?.symbol || '';
+    const symbolB = poolInfo?.mintB?.symbol || '';
+    return {
+      poolAddress: item.poolAddress,
+      positionAddress: item.positionAddress,
+      nftMintAddress: item.nftMintAddress,
+      walletAddress: item.walletAddress,
+      tickLower: item.lowerTick,
+      tickUpper: item.upperTick,
+      status: item.status,
+      liquidityUsd: item.liquidityUsd || '0',
+      earnedUsd: item.earnedUsd || '0',
+      earnedUsdPercent: item.earnedUsdPercent || '0',
+      pnlUsd: item.pnlUsd || '0',
+      pnlUsdPercent: item.pnlUsdPercent || '0',
+      bonusUsd: item.bonusUsd || '0',
+      copies: item.copies || 0,
+      positionAgeMs: item.positionAgeMs || 0,
+      totalDeposit: item.totalDeposit || '0',
+      totalClaimedFeesRewards: item.totalClaimedFeesRewards || '0',
+      pair: symbolA && symbolB ? `${symbolA}/${symbolB}` : undefined,
+      tokenSymbolA: symbolA || undefined,
+      tokenSymbolB: symbolB || undefined,
+    };
+  });
+
+  return {
+    ok: true,
+    value: {
+      positions,
+      total: data.total,
+      page: data.pageNum,
+      pageSize: data.pageSize,
+    },
+  };
+}
+
+// ============================================
 // Fee API Functions
 // ============================================
 
@@ -845,6 +971,7 @@ export const api = {
   executeSwapAmm,
   executeSwapRfq,
   listPositions,
+  listTopPositions,
   encodeFee,
   getTokenPrices,
 };

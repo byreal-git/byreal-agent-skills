@@ -66,6 +66,8 @@ byreal-cli catalog show dex.pool.list
 | dex.position.open | Open a new CLMM position |
 | dex.position.close | Close a position |
 | dex.position.claim | Claim accumulated fees |
+| dex.position.topPositions | Query top positions in a pool for copy trading |
+| dex.position.copy | Copy an existing position with referral bonus |
 | wallet.address | Show wallet address |
 | wallet.balance | Query wallet balance |
 | wallet.info | Detailed wallet info |
@@ -145,6 +147,8 @@ You do NOT need to pass token decimals or convert amounts manually. Use \`--raw\
 | Close position | \`byreal-cli positions close --nft-mint <addr> --confirm\` |
 | Claim fees | \`byreal-cli positions claim --nft-mints <addrs> --confirm\` |
 | Analyze position | \`byreal-cli positions analyze <nft-mint>\` |
+| Top positions in pool | \`byreal-cli positions top-positions --pool <addr>\` |
+| Copy a position | \`byreal-cli positions copy --position <addr> --amount-usd <usd> --confirm\` |
 | Wallet address | \`byreal-cli wallet address\` |
 | Wallet balance | \`byreal-cli wallet balance\` |
 | Set keypair | \`byreal-cli wallet set <keypair-path>\` |
@@ -426,6 +430,36 @@ Options:
   --confirm                Execute the claim
 \`\`\`
 
+### positions top-positions
+Query top positions in a pool. Use this to discover high-performing positions that can be copied.
+Each position includes an \`inRange\` field (true/false) indicating whether the pool's current tick is within the position's tick range. Out-of-range positions earn zero trading fees.
+
+\`\`\`bash
+byreal-cli positions top-positions [options]
+
+Options:
+  --pool <address>        Pool address (required)
+  --page <n>              Page number (default: 1)
+  --page-size <n>         Page size (default: 20)
+  --sort-field <field>    Sort: liquidity, apr, earned, pnl, copies, bonus (default: liquidity)
+  --sort-type <type>      Sort order: asc, desc (default: desc)
+  --status <n>            Position status: 0=open, 1=closed (default: 0)
+\`\`\`
+
+### positions copy
+Copy an existing position. Creates a new position with the same price range and records a referral on-chain for copy bonus rewards.
+
+\`\`\`bash
+byreal-cli positions copy [options]
+
+Options:
+  --position <address>    Position address to copy (required, from top-positions output)
+  --amount-usd <usd>     Investment amount in USD (required)
+  --slippage <bps>       Slippage tolerance in basis points
+  --dry-run              Preview the copy without executing
+  --confirm              Execute the copy
+\`\`\`
+
 ### pools analyze
 Comprehensive pool analysis: metrics, volatility, multi-range APR comparison, risk assessment, and investment projection.
 
@@ -519,6 +553,43 @@ When \`positions open --dry-run\` reports insufficient balance, the response aut
 5. **Re-run open**: After waiting, re-run \`positions open --dry-run\` to verify balances, then \`--confirm\`
 
 **Important**: The swap source can be ANY token in the wallet. Do NOT default to only using the pool's own tokens. Always check \`wallet balance\` to see what's available.
+
+## Workflow: Copy a Top Position
+
+When user wants to copy/follow a position:
+1. Analyze pool: \`byreal-cli pools analyze <pool-id> -o json\`
+2. List top positions: \`byreal-cli positions top-positions --pool <pool-id> -o json\`
+3. Choose a position based on: **inRange=true** (critical — out-of-range positions earn zero fees, never recommend them unless user explicitly asks), high PnL, high earned fees, high copies count, reasonable age
+4. Preview: \`byreal-cli positions copy --position <addr> --amount-usd <usd> --dry-run -o json\`
+5. Execute: \`byreal-cli positions copy --position <addr> --amount-usd <usd> --confirm -o json\`
+
+Copy Bonus: Both the original position creator and copiers earn extra yield boost (5-10%) and referral rewards (2.5-5% of followers' LP fees).
+
+## Workflow: Discover Copy Opportunities (Vague Intent)
+
+When user asks vague questions like "有什么仓位可以 copy？", "最近有什么好的仓位？" — they don't specify a pool. Follow this multi-step discovery flow:
+
+1. **Check wallet**: \`byreal-cli wallet balance -o json\` — understand available funds and token holdings
+2. **List top pools**: \`byreal-cli pools list --sort-field volumeUsd24h --sort-type desc --page-size 10 -o json\` — find active pools with high volume/TVL
+3. **Filter pools by user context**:
+   - If user holds specific tokens → prefer pools containing those tokens (avoid unnecessary swaps)
+   - If user wants stable/low-risk → prefer stablecoin pools (category=1)
+   - If user wants high yield → prefer high-APR pools
+   - Default: pick 2-3 pools with highest volume and reasonable TVL (>$50K)
+4. **Query top positions** for each selected pool: \`byreal-cli positions top-positions --pool <pool-id> -o json\`
+5. **Cross-pool comparison**: Rank all positions across pools, prioritize:
+   - **inRange=true** (mandatory — skip out-of-range positions)
+   - High earned fees % (indicates consistent fee generation)
+   - Positive PnL (net profitable after IL)
+   - Multiple copies (social proof)
+   - Reasonable age (>1d, positions that have survived market moves)
+6. **Present top 3-5 recommendations** with reasoning, then ask user which one to copy and how much to invest
+7. **Execute copy** following the "Copy a Top Position" workflow above
+
+**Tips**:
+- Always explain WHY you recommend a position (e.g., "高手续费收益 + 低无常损失 + 在区间内")
+- If user's balance is low (<$20), suggest starting with a single position to minimize gas cost
+- If all positions in a pool are out-of-range, skip that pool and explain why
 
 ## Output Format
 

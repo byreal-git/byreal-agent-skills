@@ -37,6 +37,8 @@ import {
   outputPositionClaimPreview,
   outputTransactionResult,
   outputPositionAnalysisTable,
+  outputTopPositionsTable,
+  outputCopyPositionPreview,
 } from "../output/formatters.js";
 
 // ============================================
@@ -192,6 +194,23 @@ async function fetchWalletBalanceSummary(
   return { sol: solUi, tokens };
 }
 
+// ATA program used to derive Associated Token Account addresses
+const ASSOCIATED_TOKEN_PROGRAM = new PublicKey(
+  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+);
+
+function getAtaAddress(
+  owner: PublicKey,
+  mint: PublicKey,
+  tokenProgramId: PublicKey,
+): PublicKey {
+  const [address] = PublicKey.findProgramAddressSync(
+    [owner.toBuffer(), tokenProgramId.toBuffer(), mint.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM,
+  );
+  return address;
+}
+
 async function getTokenBalance(owner: PublicKey, mint: string): Promise<BN> {
   const connection = getConnection();
   if (mint === SOL_MINT) {
@@ -199,23 +218,25 @@ async function getTokenBalance(owner: PublicKey, mint: string): Promise<BN> {
     return new BN(lamports.toString());
   }
   const mintPk = new PublicKey(mint);
-  const [splResult, t22Result] = await Promise.allSettled([
-    connection.getTokenAccountsByOwner(owner, {
-      mint: mintPk,
-      programId: TOKEN_PROGRAM_ID,
-    }),
-    connection.getTokenAccountsByOwner(owner, {
-      mint: mintPk,
-      programId: TOKEN_2022_PROGRAM_ID,
-    }),
+
+  // Only check ATA balance — the CLMM SDK transfers from ATA, not other accounts.
+  // Using getTokenAccountsByOwner would sum ALL accounts for this mint (ATA + non-ATA),
+  // which over-reports available balance when leftover non-ATA accounts exist.
+  const ataSpl = getAtaAddress(owner, mintPk, TOKEN_PROGRAM_ID);
+  const ataT22 = getAtaAddress(owner, mintPk, TOKEN_2022_PROGRAM_ID);
+
+  const [splInfo, t22Info] = await Promise.allSettled([
+    connection.getAccountInfo(ataSpl),
+    connection.getAccountInfo(ataT22),
   ]);
+
   let total = new BN(0);
-  for (const result of [splResult, t22Result]) {
+  for (const result of [splInfo, t22Info]) {
     if (result.status !== "fulfilled") continue;
-    for (const { account } of result.value.value) {
-      const amount = account.data.subarray(64, 72).readBigUInt64LE();
-      total = total.add(new BN(amount.toString()));
-    }
+    const info = result.value;
+    if (!info?.data || info.data.length < 72) continue;
+    const amount = info.data.subarray(64, 72).readBigUInt64LE();
+    total = total.add(new BN(amount.toString()));
   }
   return total;
 }
@@ -1256,6 +1277,412 @@ function createPositionsAnalyzeCommand(): Command {
 }
 
 // ============================================
+// positions top-positions
+// ============================================
+
+function createTopPositionsCommand(): Command {
+  return new Command("top-positions")
+    .description("Query top positions in a pool for copy trading")
+    .requiredOption("--pool <address>", "Pool address")
+    .option("--page <n>", "Page number", "1")
+    .option("--page-size <n>", "Page size", "20")
+    .option(
+      "--sort-field <field>",
+      "Sort: liquidity, apr, earned, pnl, copies, bonus",
+      "liquidity",
+    )
+    .option("--sort-type <type>", "Sort order: asc, desc", "desc")
+    .option("--status <n>", "Position status: 0=open, 1=closed", "0")
+    .action(async (options, cmdObj: Command) => {
+      const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
+      const format = globalOptions.output;
+      const startTime = Date.now();
+
+      const result = await api.listTopPositions({
+        poolAddress: options.pool,
+        page: parseInt(options.page, 10),
+        pageSize: parseInt(options.pageSize, 10),
+        sortField: options.sortField,
+        sortType: options.sortType,
+        status: parseInt(options.status, 10),
+      });
+
+      if (!result.ok) {
+        if (format === "json") {
+          outputErrorJson(result.error);
+        } else {
+          outputErrorTable(result.error);
+        }
+        process.exit(1);
+      }
+
+      // Enrich positions with in-range status from on-chain pool data
+      try {
+        const { getChain } = await import("../../sdk/init.js");
+        const chain = getChain();
+        const poolInfo = await chain.getRawPoolInfoByPoolId(options.pool);
+        for (const pos of result.value.positions) {
+          pos.inRange =
+            poolInfo.tickCurrent >= pos.tickLower &&
+            poolInfo.tickCurrent < pos.tickUpper;
+        }
+      } catch {
+        // If SDK fails, leave inRange undefined — non-critical enrichment
+      }
+
+      if (format === "json") {
+        outputJson(result.value, startTime);
+      } else {
+        outputTopPositionsTable(
+          result.value.positions,
+          result.value.total,
+        );
+      }
+    });
+}
+
+// ============================================
+// positions copy
+// ============================================
+
+function createCopyPositionCommand(): Command {
+  return new Command("copy")
+    .description(
+      "Copy an existing position with referral bonus",
+    )
+    .requiredOption("--position <address>", "Position PDA address to copy")
+    .requiredOption("--amount-usd <usd>", "Investment amount in USD")
+    .option("--slippage <bps>", "Slippage tolerance in basis points")
+    .option("--dry-run", "Preview the copy without executing")
+    .option("--confirm", "Execute the copy")
+    .action(async (options, cmdObj: Command) => {
+      const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
+      const format = globalOptions.output;
+      const startTime = Date.now();
+
+      // Check execution mode
+      const mode = resolveExecutionMode(options);
+      requireExecutionMode(mode, "positions copy");
+
+      // Resolve keypair (required)
+      const keypairResult = resolveKeypair(globalOptions.keypairPath);
+      if (!keypairResult.ok) {
+        if (format === "json") {
+          outputErrorJson(keypairResult.error);
+        } else {
+          outputErrorTable(keypairResult.error);
+        }
+        process.exit(1);
+      }
+
+      const { keypair, publicKey } = keypairResult.value;
+
+      try {
+        const positionAddress = new PublicKey(options.position);
+
+        // Check: cannot copy own position
+        // (Backend also validates, but early check gives better UX)
+
+        // Lazy-load SDK
+        const { getChain } = await import("../../sdk/init.js");
+        const { calculateTokenAmountsFromUsd } = await import(
+          "../../libs/clmm-sdk/client/utils.js"
+        );
+
+        const chain = getChain();
+
+        // Read parent position on-chain
+        const parentPosition =
+          await chain.getRawPositionInfoByAddress(positionAddress);
+        if (!parentPosition) {
+          const errMsg = `Position not found on-chain: ${options.position}`;
+          if (format === "json") {
+            outputErrorJson({
+              code: "POSITION_NOT_FOUND",
+              type: "BUSINESS",
+              message: errMsg,
+              retryable: false,
+            });
+          } else {
+            console.error(chalk.red(`\nError: ${errMsg}`));
+          }
+          process.exit(1);
+        }
+
+        const poolId = parentPosition.poolId;
+        const tickLower = parentPosition.tickLower;
+        const tickUpper = parentPosition.tickUpper;
+
+        // Get on-chain pool info
+        const poolInfo = await chain.getRawPoolInfoByPoolId(poolId);
+
+        // Get pool API info (symbols + prices)
+        const poolAddress = poolId.toBase58();
+        let symbolA = "MintA";
+        let symbolB = "MintB";
+        let tokenAPriceUsd = 0;
+        let tokenBPriceUsd = 0;
+        const poolApiResult = await api.getPoolInfo(poolAddress);
+        if (poolApiResult.ok) {
+          symbolA = poolApiResult.value.token_a.symbol || symbolA;
+          symbolB = poolApiResult.value.token_b.symbol || symbolB;
+          tokenAPriceUsd = poolApiResult.value.token_a.price_usd ?? 0;
+          tokenBPriceUsd = poolApiResult.value.token_b.price_usd ?? 0;
+        }
+
+        if (tokenAPriceUsd <= 0 || tokenBPriceUsd <= 0) {
+          const err = {
+            code: "PRICE_UNAVAILABLE",
+            type: "BUSINESS" as const,
+            message: `Cannot calculate token split: token price unavailable (${symbolA}: $${tokenAPriceUsd}, ${symbolB}: $${tokenBPriceUsd})`,
+            retryable: true,
+          };
+          if (format === "json") {
+            outputErrorJson(err);
+          } else {
+            outputErrorTable(err);
+          }
+          process.exit(1);
+        }
+
+        // Convert ticks to prices for display
+        const { TickMath } = await import(
+          "../../libs/clmm-sdk/instructions/utils/tickMath.js"
+        );
+        const priceLower = TickMath.getPriceFromTick({
+          tick: tickLower,
+          decimalsA: poolInfo.mintDecimalsA,
+          decimalsB: poolInfo.mintDecimalsB,
+        });
+        const priceUpper = TickMath.getPriceFromTick({
+          tick: tickUpper,
+          decimalsA: poolInfo.mintDecimalsA,
+          decimalsB: poolInfo.mintDecimalsB,
+        });
+
+        // Calculate token amounts from USD
+        const capitalUsd = parseFloat(options.amountUsd);
+        const amounts = calculateTokenAmountsFromUsd({
+          capitalUsd,
+          tokenAPriceUsd,
+          tokenBPriceUsd,
+          priceLower,
+          priceUpper,
+          poolInfo,
+        });
+
+        const amountA = amounts.amountA;
+        const amountB = amounts.amountB;
+
+        // Apply slippage
+        const slippageBps = options.slippage
+          ? parseInt(options.slippage, 10)
+          : getSlippageBps();
+        const slippageMultiplier = 10000 + slippageBps;
+        const amountBMax = amountB
+          .mul(new BN(slippageMultiplier))
+          .div(new BN(10000));
+
+        const amountAUi = rawToUi(amountA.toString(), poolInfo.mintDecimalsA);
+        const amountBUi = rawToUi(amountBMax.toString(), poolInfo.mintDecimalsB);
+        const amountAUsd =
+          tokenAPriceUsd > 0
+            ? (parseFloat(amountAUi) * tokenAPriceUsd).toFixed(2)
+            : undefined;
+        const amountBUsd =
+          tokenBPriceUsd > 0
+            ? (parseFloat(amountBUi) * tokenBPriceUsd).toFixed(2)
+            : undefined;
+        const totalUsd =
+          amountAUsd && amountBUsd
+            ? (parseFloat(amountAUsd) + parseFloat(amountBUsd)).toFixed(2)
+            : undefined;
+
+        const pair =
+          poolApiResult.ok
+            ? poolApiResult.value.pair
+            : `${symbolA}/${symbolB}`;
+
+        // Dry-run: show preview + balance check
+        if (mode === "dry-run") {
+          printDryRunBanner();
+
+          const mintAStr = poolInfo.mintA.toBase58();
+          const mintBStr = poolInfo.mintB.toBase58();
+
+          const previewData = {
+            parentPositionAddress: options.position,
+            poolAddress,
+            pair,
+            tickLower,
+            tickUpper,
+            priceLower: priceLower.toString(),
+            priceUpper: priceUpper.toString(),
+            investmentUsd: capitalUsd.toFixed(2),
+            tokenA: {
+              symbol: symbolA,
+              amount: amountAUi,
+              usd: amountAUsd,
+            },
+            tokenB: {
+              symbol: symbolB,
+              amount: amountBUi,
+              usd: amountBUsd,
+            },
+            totalUsd,
+          };
+
+          // Check wallet balance
+          const balanceWarnings = await checkBalanceSufficiency(
+            publicKey,
+            mintAStr,
+            mintBStr,
+            symbolA,
+            symbolB,
+            poolInfo.mintDecimalsA,
+            poolInfo.mintDecimalsB,
+            amountA,
+            amountBMax,
+          );
+
+          let walletBalances: WalletBalanceSummary | undefined;
+          if (balanceWarnings.length > 0) {
+            walletBalances = await fetchWalletBalanceSummary(publicKey);
+          }
+
+          if (format === "json") {
+            const jsonData: Record<string, unknown> = {
+              mode: "dry-run",
+              ...previewData,
+            };
+            if (balanceWarnings.length > 0) {
+              jsonData.balanceWarnings = balanceWarnings.map((w) => ({
+                symbol: w.symbol,
+                mint: w.mint,
+                required: w.required,
+                available: w.available,
+                deficit: w.deficit,
+                suggestion: `Swap to get at least ${w.deficit} ${w.symbol} before copying position. Use: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount> --confirm`,
+              }));
+              jsonData.walletBalances = walletBalances;
+            }
+            outputJson(jsonData, startTime);
+          } else {
+            outputCopyPositionPreview(previewData);
+            if (balanceWarnings.length > 0) {
+              console.log(chalk.red.bold("\n  Insufficient Balance"));
+              for (const w of balanceWarnings) {
+                console.log(
+                  chalk.red(
+                    `    ${w.symbol}: need ${w.required}, have ${w.available} (deficit: ${w.deficit})`,
+                  ),
+                );
+                console.log(
+                  chalk.yellow(
+                    `    → Swap to get ${w.symbol}: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount> --confirm`,
+                  ),
+                );
+              }
+              if (walletBalances) {
+                console.log(
+                  chalk.cyan.bold("\n  Available Tokens for Swap"),
+                );
+                for (const t of walletBalances.tokens) {
+                  console.log(
+                    chalk.white(
+                      `    ${t.symbol}: ${t.amount} (${t.mint})`,
+                    ),
+                  );
+                }
+              }
+            } else {
+              console.log(chalk.green("\n  Balance check: sufficient"));
+              console.log(
+                chalk.yellow(
+                  "\n  Use --confirm to copy this position",
+                ),
+              );
+            }
+          }
+          return;
+        }
+
+        // Confirm: create copied position
+        printConfirmBanner();
+
+        const result = await chain.createPositionInstructions({
+          userAddress: publicKey,
+          poolInfo,
+          tickLower,
+          tickUpper,
+          base: "MintA",
+          baseAmount: amountA,
+          otherAmountMax: amountBMax,
+          refererPosition: options.position,
+        });
+
+        // Sign and send
+        result.transaction.sign([keypair]);
+        const connection = getConnection();
+        const sendResult = await sendAndConfirmTransaction(
+          connection,
+          result.transaction,
+        );
+
+        if (!sendResult.ok) {
+          if (format === "json") {
+            outputErrorJson(sendResult.error);
+          } else {
+            outputErrorTable(sendResult.error);
+          }
+          process.exit(1);
+        }
+
+        const txData = {
+          signature: sendResult.value.signature,
+          confirmed: sendResult.value.confirmed,
+          nftAddress: result.nftAddress,
+          parentPositionAddress: options.position,
+          poolAddress,
+          pair,
+        };
+
+        if (format === "json") {
+          outputJson(txData, startTime);
+        } else {
+          outputTransactionResult("Position Copied", txData);
+          console.log(
+            chalk.green(
+              `\n  Copied from: ${options.position}`,
+            ),
+          );
+          console.log(
+            chalk.green(
+              "  Referral memo recorded on-chain for copy bonus rewards",
+            ),
+          );
+        }
+      } catch (e) {
+        const message = (e as Error).message || "Unknown SDK error";
+        if (format === "json") {
+          outputErrorJson({
+            code: "SDK_ERROR",
+            type: "SYSTEM",
+            message,
+            retryable: false,
+          });
+        } else {
+          console.error(chalk.red(`\nSDK Error: ${message}`));
+          if (process.env.DEBUG) {
+            console.error((e as Error).stack);
+          }
+        }
+        process.exit(1);
+      }
+    });
+}
+
+// ============================================
 // positions (parent command)
 // ============================================
 
@@ -1267,6 +1694,8 @@ export function createPositionsCommand(): Command {
   cmd.addCommand(createPositionsCloseCommand());
   cmd.addCommand(createPositionsClaimCommand());
   cmd.addCommand(createPositionsAnalyzeCommand());
+  cmd.addCommand(createTopPositionsCommand());
+  cmd.addCommand(createCopyPositionCommand());
 
   return cmd;
 }

@@ -22,6 +22,7 @@ import { BYREAL_CLMM_PROGRAM_ID, MEMO_PROGRAM_ID, U64_IGNORE_RANGE } from '../co
 import {
   IPoolLayoutWithId,
   IPersonalPositionLayout,
+  PersonalPositionLayout,
   PositionUtils,
   RawDataUtils,
   SqrtPriceMath,
@@ -130,6 +131,19 @@ export class Chain {
       programId: this.programId,
       nftMint,
     });
+  }
+
+  /**
+   * Get raw position info by position PDA address (not NFT mint)
+   * @param positionAddress Position PDA address
+   * @returns Promise<IPersonalPositionLayout | null> Position information
+   */
+  public async getRawPositionInfoByAddress(
+    positionAddress: PublicKey
+  ): Promise<IPersonalPositionLayout | null> {
+    const positionRes = await this.connection.getAccountInfo(positionAddress);
+    if (!positionRes) return null;
+    return PersonalPositionLayout.decode(positionRes.data);
   }
 
   /**

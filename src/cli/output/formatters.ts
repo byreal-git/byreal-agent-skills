@@ -18,6 +18,7 @@ import type {
   ByrealConfig,
   SwapQuote,
   PositionItem,
+  TopPositionItem,
   FeeEncodeEntry
 } from '../../core/types.js';
 import { rawToUi } from '../../core/amounts.js';
@@ -205,8 +206,7 @@ export function outputOverviewTable(overview: GlobalOverview): void {
     ['Volume (All Time)', formatUsd(overview.volume_all), '-'],
     ['Fees (24h)', formatUsd(overview.fee_24h_usd), formatPercent(overview.fee_change_24h)],
     ['Fees (All Time)', formatUsd(overview.fee_all), '-'],
-    ['Total Pools', overview.pools_count.toString(), '-'],
-    ['Active Positions', overview.active_positions.toString(), '-']
+    ['Total Pools', overview.pools_count.toString(), '-']
   );
 
   console.log(table.toString());
@@ -595,6 +595,102 @@ export function outputTransactionResult(title: string, data: {
   if (data.nftAddress) {
     table.push(['NFT Address', chalk.gray(data.nftAddress)]);
   }
+
+  console.log(table.toString());
+}
+
+// ============================================
+// Top Positions Formatters
+// ============================================
+
+function formatAge(ms: number): string {
+  if (ms <= 0) return '-';
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  if (days > 0) return `${days}d ${hours}h`;
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+export function outputTopPositionsTable(positions: TopPositionItem[], total: number): void {
+  console.log(chalk.cyan.bold('\nTop Positions\n'));
+
+  const table = createTable([
+    'Rank',
+    'Pair',
+    'Position',
+    'Liquidity',
+    'Earned',
+    'PnL',
+    'Bonus',
+    'Copies',
+    'Age',
+    'Range',
+  ]);
+
+  for (let i = 0; i < positions.length; i++) {
+    const pos = positions[i];
+    const pnlVal = parseFloat(pos.pnlUsd);
+    const pnlColor = pnlVal >= 0 ? chalk.green : chalk.red;
+    const pnlPercent = pos.pnlUsdPercent ? `(${(parseFloat(pos.pnlUsdPercent) * 100).toFixed(1)}%)` : '';
+    const rangeLabel = pos.inRange === true
+      ? chalk.green('In')
+      : pos.inRange === false
+        ? chalk.red('Out')
+        : chalk.gray('-');
+
+    table.push([
+      chalk.white.bold(String(i + 1)),
+      chalk.white.bold(pos.pair || '?/?'),
+      chalk.gray(pos.positionAddress),
+      formatUsd(parseFloat(pos.liquidityUsd)),
+      formatUsd(parseFloat(pos.earnedUsd)),
+      pnlColor(`${formatUsd(Math.abs(pnlVal))} ${pnlPercent}`),
+      formatUsd(parseFloat(pos.bonusUsd)),
+      String(pos.copies),
+      formatAge(pos.positionAgeMs),
+      rangeLabel,
+    ]);
+  }
+
+  console.log(table.toString());
+  console.log(chalk.gray(`\nShowing ${positions.length} of ${total} positions`));
+}
+
+export function outputCopyPositionPreview(data: {
+  parentPositionAddress: string;
+  poolAddress: string;
+  pair: string;
+  tickLower: number;
+  tickUpper: number;
+  priceLower: string;
+  priceUpper: string;
+  investmentUsd: string;
+  tokenA: { symbol: string; amount: string; usd?: string };
+  tokenB: { symbol: string; amount: string; usd?: string };
+  totalUsd?: string;
+}): void {
+  console.log(chalk.cyan.bold('\nCopy Position Preview\n'));
+
+  const table = createTable(['Field', 'Value']);
+  table.push(
+    ['Parent Position', chalk.gray(data.parentPositionAddress)],
+    ['Pool', chalk.gray(data.poolAddress)],
+    ['Pair', chalk.white.bold(data.pair)],
+    ['Tick Range', `${data.tickLower} → ${data.tickUpper}`],
+    ['Price Range', `${data.priceLower} → ${data.priceUpper}`],
+    ['Investment', `$${data.investmentUsd}`],
+    [`${data.tokenA.symbol} Amount`, `${data.tokenA.amount}${data.tokenA.usd ? ` ($${data.tokenA.usd})` : ''}`],
+    [`${data.tokenB.symbol} Amount`, `${data.tokenB.amount}${data.tokenB.usd ? ` ($${data.tokenB.usd})` : ''}`],
+  );
+
+  if (data.totalUsd) {
+    table.push(['Total USD', `$${data.totalUsd}`]);
+  }
+
+  table.push(['Copy Bonus', chalk.green('Copy earns yield boost + referral rewards for both parties')]);
 
   console.log(table.toString());
 }

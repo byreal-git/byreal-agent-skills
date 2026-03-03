@@ -122,7 +122,7 @@ export interface GlobalOverview {
   fee_change_24h: number;
   fee_all: number;
   pools_count: number;
-  active_positions: number;
+  active_positions?: number;
 }
 
 // ============================================
@@ -368,6 +368,54 @@ export interface PositionItem {
 export interface PositionListResult {
   positions: PositionItem[];
   total: number;
+}
+
+// ============================================
+// Copy Farmer / Top Positions Types
+// ============================================
+
+export type TopPositionsSortField = 'liquidity' | 'apr' | 'earned' | 'pnl' | 'copies' | 'bonus' | 'closeTime';
+
+export interface TopPositionsParams {
+  poolAddress: string;
+  page?: number;
+  pageSize?: number;
+  sortField?: TopPositionsSortField;
+  sortType?: 'asc' | 'desc';
+  status?: number; // 0=OPEN, 1=CLOSED
+}
+
+export interface TopPositionItem {
+  poolAddress: string;
+  positionAddress: string;
+  nftMintAddress: string;
+  walletAddress: string;
+  tickLower: number;
+  tickUpper: number;
+  status: number;
+  liquidityUsd: string;
+  earnedUsd: string;
+  earnedUsdPercent: string;
+  pnlUsd: string;
+  pnlUsdPercent: string;
+  bonusUsd: string;
+  copies: number;
+  positionAgeMs: number;
+  totalDeposit: string;
+  totalClaimedFeesRewards: string;
+  // From poolMap enrichment
+  pair?: string;
+  tokenSymbolA?: string;
+  tokenSymbolB?: string;
+  // Enriched by CLI (from on-chain pool data)
+  inRange?: boolean;
+}
+
+export interface TopPositionsResult {
+  positions: TopPositionItem[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 // ============================================
