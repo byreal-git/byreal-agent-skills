@@ -9,7 +9,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import BN from "bn.js";
-import { PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { Keypair, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import type { GlobalOptions } from "../../core/types.js";
 import { api } from "../../api/endpoints.js";
@@ -26,6 +26,7 @@ import {
   deserializeTransaction,
   signTransaction,
   sendAndConfirmTransaction,
+  serializeTransaction,
 } from "../../core/transaction.js";
 import {
   outputJson,
@@ -317,6 +318,8 @@ function createPositionsOpenCommand(): Command {
     .option("--raw", "Amount is already in raw (smallest unit) format")
     .option("--dry-run", "Preview the position without opening")
     .option("--confirm", "Open the position")
+    .option("--unsigned-tx", "Output unsigned transaction as JSON (no signing)")
+    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
@@ -326,18 +329,41 @@ function createPositionsOpenCommand(): Command {
       const mode = resolveExecutionMode(options);
       requireExecutionMode(mode, "positions open");
 
-      // Resolve keypair (required)
-      const keypairResult = resolveKeypair();
-      if (!keypairResult.ok) {
-        if (format === "json") {
-          outputErrorJson(keypairResult.error);
-        } else {
-          outputErrorTable(keypairResult.error);
-        }
-        process.exit(1);
-      }
+      // Resolve keypair or address based on mode
+      let keypair: Keypair | undefined;
+      let publicKey: PublicKey;
 
-      const { keypair, publicKey } = keypairResult.value;
+      if (mode === 'unsigned-tx') {
+        let address: string;
+        if (options.walletAddress) {
+          address = options.walletAddress;
+        } else {
+          const addrResult = resolveAddress();
+          if (!addrResult.ok) {
+            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
+            if (format === "json") {
+              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
+            } else {
+              console.error(chalk.red(`\nError: ${errMsg}`));
+            }
+            process.exit(1);
+          }
+          address = addrResult.value.address;
+        }
+        publicKey = new PublicKey(address);
+      } else {
+        const keypairResult = resolveKeypair();
+        if (!keypairResult.ok) {
+          if (format === "json") {
+            outputErrorJson(keypairResult.error);
+          } else {
+            outputErrorTable(keypairResult.error);
+          }
+          process.exit(1);
+        }
+        keypair = keypairResult.value.keypair;
+        publicKey = keypairResult.value.publicKey;
+      }
 
       // Validate mutually exclusive options
       const useAmountUsd = !!options.amountUsd;
@@ -636,6 +662,22 @@ function createPositionsOpenCommand(): Command {
           return;
         }
 
+        // unsigned-tx: build transaction and output
+        if (mode === 'unsigned-tx') {
+          const result = await chain.createPositionInstructions({
+            userAddress: publicKey,
+            poolInfo,
+            tickLower,
+            tickUpper,
+            base,
+            baseAmount,
+            otherAmountMax,
+          });
+          const base64 = serializeTransaction(result.transaction);
+          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+          return;
+        }
+
         // Confirm: create position
         printConfirmBanner();
 
@@ -650,7 +692,7 @@ function createPositionsOpenCommand(): Command {
         });
 
         // Sign and send
-        result.transaction.sign([keypair]);
+        result.transaction.sign([keypair!]);
         const connection = getConnection();
         const sendResult = await sendAndConfirmTransaction(
           connection,
@@ -708,6 +750,8 @@ function createPositionsCloseCommand(): Command {
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--dry-run", "Preview the close without executing")
     .option("--confirm", "Close the position")
+    .option("--unsigned-tx", "Output unsigned transaction as JSON (no signing)")
+    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
@@ -717,18 +761,41 @@ function createPositionsCloseCommand(): Command {
       const mode = resolveExecutionMode(options);
       requireExecutionMode(mode, "positions close");
 
-      // Resolve keypair (required)
-      const keypairResult = resolveKeypair();
-      if (!keypairResult.ok) {
-        if (format === "json") {
-          outputErrorJson(keypairResult.error);
-        } else {
-          outputErrorTable(keypairResult.error);
-        }
-        process.exit(1);
-      }
+      // Resolve keypair or address based on mode
+      let keypair: Keypair | undefined;
+      let publicKey: PublicKey;
 
-      const { keypair, publicKey } = keypairResult.value;
+      if (mode === 'unsigned-tx') {
+        let address: string;
+        if (options.walletAddress) {
+          address = options.walletAddress;
+        } else {
+          const addrResult = resolveAddress();
+          if (!addrResult.ok) {
+            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
+            if (format === "json") {
+              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
+            } else {
+              console.error(chalk.red(`\nError: ${errMsg}`));
+            }
+            process.exit(1);
+          }
+          address = addrResult.value.address;
+        }
+        publicKey = new PublicKey(address);
+      } else {
+        const keypairResult = resolveKeypair();
+        if (!keypairResult.ok) {
+          if (format === "json") {
+            outputErrorJson(keypairResult.error);
+          } else {
+            outputErrorTable(keypairResult.error);
+          }
+          process.exit(1);
+        }
+        keypair = keypairResult.value.keypair;
+        publicKey = keypairResult.value.publicKey;
+      }
 
       try {
         // Lazy-load SDK
@@ -791,6 +858,23 @@ function createPositionsCloseCommand(): Command {
           return;
         }
 
+        // unsigned-tx: build transaction and output
+        if (mode === 'unsigned-tx') {
+          const slippage = options.slippage
+            ? parseInt(options.slippage, 10) / 10000
+            : getSlippageBps() / 10000;
+
+          const result = await chain.decreaseFullLiquidityInstructions({
+            userAddress: publicKey,
+            nftMint,
+            closePosition: true,
+            slippage,
+          });
+          const base64 = serializeTransaction(result.transaction);
+          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+          return;
+        }
+
         // Confirm: close position
         printConfirmBanner();
 
@@ -806,7 +890,7 @@ function createPositionsCloseCommand(): Command {
         });
 
         // Sign and send
-        result.transaction.sign([keypair]);
+        result.transaction.sign([keypair!]);
         const connection = getConnection();
         const sendResult = await sendAndConfirmTransaction(
           connection,
@@ -865,6 +949,8 @@ function createPositionsClaimCommand(): Command {
     )
     .option("--dry-run", "Preview the claim without executing")
     .option("--confirm", "Execute the claim")
+    .option("--unsigned-tx", "Output unsigned transaction(s) as JSON (no signing)")
+    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
@@ -874,18 +960,39 @@ function createPositionsClaimCommand(): Command {
       const mode = resolveExecutionMode(options);
       requireExecutionMode(mode, "positions claim");
 
-      // Resolve keypair (required)
-      const keypairResult = resolveKeypair();
-      if (!keypairResult.ok) {
-        if (format === "json") {
-          outputErrorJson(keypairResult.error);
-        } else {
-          outputErrorTable(keypairResult.error);
-        }
-        process.exit(1);
-      }
+      // Resolve keypair or address based on mode
+      let keypair: Keypair | undefined;
+      let address: string;
 
-      const { keypair, address } = keypairResult.value;
+      if (mode === 'unsigned-tx') {
+        if (options.walletAddress) {
+          address = options.walletAddress;
+        } else {
+          const addrResult = resolveAddress();
+          if (!addrResult.ok) {
+            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
+            if (format === "json") {
+              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
+            } else {
+              console.error(chalk.red(`\nError: ${errMsg}`));
+            }
+            process.exit(1);
+          }
+          address = addrResult.value.address;
+        }
+      } else {
+        const keypairResult = resolveKeypair();
+        if (!keypairResult.ok) {
+          if (format === "json") {
+            outputErrorJson(keypairResult.error);
+          } else {
+            outputErrorTable(keypairResult.error);
+          }
+          process.exit(1);
+        }
+        keypair = keypairResult.value.keypair;
+        address = keypairResult.value.address;
+      }
       const nftMints = options.nftMints.split(",").map((s: string) => s.trim());
 
       // Resolve NFT mints → position addresses via positions list API
@@ -980,6 +1087,13 @@ function createPositionsClaimCommand(): Command {
         return;
       }
 
+      // unsigned-tx: output raw transactions
+      if (mode === 'unsigned-tx') {
+        const unsignedTransactions = entries.map((entry: { txPayload: string }) => entry.txPayload);
+        console.log(JSON.stringify({ unsignedTransactions }));
+        return;
+      }
+
       // Confirm: execute all fee claims
       printConfirmBanner();
 
@@ -1000,7 +1114,7 @@ function createPositionsClaimCommand(): Command {
           continue;
         }
 
-        const signedTx = signTransaction(txResult.value, keypair);
+        const signedTx = signTransaction(txResult.value, keypair!);
         const sendResult = await sendAndConfirmTransaction(
           connection,
           signedTx,
@@ -1368,6 +1482,8 @@ function createCopyPositionCommand(): Command {
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--dry-run", "Preview the copy without executing")
     .option("--confirm", "Execute the copy")
+    .option("--unsigned-tx", "Output unsigned transaction as JSON (no signing)")
+    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
@@ -1377,18 +1493,41 @@ function createCopyPositionCommand(): Command {
       const mode = resolveExecutionMode(options);
       requireExecutionMode(mode, "positions copy");
 
-      // Resolve keypair (required)
-      const keypairResult = resolveKeypair();
-      if (!keypairResult.ok) {
-        if (format === "json") {
-          outputErrorJson(keypairResult.error);
-        } else {
-          outputErrorTable(keypairResult.error);
-        }
-        process.exit(1);
-      }
+      // Resolve keypair or address based on mode
+      let keypair: Keypair | undefined;
+      let publicKey: PublicKey;
 
-      const { keypair, publicKey } = keypairResult.value;
+      if (mode === 'unsigned-tx') {
+        let address: string;
+        if (options.walletAddress) {
+          address = options.walletAddress;
+        } else {
+          const addrResult = resolveAddress();
+          if (!addrResult.ok) {
+            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
+            if (format === "json") {
+              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
+            } else {
+              console.error(chalk.red(`\nError: ${errMsg}`));
+            }
+            process.exit(1);
+          }
+          address = addrResult.value.address;
+        }
+        publicKey = new PublicKey(address);
+      } else {
+        const keypairResult = resolveKeypair();
+        if (!keypairResult.ok) {
+          if (format === "json") {
+            outputErrorJson(keypairResult.error);
+          } else {
+            outputErrorTable(keypairResult.error);
+          }
+          process.exit(1);
+        }
+        keypair = keypairResult.value.keypair;
+        publicKey = keypairResult.value.publicKey;
+      }
 
       try {
         const positionAddress = new PublicKey(options.position);
@@ -1620,6 +1759,23 @@ function createCopyPositionCommand(): Command {
           return;
         }
 
+        // unsigned-tx: build transaction and output
+        if (mode === 'unsigned-tx') {
+          const result = await chain.createPositionInstructions({
+            userAddress: publicKey,
+            poolInfo,
+            tickLower,
+            tickUpper,
+            base: "MintA",
+            baseAmount: amountA,
+            otherAmountMax: amountBMax,
+            refererPosition: options.position,
+          });
+          const base64 = serializeTransaction(result.transaction);
+          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+          return;
+        }
+
         // Confirm: create copied position
         printConfirmBanner();
 
@@ -1635,7 +1791,7 @@ function createCopyPositionCommand(): Command {
         });
 
         // Sign and send
-        result.transaction.sign([keypair]);
+        result.transaction.sign([keypair!]);
         const connection = getConnection();
         const sendResult = await sendAndConfirmTransaction(
           connection,

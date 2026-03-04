@@ -215,6 +215,8 @@ const CAPABILITIES: Capability[] = [
       { name: 'raw', type: 'boolean', required: false, description: 'Amount is already in raw (smallest unit) format' },
       { name: 'dry-run', type: 'boolean', required: false, description: 'Preview the swap without executing' },
       { name: 'confirm', type: 'boolean', required: false, description: 'Execute the swap' },
+      { name: 'unsigned-tx', type: 'boolean', required: false, description: 'Output unsigned transaction as JSON (no signing)' },
+      { name: 'wallet-address', type: 'string', required: false, description: 'Wallet public key address (for --unsigned-tx without local keypair)' },
     ],
   },
   {
@@ -262,6 +264,8 @@ const CAPABILITIES: Capability[] = [
       { name: 'raw', type: 'boolean', required: false, description: 'Amount is already in raw (smallest unit) format' },
       { name: 'dry-run', type: 'boolean', required: false, description: 'Preview the position without opening' },
       { name: 'confirm', type: 'boolean', required: false, description: 'Open the position' },
+      { name: 'unsigned-tx', type: 'boolean', required: false, description: 'Output unsigned transaction as JSON (no signing)' },
+      { name: 'wallet-address', type: 'string', required: false, description: 'Wallet public key address (for --unsigned-tx without local keypair)' },
     ],
   },
   {
@@ -276,6 +280,8 @@ const CAPABILITIES: Capability[] = [
       { name: 'slippage', type: 'integer', required: false, description: 'Slippage tolerance in basis points' },
       { name: 'dry-run', type: 'boolean', required: false, description: 'Preview the close without executing' },
       { name: 'confirm', type: 'boolean', required: false, description: 'Close the position' },
+      { name: 'unsigned-tx', type: 'boolean', required: false, description: 'Output unsigned transaction as JSON (no signing)' },
+      { name: 'wallet-address', type: 'string', required: false, description: 'Wallet public key address (for --unsigned-tx without local keypair)' },
     ],
   },
   {
@@ -289,6 +295,8 @@ const CAPABILITIES: Capability[] = [
       { name: 'nft-mints', type: 'string', required: true, description: 'Comma-separated NFT mint addresses (from positions list)' },
       { name: 'dry-run', type: 'boolean', required: false, description: 'Preview the claim without executing' },
       { name: 'confirm', type: 'boolean', required: false, description: 'Execute the claim' },
+      { name: 'unsigned-tx', type: 'boolean', required: false, description: 'Output unsigned transaction(s) as JSON (no signing)' },
+      { name: 'wallet-address', type: 'string', required: false, description: 'Wallet public key address (for --unsigned-tx without local keypair)' },
     ],
   },
   {
@@ -320,6 +328,8 @@ const CAPABILITIES: Capability[] = [
       { name: 'slippage', type: 'integer', required: false, description: 'Slippage tolerance in basis points' },
       { name: 'dry-run', type: 'boolean', required: false, description: 'Preview the copy without executing' },
       { name: 'confirm', type: 'boolean', required: false, description: 'Execute the copy' },
+      { name: 'unsigned-tx', type: 'boolean', required: false, description: 'Output unsigned transaction as JSON (no signing)' },
+      { name: 'wallet-address', type: 'string', required: false, description: 'Wallet public key address (for --unsigned-tx without local keypair)' },
     ],
   },
   {

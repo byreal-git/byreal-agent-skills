@@ -76,6 +76,8 @@ function createSwapExecuteCommand(): Command {
     .option('--raw', 'Amount is already in raw (smallest unit) format')
     .option('--dry-run', 'Preview the swap without executing')
     .option('--confirm', 'Execute the swap')
+    .option('--unsigned-tx', 'Output unsigned transaction as JSON (no signing)')
+    .option('--wallet-address <address>', 'Wallet public key address (for --unsigned-tx without local keypair)')
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
@@ -85,28 +87,48 @@ function createSwapExecuteCommand(): Command {
       const mode = resolveExecutionMode(options);
       requireExecutionMode(mode, 'swap execute');
 
-      // Resolve keypair: required for --confirm, optional for --dry-run
+      // Resolve keypair: required for --confirm, address-only for --dry-run/--unsigned-tx
       type ResolvedKeypair = Extract<ReturnType<typeof resolveKeypair>, { ok: true }>['value'];
       let keypair: ResolvedKeypair | undefined;
       let userPublicKey: string | undefined;
 
-      const keypairResult = resolveKeypair();
-      if (keypairResult.ok) {
-        keypair = keypairResult.value;
-        userPublicKey = keypair.address;
-      } else if (mode === 'confirm') {
-        // --confirm requires keypair
-        if (format === 'json') {
-          outputErrorJson(keypairResult.error);
+      if (mode === 'unsigned-tx') {
+        // --unsigned-tx mode: only need address, no keypair
+        if (options.walletAddress) {
+          userPublicKey = options.walletAddress;
         } else {
-          outputErrorTable(keypairResult.error);
+          const addrResult = resolveAddress();
+          if (addrResult.ok) {
+            userPublicKey = addrResult.value.address;
+          } else {
+            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
+            if (format === 'json') {
+              outputErrorJson({ code: 'MISSING_ADDRESS', type: 'VALIDATION', message: errMsg, retryable: false });
+            } else {
+              console.error(chalk.red(`\nError: ${errMsg}`));
+            }
+            process.exit(1);
+          }
         }
-        process.exit(1);
       } else {
-        // --dry-run without keypair: try resolveAddress for userPublicKey
-        const addrResult = resolveAddress();
-        if (addrResult.ok) {
-          userPublicKey = addrResult.value.address;
+        const keypairResult = resolveKeypair();
+        if (keypairResult.ok) {
+          keypair = keypairResult.value;
+          userPublicKey = keypair.address;
+        } else if (mode === 'confirm') {
+          // --confirm requires keypair
+          if (format === 'json') {
+            outputErrorJson(keypairResult.error);
+          } else {
+            outputErrorTable(keypairResult.error);
+          }
+          process.exit(1);
+        } else {
+          // --dry-run without keypair: try resolveAddress for userPublicKey
+          const addrResult = resolveAddress();
+          if (addrResult.ok) {
+            userPublicKey = addrResult.value.address;
+          }
         }
       }
 
@@ -157,6 +179,21 @@ function createSwapExecuteCommand(): Command {
             outputSwapQuoteTable(quote, uiInAmount, uiOutAmount);
             console.log(chalk.yellow('\n  Use --confirm to execute this swap'));
           }
+          return;
+        }
+
+        // unsigned-tx: output raw transaction and exit
+        if (mode === 'unsigned-tx') {
+          if (!quote.transaction) {
+            const errMsg = 'No transaction returned in quote. Ensure wallet address is valid.';
+            if (format === 'json') {
+              outputErrorJson({ code: 'API_ERROR', type: 'NETWORK', message: errMsg, retryable: false });
+            } else {
+              console.error(chalk.red(`\nError: ${errMsg}`));
+            }
+            process.exit(1);
+          }
+          console.log(JSON.stringify({ unsignedTransactions: [quote.transaction] }));
           return;
         }
 

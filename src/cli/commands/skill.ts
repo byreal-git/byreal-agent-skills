@@ -333,6 +333,8 @@ Options:
   --raw                    Amount is already in raw (smallest unit) format
   --dry-run                Preview the swap without executing
   --confirm                Execute the swap
+  --unsigned-tx            Output unsigned transaction as JSON (no signing)
+  --wallet-address <addr>  Wallet public key (for --unsigned-tx without local keypair)
 \`\`\`
 
 Examples:
@@ -381,6 +383,8 @@ Options:
   --raw                    Amount is already in raw (smallest unit) format
   --dry-run                Preview the position without opening
   --confirm                Open the position
+  --unsigned-tx            Output unsigned transaction as JSON (no signing)
+  --wallet-address <addr>  Wallet public key (for --unsigned-tx without local keypair)
 \`\`\`
 
 **Two modes**:
@@ -415,6 +419,8 @@ Options:
   --slippage <bps>         Slippage tolerance in basis points
   --dry-run                Preview the close without executing
   --confirm                Close the position
+  --unsigned-tx            Output unsigned transaction as JSON (no signing)
+  --wallet-address <addr>  Wallet public key (for --unsigned-tx without local keypair)
 \`\`\`
 
 ### positions claim
@@ -427,6 +433,8 @@ Options:
   --nft-mints <addresses>  Comma-separated NFT mint addresses (required, from positions list)
   --dry-run                Preview the claim without executing
   --confirm                Execute the claim
+  --unsigned-tx            Output unsigned transaction(s) as JSON (no signing)
+  --wallet-address <addr>  Wallet public key (for --unsigned-tx without local keypair)
 \`\`\`
 
 ### positions top-positions
@@ -457,6 +465,8 @@ Options:
   --slippage <bps>       Slippage tolerance in basis points
   --dry-run              Preview the copy without executing
   --confirm              Execute the copy
+  --unsigned-tx          Output unsigned transaction as JSON (no signing)
+  --wallet-address <addr> Wallet public key (for --unsigned-tx without local keypair)
 \`\`\`
 
 ### pools analyze
