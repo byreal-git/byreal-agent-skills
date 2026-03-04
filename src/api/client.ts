@@ -2,12 +2,12 @@
  * HTTP client for Byreal API
  */
 
-import ky, { HTTPError, TimeoutError } from 'ky';
-import { API_BASE_URL, DEFAULTS } from '../core/constants.js';
-import { networkError, apiError } from '../core/errors.js';
-import type { Result } from '../core/types.js';
-import { ok, err } from '../core/types.js';
-import type { ByrealError } from '../core/errors.js';
+import ky, { HTTPError, TimeoutError } from "ky";
+import { API_BASE_URL, DEFAULTS } from "../core/constants.js";
+import { networkError, apiError } from "../core/errors.js";
+import type { Result } from "../core/types.js";
+import { ok, err } from "../core/types.js";
+import type { ByrealError } from "../core/errors.js";
 
 // ============================================
 // Client Configuration
@@ -17,8 +17,8 @@ const client = ky.create({
   prefixUrl: API_BASE_URL,
   timeout: DEFAULTS.REQUEST_TIMEOUT_MS,
   headers: {
-    'Content-Type': 'application/json',
-    'User-Agent': `byreal-cli/${DEFAULTS.OUTPUT_FORMAT}`,
+    "Content-Type": "application/json",
+    "User-Agent": "byreal-cli",
   },
   hooks: {
     beforeRequest: [
@@ -37,17 +37,17 @@ const client = ky.create({
 
 export async function get<T>(
   endpoint: string,
-  params?: Record<string, string | number | boolean | undefined>
+  params?: Record<string, string | number | boolean | undefined>,
 ): Promise<Result<T, ByrealError>> {
   try {
     // Filter out undefined params
     const searchParams = params
-      ? Object.fromEntries(
-          Object.entries(params).filter(([, v]) => v !== undefined)
-        ) as Record<string, string>
+      ? (Object.fromEntries(
+          Object.entries(params).filter(([, v]) => v !== undefined),
+        ) as Record<string, string>)
       : undefined;
 
-    const response = await client.get(endpoint.replace(/^\//, ''), {
+    const response = await client.get(endpoint.replace(/^\//, ""), {
       searchParams,
     });
 
@@ -60,10 +60,10 @@ export async function get<T>(
 
 export async function post<T>(
   endpoint: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
 ): Promise<Result<T, ByrealError>> {
   try {
-    const response = await client.post(endpoint.replace(/^\//, ''), {
+    const response = await client.post(endpoint.replace(/^\//, ""), {
       json: body,
     });
 
@@ -86,24 +86,30 @@ async function handleRequestError(error: unknown): Promise<ByrealError> {
       try {
         const body = await error.response.text();
         console.error(`[DEBUG] Response body: ${body}`);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
     return apiError(`${status} ${statusText}`, status);
   }
 
   if (error instanceof TimeoutError) {
-    return networkError('Request timed out', { timeout_ms: DEFAULTS.REQUEST_TIMEOUT_MS });
+    return networkError("Request timed out", {
+      timeout_ms: DEFAULTS.REQUEST_TIMEOUT_MS,
+    });
   }
 
   if (error instanceof Error) {
     // Network errors (ECONNREFUSED, etc.)
-    if ('code' in error) {
-      return networkError(error.message, { code: (error as NodeJS.ErrnoException).code });
+    if ("code" in error) {
+      return networkError(error.message, {
+        code: (error as NodeJS.ErrnoException).code,
+      });
     }
     return networkError(error.message);
   }
 
-  return networkError('Unknown error occurred');
+  return networkError("Unknown error occurred");
 }
 
 // ============================================
