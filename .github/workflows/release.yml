@@ -23,9 +23,11 @@ jobs:
           npm version "$VERSION" --no-git-tag-version
           sed -i "s/export const VERSION = '.*'/export const VERSION = '$VERSION'/" src/core/constants.ts
 
-      - run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-      - run: npm run build
+      - name: Build
+        run: npm run build
 
       - name: Verify build
         run: node dist/index.cjs --version
