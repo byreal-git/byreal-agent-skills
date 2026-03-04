@@ -99,6 +99,14 @@ function formatUsd(value: number): string {
   return '$0.00';
 }
 
+function formatPairPrice(raw: string): string {
+  const value = parseFloat(raw);
+  if (!isFinite(value) || value === 0) return '0';
+  if (value >= 1) return value.toPrecision(6);
+  // For small prices, show 4 significant digits (like formatUsd for < $0.01)
+  return value.toPrecision(4);
+}
+
 function formatPercent(value: number): string {
   const sign = value >= 0 ? '+' : '';
   const color = value >= 0 ? chalk.green : chalk.red;
@@ -628,6 +636,7 @@ export function outputTopPositionsTable(positions: TopPositionItem[], total: num
     'Copies',
     'Age',
     'Range',
+    'Price Range',
   ]);
 
   for (let i = 0; i < positions.length; i++) {
@@ -641,6 +650,10 @@ export function outputTopPositionsTable(positions: TopPositionItem[], total: num
         ? chalk.red('Out')
         : chalk.gray('-');
 
+    const priceRangeLabel = pos.priceLower && pos.priceUpper
+      ? chalk.gray(`${formatPairPrice(pos.priceLower)} → ${formatPairPrice(pos.priceUpper)}`)
+      : chalk.gray('-');
+
     table.push([
       chalk.white.bold(String(i + 1)),
       chalk.white.bold(pos.pair || '?/?'),
@@ -652,6 +665,7 @@ export function outputTopPositionsTable(positions: TopPositionItem[], total: num
       String(pos.copies),
       formatAge(pos.positionAgeMs),
       rangeLabel,
+      priceRangeLabel,
     ]);
   }
 

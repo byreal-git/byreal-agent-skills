@@ -1316,18 +1316,31 @@ function createTopPositionsCommand(): Command {
         process.exit(1);
       }
 
-      // Enrich positions with in-range status from on-chain pool data
+      // Enrich positions with in-range status and price range from on-chain pool data
       try {
         const { getChain } = await import("../../sdk/init.js");
         const chain = getChain();
         const poolInfo = await chain.getRawPoolInfoByPoolId(options.pool);
+        const { TickMath } = await import(
+          "../../libs/clmm-sdk/instructions/utils/tickMath.js"
+        );
         for (const pos of result.value.positions) {
           pos.inRange =
             poolInfo.tickCurrent >= pos.tickLower &&
             poolInfo.tickCurrent < pos.tickUpper;
+          pos.priceLower = TickMath.getPriceFromTick({
+            tick: pos.tickLower,
+            decimalsA: poolInfo.mintDecimalsA,
+            decimalsB: poolInfo.mintDecimalsB,
+          }).toString();
+          pos.priceUpper = TickMath.getPriceFromTick({
+            tick: pos.tickUpper,
+            decimalsA: poolInfo.mintDecimalsA,
+            decimalsB: poolInfo.mintDecimalsB,
+          }).toString();
         }
       } catch {
-        // If SDK fails, leave inRange undefined — non-critical enrichment
+        // If SDK fails, leave inRange/prices undefined — non-critical enrichment
       }
 
       if (format === "json") {

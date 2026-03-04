@@ -409,6 +409,8 @@ export interface TopPositionItem {
   tokenSymbolB?: string;
   // Enriched by CLI (from on-chain pool data)
   inRange?: boolean;
+  priceLower?: string;
+  priceUpper?: string;
 }
 
 export interface TopPositionsResult {
