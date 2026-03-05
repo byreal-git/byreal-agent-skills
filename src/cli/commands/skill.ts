@@ -129,6 +129,25 @@ You do NOT need to pass token decimals or convert amounts manually. Use \`--raw\
 8. **No need to pass token decimals** - the CLI auto-resolves decimals from mint address
 9. **Check wallet before write ops** — run \`wallet address\` before any wallet-required command
 
+## External Context (AI Agent Responsibility)
+
+Byreal CLI provides on-chain data only. For complete analysis, **you (the AI agent) must supplement with web search** to provide external context. This is critical for informed investment decisions.
+
+**When to search**: Any pool analysis, investment evaluation, token inquiry, or market trend question.
+
+**What to search for**:
+- **Token fundamentals**: For xStock tokens, search the underlying company's latest earnings, financials, and stock price. For crypto-native tokens, search protocol updates, partnerships, TVL trends, and governance proposals.
+- **Recent news & events**: Token-specific news, regulatory developments, exchange listings/delistings, security incidents, or ecosystem announcements that could impact price or liquidity.
+- **Market sentiment**: Broader crypto market trends, Solana ecosystem developments, and macroeconomic factors (rate decisions, policy changes) affecting risk appetite.
+
+**How to present**:
+1. Lead with on-chain data from byreal-cli (concrete metrics: APR, TVL, volatility, range analysis)
+2. Follow with external context from web search (news, fundamentals, catalysts)
+3. Synthesize: explain how external factors impact the LP decision specifically (e.g., "earnings beat → price stability → lower IL risk → good window for LP")
+4. Clearly distinguish on-chain facts from external analysis
+
+**Example**: Analyzing a CRCLx/USDC pool — on-chain data shows 27% APR, 3.8% daily volatility, $110K TVL. But a web search reveals Circle just posted strong Q4 earnings (EPS beat 169%, USDC circulation +72% YoY). This context changes the risk assessment: post-earnings price stability = lower IL risk, making it a better LP entry window. Without this, the analysis is incomplete.
+
 ## Quick Reference
 
 | User Intent | Command |
