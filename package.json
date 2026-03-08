@@ -1,6 +1,6 @@
 {
-  "name": "byreal-cli",
-  "version": "0.1.0",
+  "name": "@byreal-io/byreal-cli",
+  "version": "0.2.2",
   "description": "AI-native CLI for Byreal CLMM DEX on Solana",
   "type": "module",
   "main": "dist/index.cjs",
@@ -12,7 +12,7 @@
     "url": "https://github.com/byreal-git/byreal-cli.git"
   },
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --outfile=dist/index.cjs --format=cjs --platform=node --target=node18 --banner:js=\"#!/usr/bin/env node\nvar _cw=console.warn;console.warn=function(){var s=arguments[0];if(typeof s==='string'&&s.includes('Failed to load bindings'))return;_cw.apply(console,arguments)};var _pe=process.emit;process.emit=function(e,a){if(e==='warning'&&a&&a.name==='DeprecationWarning')return false;return _pe.apply(this,arguments)};\"",
+    "build": "node scripts/build.mjs",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
@@ -21,7 +21,8 @@
     "test": "vitest",
     "test:run": "vitest run",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "postversion": "npm publish && git push && git push --tags"
   },
   "keywords": [
     "byreal",
@@ -32,8 +33,11 @@
     "defi",
     "liquidity"
   ],
-  "author": "",
+  "author": "Byreal Team (https://github.com/byreal-git)",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=18.0.0"
   },

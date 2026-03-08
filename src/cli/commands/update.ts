@@ -40,7 +40,7 @@ export function createUpdateCommand(): Command {
       }
 
       if (!result) {
-        console.log(chalk.yellow('Could not check for updates (no releases found or network error).'));
+        console.log(chalk.yellow('Could not check for updates (npm registry unavailable or network error).'));
         console.log(chalk.gray(`Current version: ${VERSION}`));
         return;
       }
@@ -61,7 +61,7 @@ export function createUpdateCommand(): Command {
       const result = checkForUpdate(true);
       const installCommand = getInstallCommand(result?.latestVersion);
 
-      console.log(chalk.cyan(`Installing latest version from GitHub...`));
+      console.log(chalk.cyan(`Installing latest version from npm registry...`));
       console.log(chalk.gray(`> ${installCommand}\n`));
 
       try {

@@ -1,12 +1,12 @@
 /**
- * Update check mechanism - checks GitHub Releases for new versions
+ * Update check mechanism - checks npm registry for new versions
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { homedir } from 'os';
-import { join } from 'path';
-import chalk from 'chalk';
-import { VERSION, GITHUB_REPO } from './constants.js';
+import { readFileSync, writeFileSync, mkdirSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
+import chalk from "chalk";
+import { VERSION } from "./constants.js";
 
 // ============================================
 // Types
@@ -29,15 +29,13 @@ interface UpdateResult {
 // ============================================
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
-const CACHE_DIR = join(homedir(), '.config', 'byreal');
-const CACHE_FILE = join(CACHE_DIR, 'update-check.json');
-const RELEASE_URL = `https://github.com/${GITHUB_REPO}/releases`;
+const CACHE_DIR = join(homedir(), ".config", "byreal");
+const CACHE_FILE = join(CACHE_DIR, "update-check.json");
 
-function getInstallCommand(version?: string): string {
-  if (version) {
-    return `npm install -g ${RELEASE_URL}/download/v${version}/byreal-cli.tgz`;
-  }
-  return `npm install -g ${RELEASE_URL}/latest/download/byreal-cli.tgz`;
+const NPM_PACKAGE = "@byreal-io/byreal-cli";
+
+function getInstallCommand(_version?: string): string {
+  return `npm install -g ${NPM_PACKAGE}`;
 }
 
 // ============================================
@@ -46,7 +44,7 @@ function getInstallCommand(version?: string): string {
 
 function readCache(): UpdateCache | null {
   try {
-    const data = readFileSync(CACHE_FILE, 'utf-8');
+    const data = readFileSync(CACHE_FILE, "utf-8");
     return JSON.parse(data) as UpdateCache;
   } catch {
     return null;
@@ -68,15 +66,13 @@ function writeCache(cache: UpdateCache): void {
 
 function fetchLatestVersion(): string | null {
   try {
-    // Use synchronous HTTP via child_process to avoid async complexity
-    const { execSync } = require('child_process');
+    const { execSync } = require("child_process");
     const result = execSync(
-      `curl -sf -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/${GITHUB_REPO}/releases/latest"`,
-      { timeout: 5000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+      `curl -sf "https://registry.npmjs.org/${encodeURIComponent(NPM_PACKAGE)}/latest"`,
+      { timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
     );
-    const data = JSON.parse(result);
-    const tagName = data.tag_name as string;
-    return tagName.replace(/^v/, '');
+    const data = JSON.parse(result) as { version: string };
+    return data.version;
   } catch {
     return null;
   }
@@ -87,8 +83,8 @@ function fetchLatestVersion(): string | null {
 // ============================================
 
 function isNewerVersion(latest: string, current: string): boolean {
-  const latestParts = latest.split('.').map(Number);
-  const currentParts = current.split('.').map(Number);
+  const latestParts = latest.split(".").map(Number);
+  const currentParts = current.split(".").map(Number);
 
   for (let i = 0; i < Math.max(latestParts.length, currentParts.length); i++) {
     const l = latestParts[i] || 0;
@@ -104,7 +100,7 @@ function isNewerVersion(latest: string, current: string): boolean {
 // ============================================
 
 /**
- * Check for updates. Uses cache if fresh (<4h), otherwise fetches from GitHub.
+ * Check for updates. Uses cache if fresh (<4h), otherwise fetches from npm.
  * Returns null on any error (silent failure).
  */
 export function checkForUpdate(force = false): UpdateResult | null {
@@ -112,7 +108,7 @@ export function checkForUpdate(force = false): UpdateResult | null {
     const cache = readCache();
 
     // Use cache if fresh and not forced
-    if (!force && cache && (Date.now() - cache.lastCheck) < CHECK_INTERVAL_MS) {
+    if (!force && cache && Date.now() - cache.lastCheck < CHECK_INTERVAL_MS) {
       return {
         updateAvailable: isNewerVersion(cache.latestVersion, VERSION),
         latestVersion: cache.latestVersion,
@@ -152,13 +148,13 @@ export function printUpdateNotice(): void {
   const line1 = `Update available: ${result.currentVersion} → ${result.latestVersion}`;
   const line2 = `Run: ${installCmd}`;
   const maxLen = Math.max(line1.length, line2.length);
-  const pad = (s: string) => s + ' '.repeat(maxLen - s.length);
+  const pad = (s: string) => s + " ".repeat(maxLen - s.length);
 
   console.log();
-  console.log(chalk.yellow(`╭${'─'.repeat(maxLen + 4)}╮`));
+  console.log(chalk.yellow(`╭${"─".repeat(maxLen + 4)}╮`));
   console.log(chalk.yellow(`│  ${pad(line1)}  │`));
   console.log(chalk.yellow(`│  ${pad(line2)}  │`));
-  console.log(chalk.yellow(`╰${'─'.repeat(maxLen + 4)}╯`));
+  console.log(chalk.yellow(`╰${"─".repeat(maxLen + 4)}╯`));
   console.log();
 }
 

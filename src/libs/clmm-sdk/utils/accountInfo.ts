@@ -6,11 +6,19 @@ import {
   unpackMint,
 } from '@solana/spl-token';
 import { AccountInfo, Commitment, Connection, PublicKey } from '@solana/web3.js';
-import { chunk } from 'lodash-es';
 
 import { WSOLMint } from '../constants.js';
 
 import { solToWSol } from './validateAndParsePublicKey.js';
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  if (size <= 0) return [items];
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
 
 export interface ReturnTypeFetchMultipleMintInfos {
   [mint: string]: Mint & {
@@ -58,7 +66,7 @@ export async function getMultipleAccountsInfo(
     ...config,
   };
 
-  const chunkedKeys = chunk(publicKeys, chunkCount);
+  const chunkedKeys = chunkArray(publicKeys, chunkCount);
   let results: (AccountInfo<Buffer> | null)[][] = new Array(chunkedKeys.length).fill([]);
 
   if (batchRequest) {
@@ -70,7 +78,7 @@ export async function getMultipleAccountsInfo(
       };
     });
 
-    const _batch = chunk(batch, 10);
+    const _batch = chunkArray(batch, 10);
 
     const unsafeResponse: MultipleAccountsJsonRpcResponse[] = await (
       await Promise.all(_batch.map(async (i) => await (connection as any)._rpcBatchRequest(i)))

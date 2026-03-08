@@ -13,7 +13,7 @@ npx skills add byreal-git/byreal-cli
 Or install the CLI only:
 
 ```bash
-npm install -g https://github.com/byreal-git/byreal-cli/releases/latest/download/byreal-cli.tgz
+npm install -g @byreal-io/byreal-cli
 ```
 
 ## Features

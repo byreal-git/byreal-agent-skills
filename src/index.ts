@@ -78,7 +78,10 @@ program.on('command:*', () => {
 async function main() {
   try {
     await program.parseAsync(process.argv);
-    printUpdateNotice();
+    const opts = program.opts();
+    if (opts.output !== 'json') {
+      printUpdateNotice();
+    }
   } catch (error) {
     if (error instanceof Error) {
       console.error(chalk.red(`\nError: ${error.message}`));

@@ -8,7 +8,14 @@ import type { KeySource, ByrealConfig } from './types.js';
 // Version
 // ============================================
 
-export const VERSION = '0.1.0';
+declare const __BYREAL_CLI_VERSION__: string | undefined;
+
+const INJECTED_VERSION =
+  typeof __BYREAL_CLI_VERSION__ === 'string'
+    ? __BYREAL_CLI_VERSION__
+    : undefined;
+
+export const VERSION = INJECTED_VERSION ?? process.env.npm_package_version ?? '0.0.0';
 export const CLI_NAME = 'byreal-cli';
 export const GITHUB_REPO = 'byreal-git/byreal-cli';
 
