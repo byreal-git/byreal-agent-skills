@@ -3,7 +3,7 @@ name: byreal-cli
 description: "Byreal DEX (Solana) all-in-one CLI: query pools/tokens/TVL, analyze pool APR & risk, open/close/claim CLMM positions, token swap, wallet & balance management. Use when user mentions Byreal, LP, liquidity, pools, DeFi positions, token swap, or Solana DEX operations."
 metadata:
   openclaw:
-    homepage: https://github.com/byreal-git/byreal-cli
+    homepage: https://github.com/byreal-git/byreal-agent-skills
     requires:
       bins:
         - byreal-cli

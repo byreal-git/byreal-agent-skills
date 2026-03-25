@@ -1,13 +1,13 @@
-# Byreal CLI
+# Byreal Agent Skills
 
-AI-native CLI for [Byreal](https://byreal.io) — a concentrated liquidity (CLMM) DEX on Solana. Designed for LLM agents: every command supports structured JSON output, and the built-in skill system lets AI assistants discover and use all capabilities automatically.
+Agent skills for [Byreal](https://byreal.io) — a concentrated liquidity (CLMM) DEX on Solana. Every command supports structured JSON output, and the built-in skill system lets AI agents discover and use all capabilities automatically.
 
 ## AI Integration
 
-Byreal CLI is built to be used by AI agents. Install it as a **Skill** so your LLM can discover all capabilities:
+Install as an **Agent Skill** so your LLM can discover all capabilities:
 
 ```bash
-npx skills add byreal-git/byreal-cli
+npx skills add byreal-git/byreal-agent-skills
 ```
 
 Or install the CLI only:
