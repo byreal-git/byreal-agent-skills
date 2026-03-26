@@ -65,7 +65,9 @@ All commands support `-o json` for structured output.
 | `positions increase`      | Add liquidity to an existing position           |
 | `positions decrease`      | Partially remove liquidity from a position      |
 | `positions close`         | Close a position                               |
-| `positions claim`         | Claim fees and rewards                         |
+| `positions claim`           | Claim trading fees                              |
+| `positions claim-rewards`   | Claim incentive rewards from positions           |
+| `positions claim-bonus`     | Claim CopyFarmer bonus rewards                  |
 | `positions analyze`       | Analyze an existing position                   |
 | `positions top-positions` | View top positions in a pool                   |
 | `positions copy`          | Copy a farmer's position                       |

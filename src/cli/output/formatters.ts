@@ -19,7 +19,11 @@ import type {
   SwapQuote,
   PositionItem,
   TopPositionItem,
-  FeeEncodeEntry
+  FeeEncodeEntry,
+  PositionRewardItem,
+  EpochBonusInfo,
+  ProviderOverviewInfo,
+  RewardOrderResult,
 } from '../../core/types.js';
 import { rawToUi } from '../../core/amounts.js';
 
@@ -660,6 +664,102 @@ export function outputPositionClaimPreview(entries: FeeEncodeEntry[]): void {
   }
 
   console.log(chalk.gray(`  ${entries.length} position(s) to claim`));
+}
+
+export function outputRewardsPreview(
+  items: PositionRewardItem[],
+  label: string,
+): void {
+  if (items.length === 0) {
+    console.log(chalk.gray(`\n  No unclaimed ${label}.\n`));
+    return;
+  }
+
+  console.log(chalk.cyan.bold(`\n${label} Preview\n`));
+
+  // Group by position
+  const byPosition = new Map<string, PositionRewardItem[]>();
+  for (const item of items) {
+    const list = byPosition.get(item.positionAddress) || [];
+    list.push(item);
+    byPosition.set(item.positionAddress, list);
+  }
+
+  for (const [posAddr, rewards] of byPosition) {
+    console.log(chalk.white.bold(`  Position: ${posAddr}`));
+    for (const r of rewards) {
+      const synced = parseFloat(r.syncedTokenAmount);
+      const locked = parseFloat(r.lockedTokenAmount);
+      const claimed = parseFloat(r.claimedTokenAmount);
+      const unclaimed = synced - locked - claimed;
+      if (unclaimed <= 0) continue;
+      const usdValue = parseFloat(r.price) > 0 ? ` (~$${(unclaimed * parseFloat(r.price)).toFixed(2)})` : '';
+      console.log(chalk.gray(`    ${unclaimed.toFixed(r.tokenDecimals > 6 ? 6 : r.tokenDecimals)} ${r.tokenSymbol}${usdValue} (${r.tokenAddress})`));
+    }
+    console.log();
+  }
+}
+
+export function outputBonusPreview(
+  overview: ProviderOverviewInfo,
+  epochs: Record<string, EpochBonusInfo | null>,
+): void {
+  console.log(chalk.cyan.bold('\nCopyFarmer Bonus Overview\n'));
+
+  const table = createTable(['Field', 'Value']);
+  table.push(
+    ['Total Bonus', `$${overview.totalBonus}`],
+    ['Unclaimed Bonus', `$${overview.unclaimedBonus}`],
+    ['Copies Bonus', `$${overview.copiesBonus}`],
+    ['Follows Bonus', `$${overview.followsBonus}`],
+    ['Copies Count', String(overview.copies)],
+    ['Follows Count', String(overview.follows)],
+  );
+  console.log(table.toString());
+
+  // Epoch details
+  const epochLabels: Record<string, string> = {
+    '1': 'Accruing',
+    '2': 'Pending',
+    '3': 'Claimable',
+  };
+
+  console.log(chalk.cyan.bold('\nEpoch Details\n'));
+  for (const [key, label] of Object.entries(epochLabels)) {
+    const epoch = epochs[key];
+    if (!epoch) {
+      console.log(chalk.gray(`  ${label}: none`));
+      continue;
+    }
+    const amount = `$${epoch.totalBonusUsd}`;
+    const claimWindow = key === '3'
+      ? ` (claim: ${new Date(epoch.claimTime).toLocaleString()} → ${new Date(epoch.endTime).toLocaleString()})`
+      : '';
+    console.log(chalk.white(`  ${label}: ${amount}${claimWindow}`));
+  }
+  console.log();
+}
+
+export function outputRewardOrderResult(result: RewardOrderResult): void {
+  console.log(chalk.green.bold('\nRewards Claimed\n'));
+
+  if (result.claimTokenList.length > 0) {
+    console.log(chalk.white.bold('  Claimed Tokens:'));
+    for (const token of result.claimTokenList) {
+      console.log(chalk.gray(`    ${token.tokenAmount} ${token.tokenSymbol} (${token.tokenAddress})`));
+    }
+    console.log();
+  }
+
+  if (result.txList.length > 0) {
+    console.log(chalk.white.bold('  Transactions:'));
+    for (const tx of result.txList) {
+      const statusLabel = tx.status === 1 ? chalk.green('Success') : tx.status === 2 ? chalk.red('Failed') : chalk.yellow('Sent');
+      console.log(chalk.gray(`    ${tx.txSignature} ${statusLabel}`));
+      console.log(chalk.blue(`    https://solscan.io/tx/${tx.txSignature}`));
+    }
+    console.log();
+  }
 }
 
 export function outputTransactionResult(title: string, data: {

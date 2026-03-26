@@ -28,6 +28,13 @@ import type {
   TopPositionsResult,
   FeeEncodeParams,
   FeeEncodeEntry,
+  UnclaimedDataResult,
+  EpochBonusInfo,
+  ProviderOverviewInfo,
+  RewardEncodeParams,
+  RewardEncodeResult,
+  RewardOrderParams,
+  RewardOrderResult,
 } from '../core/types.js';
 import type { ByrealError } from '../core/errors.js';
 
@@ -960,6 +967,119 @@ export async function getTokenPrices(
   return { ok: true, value: prices };
 }
 
+// ============================================
+// Reward / Bonus API Functions
+// ============================================
+
+/**
+ * Get unclaimed incentive reward data for a user
+ */
+export async function getUnclaimedData(
+  userAddress: string
+): Promise<Result<UnclaimedDataResult, ByrealError>> {
+  const result = await apiClient.get<ApiResponse<UnclaimedDataResult>>(API_ENDPOINTS.UNCLAIMED_DATA, {
+    userAddress,
+  });
+
+  if (!result.ok) return result;
+
+  const data = result.value.result?.data;
+  if (!data) {
+    return { ok: true, value: { unclaimedOpenIncentives: [], unclaimedClosedIncentives: [] } };
+  }
+
+  return { ok: true, value: data };
+}
+
+/**
+ * Get epoch bonus info for copyfarmer
+ */
+export async function getEpochBonus(
+  walletAddress: string,
+  type: number = -1
+): Promise<Result<Record<string, EpochBonusInfo | null>, ByrealError>> {
+  const result = await apiClient.get<ApiResponse<Record<string, EpochBonusInfo | null>>>(API_ENDPOINTS.COPYFARMER_EPOCH_BONUS, {
+    walletAddress,
+    type,
+  });
+
+  if (!result.ok) return result;
+
+  const data = result.value.result?.data;
+  if (!data) {
+    return { ok: true, value: {} };
+  }
+
+  return { ok: true, value: data };
+}
+
+/**
+ * Get provider overview for copyfarmer bonus
+ */
+export async function getProviderOverview(
+  providerAddress: string
+): Promise<Result<ProviderOverviewInfo, ByrealError>> {
+  const result = await apiClient.get<ApiResponse<ProviderOverviewInfo>>(API_ENDPOINTS.COPYFARMER_PROVIDER_OVERVIEW, {
+    providerAddress,
+  });
+
+  if (!result.ok) return result;
+
+  const data = result.value.result?.data;
+  if (!data) {
+    return {
+      ok: true,
+      value: { totalBonus: '0', unclaimedBonus: '0', copiesBonus: '0', followsBonus: '0', copies: 0, follows: 0 },
+    };
+  }
+
+  return { ok: true, value: data };
+}
+
+/**
+ * Encode reward/bonus claim transactions
+ */
+export async function encodeReward(
+  params: RewardEncodeParams
+): Promise<Result<RewardEncodeResult, ByrealError>> {
+  const result = await apiClient.post<ApiResponse<RewardEncodeResult>>(API_ENDPOINTS.REWARD_ENCODE, {
+    walletAddress: params.walletAddress,
+    positionAddresses: params.positionAddresses,
+    type: params.type,
+  });
+
+  if (!result.ok) return result;
+
+  const data = result.value.result?.data;
+  if (!data) {
+    return { ok: true, value: { orderCode: '', rewardEncodeItems: [] } };
+  }
+
+  return { ok: true, value: data };
+}
+
+/**
+ * Submit signed reward/bonus claim transactions to backend
+ */
+export async function submitRewardOrder(
+  params: RewardOrderParams
+): Promise<Result<RewardOrderResult, ByrealError>> {
+  const result = await apiClient.post<ApiResponse<RewardOrderResult>>(API_ENDPOINTS.REWARD_ORDER, {
+    orderCode: params.orderCode,
+    walletAddress: params.walletAddress,
+    signedTxPayload: params.signedTxPayload,
+  });
+
+  if (!result.ok) return result;
+
+  const data = result.value.result?.data;
+  if (!data) {
+    return { ok: true, value: { orderCode: '', txList: [], claimTokenList: [] } };
+  }
+
+  return { ok: true, value: data };
+}
+
 // Export all API functions
 export const api = {
   listPools,
@@ -974,4 +1094,9 @@ export const api = {
   listTopPositions,
   encodeFee,
   getTokenPrices,
+  getUnclaimedData,
+  getEpochBonus,
+  getProviderOverview,
+  encodeReward,
+  submitRewardOrder,
 };

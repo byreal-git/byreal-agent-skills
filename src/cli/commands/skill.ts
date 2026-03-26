@@ -68,6 +68,8 @@ byreal-cli catalog show dex.pool.list
 | dex.position.decrease | Partially remove liquidity from a position |
 | dex.position.close | Close a position (remove all liquidity + burn NFT) |
 | dex.position.claim | Claim accumulated fees |
+| dex.position.claimRewards | Claim incentive rewards from positions |
+| dex.position.claimBonus | Claim CopyFarmer bonus rewards |
 | dex.position.topPositions | Query top positions in a pool for copy trading |
 | dex.position.copy | Copy an existing position with referral bonus |
 | wallet.address | Show wallet address |
@@ -172,6 +174,8 @@ Byreal CLI provides on-chain data only. For complete analysis, **you (the AI age
 | Decrease liquidity (USD) | \`byreal-cli positions decrease --nft-mint <addr> --amount-usd <usd> --confirm\` |
 | Close position | \`byreal-cli positions close --nft-mint <addr> --confirm\` |
 | Claim fees | \`byreal-cli positions claim --nft-mints <addrs> --confirm\` |
+| Claim incentive rewards | \`byreal-cli positions claim-rewards --confirm\` |
+| Claim copy bonus | \`byreal-cli positions claim-bonus --confirm\` |
 | Analyze position | \`byreal-cli positions analyze <nft-mint>\` |
 | Top positions in pool | \`byreal-cli positions top-positions --pool <addr>\` |
 | Copy a position | \`byreal-cli positions copy --position <addr> --amount-usd <usd> --confirm\` |
@@ -542,6 +546,42 @@ Options:
   --unsigned-tx            Output unsigned transaction(s) as JSON (no signing)
   --wallet-address <addr>  Wallet public key (for --unsigned-tx without local keypair)
 \`\`\`
+
+### positions claim-rewards
+Claim incentive rewards from positions. These are operational rewards (bonuses) manually added to pools by the team to incentivize liquidity providers — NOT trading fees (use \`positions claim\` for fees).
+
+\`\`\`bash
+byreal-cli positions claim-rewards [options]
+
+Options:
+  --dry-run                Preview unclaimed rewards (shows amounts per position)
+  --confirm                Claim the rewards
+  --unsigned-tx            Output unsigned transaction(s) as JSON (no signing)
+  --wallet-address <addr>  Wallet public key (for --unsigned-tx without local keypair)
+\`\`\`
+
+**Three types of position earnings:**
+- **Trading fees** → \`positions claim\` (existing)
+- **Incentive rewards** → \`positions claim-rewards\` (this command)
+- **Copy bonus** → \`positions claim-bonus\` (see below)
+
+### positions claim-bonus
+Claim CopyFarmer bonus rewards earned from copying other users' positions. Bonuses accrue in epochs and become claimable in time windows.
+
+\`\`\`bash
+byreal-cli positions claim-bonus [options]
+
+Options:
+  --dry-run                Preview bonus overview (total, per-epoch, claimable amount)
+  --confirm                Claim the bonus
+  --unsigned-tx            Output unsigned transaction(s) as JSON (no signing)
+  --wallet-address <addr>  Wallet public key (for --unsigned-tx without local keypair)
+\`\`\`
+
+**Epoch states:**
+- **Accruing**: Current epoch, bonus is accumulating
+- **Pending**: Settlement period, not yet claimable
+- **Claimable**: Ready to claim within the time window
 
 ### positions top-positions
 Query top positions in a pool. Use this to discover high-performing positions that can be copied.

@@ -437,3 +437,90 @@ export interface FeeEncodeEntry {
     tokenSymbol: string;
   }[];
 }
+
+// ============================================
+// Reward / Bonus Claim Types
+// ============================================
+
+export interface PositionRewardItem {
+  positionAddress: string;
+  tokenAddress: string;
+  tokenSymbol: string;
+  syncedTokenAmount: string;
+  lockedTokenAmount: string;
+  claimedTokenAmount: string;
+  price: string;
+  tokenDecimals: number;
+}
+
+export interface UnclaimedDataResult {
+  unclaimedOpenIncentives: PositionRewardItem[];
+  unclaimedClosedIncentives: PositionRewardItem[];
+}
+
+export interface EpochBonusInfo {
+  epochTime: number;
+  epochStartTime: number;
+  claimTime: number;
+  endTime: number;
+  totalBonusUsd: string;
+}
+
+export interface ProviderOverviewInfo {
+  totalBonus: string;
+  unclaimedBonus: string;
+  copiesBonus: string;
+  followsBonus: string;
+  copies: number;
+  follows: number;
+}
+
+export interface RewardEncodeParams {
+  walletAddress: string;
+  positionAddresses: string[];
+  type: 1 | 2; // 1=incentive rewards, 2=copyfarmer bonus
+}
+
+export interface RewardClaimInfoDTO {
+  tokenAddress: string;
+  tokenAmount: number;
+  tokenDecimals: number;
+  tokenSymbol: string;
+}
+
+export interface RewardClaimRawTxInfo {
+  poolAddress: string;
+  txPayload: string;
+  txCode: string;
+  rewardClaimInfo: RewardClaimInfoDTO[];
+}
+
+export interface RewardEncodeResult {
+  orderCode: string;
+  rewardEncodeItems: RewardClaimRawTxInfo[];
+}
+
+export interface RewardOrderParams {
+  orderCode: string;
+  walletAddress: string;
+  signedTxPayload: { txCode: string; poolAddress: string; signedTx: string }[];
+}
+
+export interface RewardClaimTxResult {
+  poolAddress: string;
+  txSignature: string;
+  status: number;
+}
+
+export interface ClaimTokenItem {
+  tokenAddress: string;
+  tokenSymbol: string;
+  tokenAmount: string;
+  tokenDecimals: number;
+}
+
+export interface RewardOrderResult {
+  orderCode: string;
+  txList: RewardClaimTxResult[];
+  claimTokenList: ClaimTokenItem[];
+}

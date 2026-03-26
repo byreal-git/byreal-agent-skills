@@ -38,6 +38,9 @@ import {
   outputPositionIncreasePreview,
   outputPositionDecreasePreview,
   outputPositionClaimPreview,
+  outputRewardsPreview,
+  outputBonusPreview,
+  outputRewardOrderResult,
   outputTransactionResult,
   outputPositionAnalysisTable,
   outputTopPositionsTable,
@@ -1910,6 +1913,474 @@ function createPositionsClaimCommand(): Command {
 }
 
 // ============================================
+// positions claim-rewards (API)
+// ============================================
+
+function createPositionsClaimRewardsCommand(): Command {
+  return new Command("claim-rewards")
+    .description("Claim incentive rewards from positions")
+    .option("--dry-run", "Preview unclaimed rewards without claiming")
+    .option("--confirm", "Claim the rewards")
+    .option("--unsigned-tx", "Output unsigned transaction(s) as JSON (no signing)")
+    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
+    .action(async (options, cmdObj: Command) => {
+      const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
+      const format = globalOptions.output;
+      const startTime = Date.now();
+
+      const mode = resolveExecutionMode(options);
+      requireExecutionMode(mode, "positions claim-rewards");
+
+      // Resolve keypair or address
+      let keypair: Keypair | undefined;
+      let address: string;
+
+      if (mode === 'unsigned-tx') {
+        if (options.walletAddress) {
+          address = options.walletAddress;
+        } else {
+          const addrResult = resolveAddress();
+          if (!addrResult.ok) {
+            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
+            if (format === "json") {
+              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
+            } else {
+              console.error(chalk.red(`\nError: ${errMsg}`));
+            }
+            process.exit(1);
+          }
+          address = addrResult.value.address;
+        }
+      } else if (mode === 'dry-run') {
+        const addrResult = resolveAddress();
+        if (!addrResult.ok) {
+          if (format === "json") {
+            outputErrorJson(addrResult.error);
+          } else {
+            outputErrorTable(addrResult.error);
+          }
+          process.exit(1);
+        }
+        address = addrResult.value.address;
+      } else {
+        const keypairResult = resolveKeypair();
+        if (!keypairResult.ok) {
+          if (format === "json") {
+            outputErrorJson(keypairResult.error);
+          } else {
+            outputErrorTable(keypairResult.error);
+          }
+          process.exit(1);
+        }
+        keypair = keypairResult.value.keypair;
+        address = keypairResult.value.address;
+      }
+
+      try {
+        // Query unclaimed rewards
+        const unclaimedResult = await api.getUnclaimedData(address);
+        if (!unclaimedResult.ok) {
+          if (format === "json") {
+            outputErrorJson(unclaimedResult.error);
+          } else {
+            outputErrorTable(unclaimedResult.error);
+          }
+          process.exit(1);
+        }
+
+        const { unclaimedOpenIncentives, unclaimedClosedIncentives } = unclaimedResult.value;
+
+        // Filter items with unclaimed > 0
+        const filterUnclaimed = (items: typeof unclaimedOpenIncentives) =>
+          items.filter((item) => {
+            const unclaimed = parseFloat(item.syncedTokenAmount) - parseFloat(item.lockedTokenAmount) - parseFloat(item.claimedTokenAmount);
+            return unclaimed > 0;
+          });
+
+        const openRewards = filterUnclaimed(unclaimedOpenIncentives);
+        const closedRewards = filterUnclaimed(unclaimedClosedIncentives);
+        const allRewards = [...openRewards, ...closedRewards];
+
+        // Dry-run: show preview
+        if (mode === "dry-run") {
+          printDryRunBanner();
+
+          if (format === "json") {
+            outputJson({
+              mode: "dry-run",
+              openPositionRewards: openRewards,
+              closedPositionRewards: closedRewards,
+              totalPositions: new Set(allRewards.map((r) => r.positionAddress)).size,
+            }, startTime);
+          } else {
+            if (openRewards.length > 0) {
+              outputRewardsPreview(openRewards, "Open Position Rewards");
+            }
+            if (closedRewards.length > 0) {
+              outputRewardsPreview(closedRewards, "Closed Position Rewards");
+            }
+            if (allRewards.length === 0) {
+              console.log(chalk.gray("\n  No unclaimed incentive rewards.\n"));
+            } else {
+              console.log(
+                chalk.yellow("\n  Use --confirm to claim these rewards"),
+              );
+            }
+          }
+          return;
+        }
+
+        // Check if there's anything to claim
+        if (allRewards.length === 0) {
+          const errMsg = "No unclaimed incentive rewards to claim.";
+          if (format === "json") {
+            outputErrorJson({ code: "NO_REWARDS", type: "BUSINESS", message: errMsg, retryable: false });
+          } else {
+            console.log(chalk.yellow(`\n  ${errMsg}\n`));
+          }
+          return;
+        }
+
+        // Get unique position addresses
+        const positionAddresses = [...new Set(allRewards.map((r) => r.positionAddress))];
+
+        // Encode reward claim transactions
+        const encodeResult = await api.encodeReward({
+          walletAddress: address,
+          positionAddresses,
+          type: 1,
+        });
+
+        if (!encodeResult.ok) {
+          if (format === "json") {
+            outputErrorJson(encodeResult.error);
+          } else {
+            outputErrorTable(encodeResult.error);
+          }
+          process.exit(1);
+        }
+
+        const { orderCode, rewardEncodeItems } = encodeResult.value;
+
+        if (rewardEncodeItems.length === 0) {
+          const errMsg = "No reward transactions to process.";
+          if (format === "json") {
+            outputErrorJson({ code: "NO_TRANSACTIONS", type: "BUSINESS", message: errMsg, retryable: false });
+          } else {
+            console.log(chalk.yellow(`\n  ${errMsg}\n`));
+          }
+          return;
+        }
+
+        // unsigned-tx: output encoded transactions
+        if (mode === 'unsigned-tx') {
+          const txPayloads = rewardEncodeItems.map((item) => ({
+            poolAddress: item.poolAddress,
+            txPayload: item.txPayload,
+            txCode: item.txCode,
+            tokens: item.rewardClaimInfo,
+          }));
+          console.log(JSON.stringify({ orderCode, unsignedTransactions: txPayloads }));
+          return;
+        }
+
+        // Confirm: sign and submit
+        printConfirmBanner();
+
+        const signedPayloads: { txCode: string; poolAddress: string; signedTx: string }[] = [];
+        for (const item of rewardEncodeItems) {
+          const txResult = deserializeTransaction(item.txPayload);
+          if (!txResult.ok) {
+            const errMsg = `Failed to deserialize transaction for pool ${item.poolAddress}: ${txResult.error.message}`;
+            if (format === "json") {
+              outputErrorJson({ code: "TX_DESERIALIZE_ERROR", type: "SYSTEM", message: errMsg, retryable: false });
+            } else {
+              console.error(chalk.red(`\nError: ${errMsg}`));
+            }
+            process.exit(1);
+          }
+          const signedTx = signTransaction(txResult.value, keypair!);
+          signedPayloads.push({
+            txCode: item.txCode,
+            poolAddress: item.poolAddress,
+            signedTx: serializeTransaction(signedTx),
+          });
+        }
+
+        // Submit to backend
+        const orderResult = await api.submitRewardOrder({
+          orderCode,
+          walletAddress: address,
+          signedTxPayload: signedPayloads,
+        });
+
+        if (!orderResult.ok) {
+          if (format === "json") {
+            outputErrorJson(orderResult.error);
+          } else {
+            outputErrorTable(orderResult.error);
+          }
+          process.exit(1);
+        }
+
+        if (format === "json") {
+          outputJson(orderResult.value, startTime);
+        } else {
+          outputRewardOrderResult(orderResult.value);
+        }
+      } catch (e) {
+        const message = (e as Error).message || "Unknown error";
+        if (format === "json") {
+          outputErrorJson({ code: "SDK_ERROR", type: "SYSTEM", message, retryable: false });
+        } else {
+          console.error(chalk.red(`\nError: ${message}`));
+          if (process.env.DEBUG) {
+            console.error((e as Error).stack);
+          }
+        }
+        process.exit(1);
+      }
+    });
+}
+
+// ============================================
+// positions claim-bonus (API)
+// ============================================
+
+function createPositionsClaimBonusCommand(): Command {
+  return new Command("claim-bonus")
+    .description("Claim CopyFarmer bonus rewards")
+    .option("--dry-run", "Preview claimable bonus without claiming")
+    .option("--confirm", "Claim the bonus")
+    .option("--unsigned-tx", "Output unsigned transaction(s) as JSON (no signing)")
+    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
+    .action(async (options, cmdObj: Command) => {
+      const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
+      const format = globalOptions.output;
+      const startTime = Date.now();
+
+      const mode = resolveExecutionMode(options);
+      requireExecutionMode(mode, "positions claim-bonus");
+
+      // Resolve keypair or address
+      let keypair: Keypair | undefined;
+      let address: string;
+
+      if (mode === 'unsigned-tx') {
+        if (options.walletAddress) {
+          address = options.walletAddress;
+        } else {
+          const addrResult = resolveAddress();
+          if (!addrResult.ok) {
+            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
+            if (format === "json") {
+              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
+            } else {
+              console.error(chalk.red(`\nError: ${errMsg}`));
+            }
+            process.exit(1);
+          }
+          address = addrResult.value.address;
+        }
+      } else if (mode === 'dry-run') {
+        const addrResult = resolveAddress();
+        if (!addrResult.ok) {
+          if (format === "json") {
+            outputErrorJson(addrResult.error);
+          } else {
+            outputErrorTable(addrResult.error);
+          }
+          process.exit(1);
+        }
+        address = addrResult.value.address;
+      } else {
+        const keypairResult = resolveKeypair();
+        if (!keypairResult.ok) {
+          if (format === "json") {
+            outputErrorJson(keypairResult.error);
+          } else {
+            outputErrorTable(keypairResult.error);
+          }
+          process.exit(1);
+        }
+        keypair = keypairResult.value.keypair;
+        address = keypairResult.value.address;
+      }
+
+      try {
+        // Query epoch bonus and provider overview in parallel
+        const [epochResult, overviewResult] = await Promise.all([
+          api.getEpochBonus(address, -1),
+          api.getProviderOverview(address),
+        ]);
+
+        if (!epochResult.ok) {
+          if (format === "json") {
+            outputErrorJson(epochResult.error);
+          } else {
+            outputErrorTable(epochResult.error);
+          }
+          process.exit(1);
+        }
+
+        if (!overviewResult.ok) {
+          if (format === "json") {
+            outputErrorJson(overviewResult.error);
+          } else {
+            outputErrorTable(overviewResult.error);
+          }
+          process.exit(1);
+        }
+
+        const epochs = epochResult.value;
+        const overview = overviewResult.value;
+
+        // Check if type=3 (CLAIMABLE) epoch is available
+        const claimableEpoch = epochs['3'];
+        const now = Date.now();
+        const canClaim = claimableEpoch
+          && parseFloat(claimableEpoch.totalBonusUsd) > 0
+          && now >= claimableEpoch.claimTime
+          && now < claimableEpoch.endTime;
+
+        // Dry-run: show preview
+        if (mode === "dry-run") {
+          printDryRunBanner();
+
+          if (format === "json") {
+            outputJson({
+              mode: "dry-run",
+              overview,
+              epochs,
+              canClaim: !!canClaim,
+              claimableAmount: canClaim ? claimableEpoch!.totalBonusUsd : '0',
+            }, startTime);
+          } else {
+            outputBonusPreview(overview, epochs);
+            if (canClaim) {
+              console.log(
+                chalk.yellow(`  Use --confirm to claim $${claimableEpoch!.totalBonusUsd} bonus\n`),
+              );
+            } else {
+              console.log(chalk.gray("  No bonus currently claimable.\n"));
+            }
+          }
+          return;
+        }
+
+        // Check claimability
+        if (!canClaim) {
+          const errMsg = claimableEpoch && parseFloat(claimableEpoch.totalBonusUsd) > 0
+            ? `Bonus not yet claimable. Claim window: ${new Date(claimableEpoch.claimTime).toLocaleString()} → ${new Date(claimableEpoch.endTime).toLocaleString()}`
+            : "No CopyFarmer bonus available to claim.";
+          if (format === "json") {
+            outputErrorJson({ code: "NO_BONUS", type: "BUSINESS", message: errMsg, retryable: false });
+          } else {
+            console.log(chalk.yellow(`\n  ${errMsg}\n`));
+          }
+          return;
+        }
+
+        // Encode bonus claim transactions (type=2, empty positionAddresses)
+        const encodeResult = await api.encodeReward({
+          walletAddress: address,
+          positionAddresses: [],
+          type: 2,
+        });
+
+        if (!encodeResult.ok) {
+          if (format === "json") {
+            outputErrorJson(encodeResult.error);
+          } else {
+            outputErrorTable(encodeResult.error);
+          }
+          process.exit(1);
+        }
+
+        const { orderCode, rewardEncodeItems } = encodeResult.value;
+
+        if (rewardEncodeItems.length === 0) {
+          const errMsg = "No bonus transactions to process.";
+          if (format === "json") {
+            outputErrorJson({ code: "NO_TRANSACTIONS", type: "BUSINESS", message: errMsg, retryable: false });
+          } else {
+            console.log(chalk.yellow(`\n  ${errMsg}\n`));
+          }
+          return;
+        }
+
+        // unsigned-tx: output encoded transactions
+        if (mode === 'unsigned-tx') {
+          const txPayloads = rewardEncodeItems.map((item) => ({
+            poolAddress: item.poolAddress,
+            txPayload: item.txPayload,
+            txCode: item.txCode,
+            tokens: item.rewardClaimInfo,
+          }));
+          console.log(JSON.stringify({ orderCode, unsignedTransactions: txPayloads }));
+          return;
+        }
+
+        // Confirm: sign and submit
+        printConfirmBanner();
+
+        const signedPayloads: { txCode: string; poolAddress: string; signedTx: string }[] = [];
+        for (const item of rewardEncodeItems) {
+          const txResult = deserializeTransaction(item.txPayload);
+          if (!txResult.ok) {
+            const errMsg = `Failed to deserialize transaction for pool ${item.poolAddress}: ${txResult.error.message}`;
+            if (format === "json") {
+              outputErrorJson({ code: "TX_DESERIALIZE_ERROR", type: "SYSTEM", message: errMsg, retryable: false });
+            } else {
+              console.error(chalk.red(`\nError: ${errMsg}`));
+            }
+            process.exit(1);
+          }
+          const signedTx = signTransaction(txResult.value, keypair!);
+          signedPayloads.push({
+            txCode: item.txCode,
+            poolAddress: item.poolAddress,
+            signedTx: serializeTransaction(signedTx),
+          });
+        }
+
+        // Submit to backend
+        const orderResult = await api.submitRewardOrder({
+          orderCode,
+          walletAddress: address,
+          signedTxPayload: signedPayloads,
+        });
+
+        if (!orderResult.ok) {
+          if (format === "json") {
+            outputErrorJson(orderResult.error);
+          } else {
+            outputErrorTable(orderResult.error);
+          }
+          process.exit(1);
+        }
+
+        if (format === "json") {
+          outputJson(orderResult.value, startTime);
+        } else {
+          outputRewardOrderResult(orderResult.value);
+        }
+      } catch (e) {
+        const message = (e as Error).message || "Unknown error";
+        if (format === "json") {
+          outputErrorJson({ code: "SDK_ERROR", type: "SYSTEM", message, retryable: false });
+        } else {
+          console.error(chalk.red(`\nError: ${message}`));
+          if (process.env.DEBUG) {
+            console.error((e as Error).stack);
+          }
+        }
+        process.exit(1);
+      }
+    });
+}
+
+// ============================================
 // positions analyze
 // ============================================
 
@@ -2611,6 +3082,8 @@ export function createPositionsCommand(): Command {
   cmd.addCommand(createPositionsDecreaseCommand());
   cmd.addCommand(createPositionsCloseCommand());
   cmd.addCommand(createPositionsClaimCommand());
+  cmd.addCommand(createPositionsClaimRewardsCommand());
+  cmd.addCommand(createPositionsClaimBonusCommand());
   cmd.addCommand(createPositionsAnalyzeCommand());
   cmd.addCommand(createTopPositionsCommand());
   cmd.addCommand(createCopyPositionCommand());

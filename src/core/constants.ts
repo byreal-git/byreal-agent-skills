@@ -49,6 +49,13 @@ export const API_ENDPOINTS = {
 
   // Copy Farmer endpoints
   COPYFARMER_TOP_POSITIONS: '/byreal/api/dex/v2/copyfarmer/top-positions',
+  COPYFARMER_EPOCH_BONUS: '/byreal/api/dex/v2/copyfarmer/epoch-bonus',
+  COPYFARMER_PROVIDER_OVERVIEW: '/byreal/api/dex/v2/copyfarmer/providerOverview',
+
+  // Reward / Bonus claim endpoints
+  UNCLAIMED_DATA: '/byreal/api/dex/v2/position/unclaimed-data',
+  REWARD_ENCODE: '/byreal/api/dex/v2/incentive/encode-v2',
+  REWARD_ORDER: '/byreal/api/dex/v2/incentive/order-v2',
 
   // Fee endpoints
   AUTO_FEE: '/byreal/api/dex/v2/main/auto-fee',
