@@ -62,6 +62,8 @@ All commands support `-o json` for structured output.
 | `swap execute`            | Preview or execute a token swap                |
 | `positions list`          | List your CLMM positions                       |
 | `positions open`          | Open a new CLMM position                       |
+| `positions increase`      | Add liquidity to an existing position           |
+| `positions decrease`      | Partially remove liquidity from a position      |
 | `positions close`         | Close a position                               |
 | `positions claim`         | Claim fees and rewards                         |
 | `positions analyze`       | Analyze an existing position                   |

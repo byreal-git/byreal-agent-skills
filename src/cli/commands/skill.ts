@@ -64,7 +64,9 @@ byreal-cli catalog show dex.pool.list
 | dex.position.list | List user's CLMM positions |
 | dex.position.analyze | Analyze existing position |
 | dex.position.open | Open a new CLMM position |
-| dex.position.close | Close a position |
+| dex.position.increase | Add liquidity to an existing position |
+| dex.position.decrease | Partially remove liquidity from a position |
+| dex.position.close | Close a position (remove all liquidity + burn NFT) |
 | dex.position.claim | Claim accumulated fees |
 | dex.position.topPositions | Query top positions in a pool for copy trading |
 | dex.position.copy | Copy an existing position with referral bonus |
@@ -164,6 +166,10 @@ Byreal CLI provides on-chain data only. For complete analysis, **you (the AI age
 | List positions | \`byreal-cli positions list\` |
 | Open position (USD) | \`byreal-cli positions open --pool <addr> --price-lower <p> --price-upper <p> --amount-usd <usd> --confirm\` |
 | Open position (token) | \`byreal-cli positions open --pool <addr> --price-lower <p> --price-upper <p> --base <token> --amount <amount> --confirm\` |
+| Increase liquidity | \`byreal-cli positions increase --nft-mint <addr> --base MintA --amount <amt> --confirm\` |
+| Increase liquidity (USD) | \`byreal-cli positions increase --nft-mint <addr> --amount-usd <usd> --confirm\` |
+| Decrease liquidity (%) | \`byreal-cli positions decrease --nft-mint <addr> --percentage <1-100> --confirm\` |
+| Decrease liquidity (USD) | \`byreal-cli positions decrease --nft-mint <addr> --amount-usd <usd> --confirm\` |
 | Close position | \`byreal-cli positions close --nft-mint <addr> --confirm\` |
 | Claim fees | \`byreal-cli positions claim --nft-mints <addrs> --confirm\` |
 | Analyze position | \`byreal-cli positions analyze <nft-mint>\` |
@@ -446,8 +452,70 @@ byreal-cli positions open --pool <pool-address> \\
   --price-lower 4000 --price-upper 7000 --amount-usd 100 --confirm -o json
 \`\`\`
 
+### positions increase
+Add liquidity to an existing position. Supports two modes: specify token amount (--amount) or USD investment (--amount-usd). The position's existing price range is reused.
+
+\`\`\`bash
+byreal-cli positions increase [options]
+
+Options:
+  --nft-mint <address>     Position NFT mint address (required)
+  --base <token>           Base token: MintA or MintB (required with --amount)
+  --amount <amount>        Amount of base token to add, UI format. Decimals auto-resolved.
+  --amount-usd <usd>       Investment amount in USD. Auto-calculates token A/B split.
+                           Mutually exclusive with --amount and --base.
+  --slippage <bps>         Slippage tolerance in basis points
+  --raw                    Amount is already in raw (smallest unit) format
+  --dry-run                Preview without executing
+  --confirm                Execute the increase
+  --unsigned-tx            Output unsigned transaction as JSON (no signing)
+  --wallet-address <addr>  Wallet public key (for --unsigned-tx without local keypair)
+\`\`\`
+
+Examples:
+\`\`\`bash
+# Preview adding $50 worth of liquidity
+byreal-cli positions increase --nft-mint <nft-mint> --amount-usd 50 --dry-run -o json
+
+# Add liquidity by token amount
+byreal-cli positions increase --nft-mint <nft-mint> --base MintA --amount 0.5 --confirm -o json
+\`\`\`
+
+### positions decrease
+Partially remove liquidity from a position. Two modes: --percentage (by ratio) or --amount-usd (by USD value). The position NFT is kept open (unlike \`close\` which burns it), so you can add liquidity back later.
+
+\`\`\`bash
+byreal-cli positions decrease [options]
+
+Options:
+  --nft-mint <address>     Position NFT mint address (required)
+  --percentage <1-100>     Percentage of liquidity to remove. Mutually exclusive with --amount-usd.
+  --amount-usd <usd>       USD amount of liquidity to remove. Auto-calculates percentage. Errors if amount exceeds position value. Mutually exclusive with --percentage.
+  --slippage <bps>         Slippage tolerance in basis points
+  --dry-run                Preview without executing (shows total position USD value and removal percentage)
+  --confirm                Execute the decrease
+  --unsigned-tx            Output unsigned transaction as JSON (no signing)
+  --wallet-address <addr>  Wallet public key (for --unsigned-tx without local keypair)
+\`\`\`
+
+Examples:
+\`\`\`bash
+# Preview removing $50 worth of liquidity
+byreal-cli positions decrease --nft-mint <nft-mint> --amount-usd 50 --dry-run -o json
+
+# Preview removing 50% of liquidity
+byreal-cli positions decrease --nft-mint <nft-mint> --percentage 50 --dry-run -o json
+
+# Remove 100% liquidity but keep position open (can re-add later)
+byreal-cli positions decrease --nft-mint <nft-mint> --percentage 100 --confirm -o json
+\`\`\`
+
+**Difference from \`close\`**:
+- \`decrease --percentage 100\`: Removes all liquidity but **keeps the position NFT**. You can add liquidity again later with \`increase\`.
+- \`close\`: Removes all liquidity AND **burns the position NFT**. The position is permanently closed.
+
 ### positions close
-Close a position (remove all liquidity).
+Close a position (remove all liquidity and burn position NFT).
 
 \`\`\`bash
 byreal-cli positions close [options]
@@ -600,6 +668,23 @@ When \`positions open --dry-run\` reports insufficient balance, the response aut
 5. **Re-run open**: After waiting, re-run \`positions open --dry-run\` to verify balances, then \`--confirm\`
 
 **Important**: The swap source can be ANY token in the wallet. Do NOT default to only using the pool's own tokens. Always check \`wallet balance\` to see what's available.
+
+## Workflow: Increase/Decrease Liquidity
+
+When user wants to add more liquidity to an existing position or partially withdraw:
+
+**Increase liquidity**:
+1. \`byreal-cli positions list -o json\` — find the position's NFT mint address
+2. \`byreal-cli positions increase --nft-mint <nft-mint> --amount-usd <usd> --dry-run -o json\` — preview (includes balance check)
+3. If insufficient balance → swap to get required tokens (see "Insufficient Balance" workflow)
+4. \`byreal-cli positions increase --nft-mint <nft-mint> --amount-usd <usd> --confirm -o json\` — execute
+
+**Decrease liquidity** (partial withdrawal):
+1. \`byreal-cli positions list -o json\` — find the position's NFT mint address
+2. \`byreal-cli positions decrease --nft-mint <nft-mint> --percentage 50 --dry-run -o json\` — preview how much you'll receive
+3. \`byreal-cli positions decrease --nft-mint <nft-mint> --percentage 50 --confirm -o json\` — execute
+
+**Key distinction**: Use \`decrease\` to partially withdraw while keeping the position open. Use \`close\` to fully exit and burn the NFT.
 
 ## Workflow: Copy a Top Position
 

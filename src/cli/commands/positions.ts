@@ -35,6 +35,8 @@ import {
   outputPositionsTable,
   outputPositionOpenPreview,
   outputPositionClosePreview,
+  outputPositionIncreasePreview,
+  outputPositionDecreasePreview,
   outputPositionClaimPreview,
   outputTransactionResult,
   outputPositionAnalysisTable,
@@ -717,6 +719,756 @@ function createPositionsOpenCommand(): Command {
           outputJson(txData, startTime);
         } else {
           outputTransactionResult("Position Opened", txData);
+        }
+      } catch (e) {
+        const message = (e as Error).message || "Unknown SDK error";
+        if (format === "json") {
+          outputErrorJson({
+            code: "SDK_ERROR",
+            type: "SYSTEM",
+            message,
+            retryable: false,
+          });
+        } else {
+          console.error(chalk.red(`\nSDK Error: ${message}`));
+          if (process.env.DEBUG) {
+            console.error((e as Error).stack);
+          }
+        }
+        process.exit(1);
+      }
+    });
+}
+
+// ============================================
+// positions increase (SDK)
+// ============================================
+
+function createPositionsIncreaseCommand(): Command {
+  return new Command("increase")
+    .description("Add liquidity to an existing position")
+    .requiredOption("--nft-mint <address>", "Position NFT mint address")
+    .option(
+      "--base <token>",
+      "Base token: MintA or MintB (required unless --amount-usd)",
+    )
+    .option(
+      "--amount <amount>",
+      "Amount of base token to add (UI amount unless --raw)",
+    )
+    .option(
+      "--amount-usd <usd>",
+      "Investment amount in USD (auto-calculates token split, mutually exclusive with --amount)",
+    )
+    .option("--slippage <bps>", "Slippage tolerance in basis points")
+    .option("--raw", "Amount is already in raw (smallest unit) format")
+    .option("--dry-run", "Preview without executing")
+    .option("--confirm", "Execute the increase")
+    .option("--unsigned-tx", "Output unsigned transaction as JSON (no signing)")
+    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
+    .action(async (options, cmdObj: Command) => {
+      const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
+      const format = globalOptions.output;
+      const startTime = Date.now();
+
+      // Check execution mode
+      const mode = resolveExecutionMode(options);
+      requireExecutionMode(mode, "positions increase");
+
+      // Resolve keypair or address based on mode
+      let keypair: Keypair | undefined;
+      let publicKey: PublicKey;
+
+      if (mode === 'unsigned-tx') {
+        let address: string;
+        if (options.walletAddress) {
+          address = options.walletAddress;
+        } else {
+          const addrResult = resolveAddress();
+          if (!addrResult.ok) {
+            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
+            if (format === "json") {
+              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
+            } else {
+              console.error(chalk.red(`\nError: ${errMsg}`));
+            }
+            process.exit(1);
+          }
+          address = addrResult.value.address;
+        }
+        publicKey = new PublicKey(address);
+      } else {
+        const keypairResult = resolveKeypair();
+        if (!keypairResult.ok) {
+          if (format === "json") {
+            outputErrorJson(keypairResult.error);
+          } else {
+            outputErrorTable(keypairResult.error);
+          }
+          process.exit(1);
+        }
+        keypair = keypairResult.value.keypair;
+        publicKey = keypairResult.value.publicKey;
+      }
+
+      // Validate mutually exclusive options
+      const useAmountUsd = !!options.amountUsd;
+      const useTokenAmount = !!options.amount;
+      if (useAmountUsd && useTokenAmount) {
+        const err = {
+          code: "INVALID_PARAMS",
+          type: "VALIDATION" as const,
+          message:
+            "--amount and --amount-usd are mutually exclusive. Use one or the other.",
+          retryable: false,
+        };
+        if (format === "json") {
+          outputErrorJson(err);
+        } else {
+          outputErrorTable(err);
+        }
+        process.exit(1);
+      }
+      if (!useAmountUsd && !useTokenAmount) {
+        const err = {
+          code: "MISSING_PARAMS",
+          type: "VALIDATION" as const,
+          message: "Either --amount (with --base) or --amount-usd is required.",
+          retryable: false,
+        };
+        if (format === "json") {
+          outputErrorJson(err);
+        } else {
+          outputErrorTable(err);
+        }
+        process.exit(1);
+      }
+      if (useTokenAmount && !options.base) {
+        const err = {
+          code: "MISSING_PARAMS",
+          type: "VALIDATION" as const,
+          message:
+            "--base is required when using --amount. Specify MintA or MintB.",
+          retryable: false,
+        };
+        if (format === "json") {
+          outputErrorJson(err);
+        } else {
+          outputErrorTable(err);
+        }
+        process.exit(1);
+      }
+
+      try {
+        // Lazy-load SDK
+        const { getChain } = await import("../../sdk/init.js");
+        const { calculateTokenAmountsFromUsd } =
+          await import("../../sdk/calculate.js");
+        const {
+          getAmountBFromAmountA,
+          getAmountAFromAmountB,
+        } = await import("@byreal-io/byreal-clmm-sdk");
+
+        const chain = getChain();
+        const nftMint = new PublicKey(options.nftMint);
+
+        // Get position info
+        const positionInfo = await chain.getPositionInfoByNftMint(nftMint);
+        if (!positionInfo) {
+          const errMsg = `Position not found for NFT mint: ${options.nftMint}`;
+          if (format === "json") {
+            outputErrorJson({
+              code: "POSITION_NOT_FOUND",
+              type: "BUSINESS",
+              message: errMsg,
+              retryable: false,
+            });
+          } else {
+            console.error(chalk.red(`\nError: ${errMsg}`));
+          }
+          process.exit(1);
+        }
+
+        const poolInfo = positionInfo.rawPoolInfo;
+        const poolAddress = poolInfo.poolId.toBase58();
+
+        // Fetch pool API info (symbols + prices)
+        let symbolA = "MintA";
+        let symbolB = "MintB";
+        let tokenAPriceUsd = 0;
+        let tokenBPriceUsd = 0;
+        const poolApiResult = await api.getPoolInfo(poolAddress);
+        if (poolApiResult.ok) {
+          symbolA = poolApiResult.value.token_a.symbol || symbolA;
+          symbolB = poolApiResult.value.token_b.symbol || symbolB;
+          tokenAPriceUsd = poolApiResult.value.token_a.price_usd ?? 0;
+          tokenBPriceUsd = poolApiResult.value.token_b.price_usd ?? 0;
+        }
+
+        // Compute token amounts
+        let base: "MintA" | "MintB";
+        let baseAmount: BN;
+        let otherAmount: BN;
+        let investmentUsd: string | undefined;
+
+        if (useAmountUsd) {
+          if (tokenAPriceUsd <= 0 || tokenBPriceUsd <= 0) {
+            const err = {
+              code: "PRICE_UNAVAILABLE",
+              type: "BUSINESS" as const,
+              message: `Cannot calculate token split: token price unavailable (${symbolA}: $${tokenAPriceUsd}, ${symbolB}: $${tokenBPriceUsd})`,
+              retryable: true,
+            };
+            if (format === "json") {
+              outputErrorJson(err);
+            } else {
+              outputErrorTable(err);
+            }
+            process.exit(1);
+          }
+
+          const amounts = calculateTokenAmountsFromUsd({
+            capitalUsd: parseFloat(options.amountUsd),
+            tokenAPriceUsd,
+            tokenBPriceUsd,
+            priceLower: positionInfo.priceLower,
+            priceUpper: positionInfo.priceUpper,
+            poolInfo,
+          });
+
+          base = "MintA";
+          baseAmount = amounts.amountA;
+          otherAmount = amounts.amountB;
+          investmentUsd = parseFloat(options.amountUsd).toFixed(2);
+        } else {
+          base = options.base as "MintA" | "MintB";
+          const baseDecimals =
+            base === "MintA" ? poolInfo.mintDecimalsA : poolInfo.mintDecimalsB;
+          baseAmount = options.raw
+            ? new BN(options.amount)
+            : new BN(uiToRaw(options.amount, baseDecimals));
+
+          if (base === "MintA") {
+            otherAmount = getAmountBFromAmountA({
+              priceLower: positionInfo.priceLower,
+              priceUpper: positionInfo.priceUpper,
+              amountA: baseAmount,
+              poolInfo,
+            });
+          } else {
+            otherAmount = getAmountAFromAmountB({
+              priceLower: positionInfo.priceLower,
+              priceUpper: positionInfo.priceUpper,
+              amountB: baseAmount,
+              poolInfo,
+            });
+          }
+        }
+
+        // Apply slippage to otherAmountMax
+        const slippageBps = options.slippage
+          ? parseInt(options.slippage, 10)
+          : getSlippageBps();
+        const slippageMultiplier = 10000 + slippageBps;
+        const otherAmountMax = otherAmount
+          .mul(new BN(slippageMultiplier))
+          .div(new BN(10000));
+
+        const decimals =
+          base === "MintA" ? poolInfo.mintDecimalsA : poolInfo.mintDecimalsB;
+        const otherDecimals =
+          base === "MintA" ? poolInfo.mintDecimalsB : poolInfo.mintDecimalsA;
+        const baseSymbol = base === "MintA" ? symbolA : symbolB;
+        const otherSymbol = base === "MintA" ? symbolB : symbolA;
+
+        // Dry-run: show preview + balance check
+        if (mode === "dry-run") {
+          printDryRunBanner();
+
+          const mintAStr = poolInfo.mintA.toBase58();
+          const mintBStr = poolInfo.mintB.toBase58();
+          const requiredA = base === "MintA" ? baseAmount : otherAmountMax;
+          const requiredB = base === "MintA" ? otherAmountMax : baseAmount;
+
+          const previewData = {
+            nftMint: options.nftMint,
+            poolAddress,
+            priceLower: positionInfo.uiPriceLower,
+            priceUpper: positionInfo.uiPriceUpper,
+            baseAmount: rawToUi(baseAmount.toString(), decimals),
+            baseToken: baseSymbol,
+            otherAmount: rawToUi(otherAmountMax.toString(), otherDecimals),
+            otherToken: otherSymbol,
+            currentTokenA: positionInfo.tokenA.uiAmount,
+            currentTokenB: positionInfo.tokenB.uiAmount,
+            symbolA,
+            symbolB,
+            ...(investmentUsd ? { investmentUsd } : {}),
+          };
+
+          // Check wallet balance
+          const balanceWarnings = await checkBalanceSufficiency(
+            publicKey,
+            mintAStr,
+            mintBStr,
+            symbolA,
+            symbolB,
+            poolInfo.mintDecimalsA,
+            poolInfo.mintDecimalsB,
+            requiredA,
+            requiredB,
+          );
+
+          let walletBalances: WalletBalanceSummary | undefined;
+          if (balanceWarnings.length > 0) {
+            walletBalances = await fetchWalletBalanceSummary(publicKey);
+          }
+
+          if (format === "json") {
+            const jsonData: Record<string, unknown> = {
+              mode: "dry-run",
+              ...previewData,
+            };
+            if (balanceWarnings.length > 0) {
+              jsonData.balanceWarnings = balanceWarnings.map((w) => ({
+                symbol: w.symbol,
+                mint: w.mint,
+                required: w.required,
+                available: w.available,
+                deficit: w.deficit,
+                suggestion: `Swap to get at least ${w.deficit} ${w.symbol}. Use: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount> --confirm`,
+              }));
+              jsonData.walletBalances = walletBalances;
+            }
+            outputJson(jsonData, startTime);
+          } else {
+            outputPositionIncreasePreview(previewData);
+            if (balanceWarnings.length > 0) {
+              console.log(chalk.red.bold("\n  Insufficient Balance"));
+              for (const w of balanceWarnings) {
+                console.log(
+                  chalk.red(
+                    `    ${w.symbol}: need ${w.required}, have ${w.available} (deficit: ${w.deficit})`,
+                  ),
+                );
+                console.log(
+                  chalk.yellow(
+                    `    → Swap to get ${w.symbol}: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount> --confirm`,
+                  ),
+                );
+              }
+              if (walletBalances) {
+                console.log(chalk.cyan.bold("\n  Available Tokens for Swap"));
+                for (const t of walletBalances.tokens) {
+                  console.log(
+                    chalk.white(`    ${t.symbol}: ${t.amount} (${t.mint})`),
+                  );
+                }
+              }
+            } else {
+              console.log(chalk.green("\n  Balance check: sufficient"));
+              console.log(
+                chalk.yellow("\n  Use --confirm to add liquidity to this position"),
+              );
+            }
+          }
+          return;
+        }
+
+        // unsigned-tx: build transaction and output
+        if (mode === 'unsigned-tx') {
+          const result = await chain.addLiquidityInstructions({
+            userAddress: publicKey,
+            nftMint,
+            base,
+            baseAmount,
+            otherAmountMax,
+          });
+          const base64 = serializeTransaction(result.transaction);
+          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+          return;
+        }
+
+        // Confirm: add liquidity
+        printConfirmBanner();
+
+        const result = await chain.addLiquidityInstructions({
+          userAddress: publicKey,
+          nftMint,
+          base,
+          baseAmount,
+          otherAmountMax,
+        });
+
+        // Sign and send
+        result.transaction.sign([keypair!]);
+        const connection = getConnection();
+        const sendResult = await sendAndConfirmTransaction(
+          connection,
+          result.transaction,
+        );
+
+        if (!sendResult.ok) {
+          if (format === "json") {
+            outputErrorJson(sendResult.error);
+          } else {
+            outputErrorTable(sendResult.error);
+          }
+          process.exit(1);
+        }
+
+        const txData = {
+          signature: sendResult.value.signature,
+          confirmed: sendResult.value.confirmed,
+        };
+
+        if (format === "json") {
+          outputJson(txData, startTime);
+        } else {
+          outputTransactionResult("Liquidity Increased", txData);
+        }
+      } catch (e) {
+        const message = (e as Error).message || "Unknown SDK error";
+        if (format === "json") {
+          outputErrorJson({
+            code: "SDK_ERROR",
+            type: "SYSTEM",
+            message,
+            retryable: false,
+          });
+        } else {
+          console.error(chalk.red(`\nSDK Error: ${message}`));
+          if (process.env.DEBUG) {
+            console.error((e as Error).stack);
+          }
+        }
+        process.exit(1);
+      }
+    });
+}
+
+// ============================================
+// positions decrease (SDK)
+// ============================================
+
+function createPositionsDecreaseCommand(): Command {
+  return new Command("decrease")
+    .description("Remove part of the liquidity from a position (keeps position open)")
+    .requiredOption("--nft-mint <address>", "Position NFT mint address")
+    .option("--percentage <1-100>", "Percentage of liquidity to remove")
+    .option(
+      "--amount-usd <usd>",
+      "USD amount of liquidity to remove (mutually exclusive with --percentage)",
+    )
+    .option("--slippage <bps>", "Slippage tolerance in basis points")
+    .option("--dry-run", "Preview without executing")
+    .option("--confirm", "Execute the decrease")
+    .option("--unsigned-tx", "Output unsigned transaction as JSON (no signing)")
+    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
+    .action(async (options, cmdObj: Command) => {
+      const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
+      const format = globalOptions.output;
+      const startTime = Date.now();
+
+      // Check execution mode
+      const mode = resolveExecutionMode(options);
+      requireExecutionMode(mode, "positions decrease");
+
+      // Validate: must provide one of --percentage or --amount-usd
+      const hasPercentage = options.percentage !== undefined;
+      const hasAmountUsd = options.amountUsd !== undefined;
+      if (hasPercentage && hasAmountUsd) {
+        const err = {
+          code: "INVALID_PARAMS",
+          type: "VALIDATION" as const,
+          message: "--percentage and --amount-usd are mutually exclusive. Use one or the other.",
+          retryable: false,
+        };
+        if (format === "json") {
+          outputErrorJson(err);
+        } else {
+          outputErrorTable(err);
+        }
+        process.exit(1);
+      }
+      if (!hasPercentage && !hasAmountUsd) {
+        const err = {
+          code: "MISSING_PARAMS",
+          type: "VALIDATION" as const,
+          message: "Either --percentage or --amount-usd is required.",
+          retryable: false,
+        };
+        if (format === "json") {
+          outputErrorJson(err);
+        } else {
+          outputErrorTable(err);
+        }
+        process.exit(1);
+      }
+
+      if (hasPercentage) {
+        const pct = parseFloat(options.percentage);
+        if (isNaN(pct) || pct < 1 || pct > 100) {
+          const err = {
+            code: "INVALID_PARAMS",
+            type: "VALIDATION" as const,
+            message: "--percentage must be a number between 1 and 100.",
+            retryable: false,
+          };
+          if (format === "json") {
+            outputErrorJson(err);
+          } else {
+            outputErrorTable(err);
+          }
+          process.exit(1);
+        }
+      }
+
+      // Resolve keypair or address based on mode
+      let keypair: Keypair | undefined;
+      let publicKey: PublicKey;
+
+      if (mode === 'unsigned-tx') {
+        let address: string;
+        if (options.walletAddress) {
+          address = options.walletAddress;
+        } else {
+          const addrResult = resolveAddress();
+          if (!addrResult.ok) {
+            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
+            if (format === "json") {
+              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
+            } else {
+              console.error(chalk.red(`\nError: ${errMsg}`));
+            }
+            process.exit(1);
+          }
+          address = addrResult.value.address;
+        }
+        publicKey = new PublicKey(address);
+      } else {
+        const keypairResult = resolveKeypair();
+        if (!keypairResult.ok) {
+          if (format === "json") {
+            outputErrorJson(keypairResult.error);
+          } else {
+            outputErrorTable(keypairResult.error);
+          }
+          process.exit(1);
+        }
+        keypair = keypairResult.value.keypair;
+        publicKey = keypairResult.value.publicKey;
+      }
+
+      try {
+        // Lazy-load SDK
+        const { getChain } = await import("../../sdk/init.js");
+        const chain = getChain();
+
+        const nftMint = new PublicKey(options.nftMint);
+
+        // Get position info
+        const positionInfo = await chain.getPositionInfoByNftMint(nftMint);
+        if (!positionInfo) {
+          const errMsg = `Position not found for NFT mint: ${options.nftMint}`;
+          if (format === "json") {
+            outputErrorJson({
+              code: "POSITION_NOT_FOUND",
+              type: "BUSINESS",
+              message: errMsg,
+              retryable: false,
+            });
+          } else {
+            console.error(chalk.red(`\nError: ${errMsg}`));
+          }
+          process.exit(1);
+        }
+
+        const poolAddress = positionInfo.rawPoolInfo.poolId.toBase58();
+
+        // Try to resolve token symbols and USD prices from API pool info
+        let symbolA = positionInfo.tokenA.address.toBase58();
+        let symbolB = positionInfo.tokenB.address.toBase58();
+        let tokenAPriceUsd = 0;
+        let tokenBPriceUsd = 0;
+        const poolResult = await api.getPoolInfo(poolAddress);
+        if (poolResult.ok) {
+          symbolA = poolResult.value.token_a.symbol || symbolA;
+          symbolB = poolResult.value.token_b.symbol || symbolB;
+          tokenAPriceUsd = poolResult.value.token_a.price_usd ?? 0;
+          tokenBPriceUsd = poolResult.value.token_b.price_usd ?? 0;
+        }
+
+        // Calculate total position USD value
+        const tokenAUiAmount = parseFloat(positionInfo.tokenA.uiAmount);
+        const tokenBUiAmount = parseFloat(positionInfo.tokenB.uiAmount);
+        const totalUsdA = tokenAPriceUsd > 0 ? tokenAUiAmount * tokenAPriceUsd : 0;
+        const totalUsdB = tokenBPriceUsd > 0 ? tokenBUiAmount * tokenBPriceUsd : 0;
+        const totalPositionUsd = totalUsdA + totalUsdB;
+
+        // Determine percentage
+        let percentage: number;
+        let requestedUsd: string | undefined;
+
+        if (hasAmountUsd) {
+          const amountUsd = parseFloat(options.amountUsd);
+
+          if (tokenAPriceUsd <= 0 || tokenBPriceUsd <= 0) {
+            const err = {
+              code: "PRICE_UNAVAILABLE",
+              type: "BUSINESS" as const,
+              message: `Cannot calculate removal amount: token price unavailable (${symbolA}: $${tokenAPriceUsd}, ${symbolB}: $${tokenBPriceUsd})`,
+              retryable: true,
+            };
+            if (format === "json") {
+              outputErrorJson(err);
+            } else {
+              outputErrorTable(err);
+            }
+            process.exit(1);
+          }
+
+          if (totalPositionUsd <= 0) {
+            const err = {
+              code: "ZERO_POSITION",
+              type: "BUSINESS" as const,
+              message: "Position has no USD value to remove.",
+              retryable: false,
+            };
+            if (format === "json") {
+              outputErrorJson(err);
+            } else {
+              outputErrorTable(err);
+            }
+            process.exit(1);
+          }
+
+          if (amountUsd > totalPositionUsd) {
+            const err = {
+              code: "AMOUNT_EXCEEDS_POSITION",
+              type: "VALIDATION" as const,
+              message: `Requested $${amountUsd.toFixed(2)} exceeds total position value of $${totalPositionUsd.toFixed(2)}.`,
+              retryable: false,
+              details: {
+                requestedUsd: amountUsd.toFixed(2),
+                totalPositionUsd: totalPositionUsd.toFixed(2),
+              },
+            };
+            if (format === "json") {
+              outputErrorJson(err);
+            } else {
+              outputErrorTable(err);
+            }
+            process.exit(1);
+          }
+
+          percentage = (amountUsd / totalPositionUsd) * 100;
+          // Cap at 100
+          if (percentage > 100) percentage = 100;
+          requestedUsd = amountUsd.toFixed(2);
+        } else {
+          percentage = parseFloat(options.percentage);
+        }
+
+        // Calculate liquidity to remove
+        const currentLiquidity = positionInfo.rawPositionInfo.liquidity;
+        const liquidityToDecrease = currentLiquidity
+          .mul(new BN(Math.floor(percentage * 100)))
+          .div(new BN(10000));
+
+        // Estimate token amounts to receive (proportional to percentage)
+        const receiveAmountAUi = (tokenAUiAmount * percentage / 100).toString();
+        const receiveAmountBUi = (tokenBUiAmount * percentage / 100).toString();
+
+        const slippage = options.slippage
+          ? parseInt(options.slippage, 10) / 10000
+          : getSlippageBps() / 10000;
+
+        // Dry-run: show preview
+        if (mode === "dry-run") {
+          printDryRunBanner();
+          const previewData = {
+            nftMint: options.nftMint,
+            poolAddress,
+            priceLower: positionInfo.uiPriceLower,
+            priceUpper: positionInfo.uiPriceUpper,
+            percentage: Math.round(percentage * 100) / 100,
+            tokenAmountA: positionInfo.tokenA.uiAmount,
+            tokenAmountB: positionInfo.tokenB.uiAmount,
+            receiveAmountA: receiveAmountAUi,
+            receiveAmountB: receiveAmountBUi,
+            symbolA,
+            symbolB,
+            ...(totalPositionUsd > 0 ? { totalPositionUsd: totalPositionUsd.toFixed(2) } : {}),
+            ...(requestedUsd ? { requestedUsd } : {}),
+          };
+
+          if (format === "json") {
+            outputJson({ mode: "dry-run", ...previewData }, startTime);
+          } else {
+            outputPositionDecreasePreview(previewData);
+            console.log(
+              chalk.yellow("\n  Use --confirm to decrease liquidity"),
+            );
+          }
+          return;
+        }
+
+        // Build transaction based on percentage
+        let result;
+        if (percentage >= 100) {
+          // 100%: remove all liquidity but keep position NFT open
+          result = await chain.decreaseFullLiquidityInstructions({
+            userAddress: publicKey,
+            nftMint,
+            closePosition: false,
+            slippage,
+          });
+        } else {
+          result = await chain.decreaseLiquidityInstructions({
+            userAddress: publicKey,
+            nftMint,
+            liquidity: liquidityToDecrease,
+            slippage,
+          });
+        }
+
+        // unsigned-tx: output transaction
+        if (mode === 'unsigned-tx') {
+          const base64 = serializeTransaction(result.transaction);
+          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+          return;
+        }
+
+        // Confirm: decrease liquidity
+        printConfirmBanner();
+
+        // Sign and send
+        result.transaction.sign([keypair!]);
+        const connection = getConnection();
+        const sendResult = await sendAndConfirmTransaction(
+          connection,
+          result.transaction,
+        );
+
+        if (!sendResult.ok) {
+          if (format === "json") {
+            outputErrorJson(sendResult.error);
+          } else {
+            outputErrorTable(sendResult.error);
+          }
+          process.exit(1);
+        }
+
+        const txData = {
+          signature: sendResult.value.signature,
+          confirmed: sendResult.value.confirmed,
+        };
+
+        if (format === "json") {
+          outputJson(txData, startTime);
+        } else {
+          outputTransactionResult("Liquidity Decreased", txData);
         }
       } catch (e) {
         const message = (e as Error).message || "Unknown SDK error";
@@ -1855,6 +2607,8 @@ export function createPositionsCommand(): Command {
 
   cmd.addCommand(createPositionsListCommand());
   cmd.addCommand(createPositionsOpenCommand());
+  cmd.addCommand(createPositionsIncreaseCommand());
+  cmd.addCommand(createPositionsDecreaseCommand());
   cmd.addCommand(createPositionsCloseCommand());
   cmd.addCommand(createPositionsClaimCommand());
   cmd.addCommand(createPositionsAnalyzeCommand());

@@ -571,6 +571,82 @@ export function outputPositionClosePreview(data: {
   console.log(table.toString());
 }
 
+export function outputPositionIncreasePreview(data: {
+  nftMint: string;
+  poolAddress: string;
+  priceLower: string;
+  priceUpper: string;
+  baseAmount: string;
+  baseToken: string;
+  otherAmount: string;
+  otherToken: string;
+  currentTokenA?: string;
+  currentTokenB?: string;
+  symbolA?: string;
+  symbolB?: string;
+}): void {
+  console.log(chalk.cyan.bold('\nIncrease Liquidity Preview\n'));
+
+  const table = createTable(['Field', 'Value']);
+  table.push(
+    ['NFT Mint', chalk.gray(data.nftMint)],
+    ['Pool', chalk.gray(data.poolAddress)],
+    ['Price Range', `${data.priceLower} → ${data.priceUpper}`],
+  );
+  if (data.currentTokenA && data.symbolA) {
+    table.push(['Current Token A', `${data.currentTokenA} ${data.symbolA}`]);
+  }
+  if (data.currentTokenB && data.symbolB) {
+    table.push(['Current Token B', `${data.currentTokenB} ${data.symbolB}`]);
+  }
+  table.push(
+    ['Base Amount to Add', `${data.baseAmount} ${data.baseToken}`],
+    ['Other Amount to Add', `${data.otherAmount} ${data.otherToken}`],
+  );
+
+  console.log(table.toString());
+}
+
+export function outputPositionDecreasePreview(data: {
+  nftMint: string;
+  poolAddress: string;
+  priceLower: string;
+  priceUpper: string;
+  percentage: number;
+  tokenAmountA: string;
+  tokenAmountB: string;
+  receiveAmountA: string;
+  receiveAmountB: string;
+  symbolA: string;
+  symbolB: string;
+  totalPositionUsd?: string;
+  requestedUsd?: string;
+}): void {
+  console.log(chalk.cyan.bold('\nDecrease Liquidity Preview\n'));
+
+  const table = createTable(['Field', 'Value']);
+  table.push(
+    ['NFT Mint', chalk.gray(data.nftMint)],
+    ['Pool', chalk.gray(data.poolAddress)],
+    ['Price Range', `${data.priceLower} → ${data.priceUpper}`],
+    ['Current Token A', `${data.tokenAmountA} ${data.symbolA}`],
+    ['Current Token B', `${data.tokenAmountB} ${data.symbolB}`],
+  );
+  if (data.totalPositionUsd) {
+    table.push(['Total Position Value', `$${data.totalPositionUsd}`]);
+  }
+  if (data.requestedUsd) {
+    table.push(['Remove Amount', `$${data.requestedUsd}`]);
+  }
+  table.push(
+    ['Remove Percentage', `${data.percentage}%`],
+    ['Token A to Receive', `${data.receiveAmountA} ${data.symbolA}`],
+    ['Token B to Receive', `${data.receiveAmountB} ${data.symbolB}`],
+  );
+
+  console.log(table.toString());
+}
+
 export function outputPositionClaimPreview(entries: FeeEncodeEntry[]): void {
   console.log(chalk.cyan.bold('\nFee Claim Preview\n'));
 
