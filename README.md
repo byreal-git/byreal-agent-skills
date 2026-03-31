@@ -1,6 +1,6 @@
 # Byreal Agent Skills
 
-> **Note:** This is the **openclaw** internal branch. Write commands output unsigned base64 transactions by default and require `--wallet-address <address>` instead of local keypair setup.
+> **Note:** This is the **RealClaw** internal branch (`openclaw`). Write commands output unsigned base64 transactions by default and require `--wallet-address <address>` instead of local keypair setup. Package name: `@byreal-io/byreal-cli-realclaw`.
 
 Agent skills for [Byreal](https://byreal.io) — a concentrated liquidity (CLMM) DEX on Solana. Every command supports structured JSON output, and the built-in skill system lets AI agents discover and use all capabilities automatically.
 
@@ -15,6 +15,10 @@ npx skills add https://github.com/byreal-git/byreal-agent-skills/tree/openclaw
 Or install the CLI only:
 
 ```bash
+# If @byreal-io/byreal-cli (main branch) is already installed, uninstall first
+# to avoid bin name conflict (both packages use the `byreal-cli` binary name):
+npm uninstall -g @byreal-io/byreal-cli
+
 npm install -g @byreal-io/byreal-cli-realclaw
 ```
 

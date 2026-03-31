@@ -1,6 +1,6 @@
 ---
-name: byreal-cli
-description: "Byreal DEX (Solana) all-in-one CLI: query pools/tokens/TVL, analyze pool APR & risk, open/close/claim CLMM positions, token swap, wallet & balance management. Use when user mentions Byreal, LP, liquidity, pools, DeFi positions, token swap, or Solana DEX operations."
+name: byreal-cli-realclaw
+description: "RealClaw edition of Byreal DEX CLI (Solana): query pools/tokens/TVL, analyze pool APR & risk, open/close/claim CLMM positions, token swap, wallet balance. Outputs unsigned base64 transactions for hosted wallet signing. Use when user mentions Byreal, LP, liquidity, pools, DeFi positions, token swap, or Solana DEX operations."
 metadata:
   openclaw:
     homepage: https://github.com/byreal-git/byreal-agent-skills
@@ -36,6 +36,10 @@ byreal-cli catalog show <capability-id>
 ```bash
 # Check if already installed
 which byreal-cli && byreal-cli --version
+
+# If @byreal-io/byreal-cli (main branch version) is already installed,
+# uninstall it first to avoid bin name conflict:
+npm uninstall -g @byreal-io/byreal-cli
 
 # Install
 npm install -g @byreal-io/byreal-cli-realclaw

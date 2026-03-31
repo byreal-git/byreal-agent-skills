@@ -22,6 +22,9 @@ Byreal DEX (Solana) all-in-one CLI: query pools/tokens/TVL, analyze pool APR & r
 # Check if already installed
 which byreal-cli && byreal-cli --version
 
+# If @byreal-io/byreal-cli (main branch) is installed, uninstall first (bin name conflict):
+npm uninstall -g @byreal-io/byreal-cli
+
 # Install
 npm install -g @byreal-io/byreal-cli-realclaw
 \`\`\`
