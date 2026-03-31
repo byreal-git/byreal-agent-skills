@@ -18,8 +18,6 @@ import type {
   Result,
   SwapQuoteParams,
   SwapQuote,
-  SwapAmmExecuteParams,
-  SwapRfqExecuteParams,
   PositionListParams,
   PositionItem,
   PositionListResult,
@@ -33,8 +31,6 @@ import type {
   ProviderOverviewInfo,
   RewardEncodeParams,
   RewardEncodeResult,
-  RewardOrderParams,
-  RewardOrderResult,
 } from '../core/types.js';
 import type { ByrealError } from '../core/errors.js';
 
@@ -245,10 +241,6 @@ interface ApiSwapQuoteResponse {
 // ============================================
 // Swap Execute Response Types
 // ============================================
-
-interface ApiSwapAmmExecuteResponse extends ApiResponse<string[]> {}
-
-interface ApiSwapRfqExecuteResponse extends ApiResponse<{ txSignature: string; state: string }> {}
 
 // ============================================
 // Position Response Types
@@ -740,50 +732,6 @@ export async function getSwapQuote(
   };
 }
 
-/**
- * Execute swap via AMM (DEX 格式)
- */
-export async function executeSwapAmm(
-  params: SwapAmmExecuteParams
-): Promise<Result<{ signatures: string[] }, ByrealError>> {
-  const result = await apiClient.post<ApiSwapAmmExecuteResponse>(API_ENDPOINTS.SWAP_EXECUTE_AMM, {
-    preData: params.preData,
-    data: params.data,
-    userSignTime: params.userSignTime,
-  });
-
-  if (!result.ok) return result;
-
-  const data = result.value.result?.data;
-  if (!data || !Array.isArray(data) || data.length === 0) {
-    return { ok: true, value: { signatures: [] } };
-  }
-
-  return { ok: true, value: { signatures: data } };
-}
-
-/**
- * Execute swap via RFQ
- */
-export async function executeSwapRfq(
-  params: SwapRfqExecuteParams
-): Promise<Result<{ txSignature: string; state: string }, ByrealError>> {
-  const result = await apiClient.post<ApiSwapRfqExecuteResponse>(API_ENDPOINTS.SWAP_EXECUTE_RFQ, {
-    quoteId: params.quoteId,
-    requestId: params.requestId,
-    transaction: params.transaction,
-  });
-
-  if (!result.ok) return result;
-
-  const data = result.value.result?.data;
-  if (!data) {
-    return { ok: false, error: apiError('No RFQ swap result returned') };
-  }
-
-  return { ok: true, value: data };
-}
-
 // ============================================
 // Position API Functions
 // ============================================
@@ -1058,28 +1006,6 @@ export async function encodeReward(
   return { ok: true, value: data };
 }
 
-/**
- * Submit signed reward/bonus claim transactions to backend
- */
-export async function submitRewardOrder(
-  params: RewardOrderParams
-): Promise<Result<RewardOrderResult, ByrealError>> {
-  const result = await apiClient.post<ApiResponse<RewardOrderResult>>(API_ENDPOINTS.REWARD_ORDER, {
-    orderCode: params.orderCode,
-    walletAddress: params.walletAddress,
-    signedTxPayload: params.signedTxPayload,
-  });
-
-  if (!result.ok) return result;
-
-  const data = result.value.result?.data;
-  if (!data) {
-    return { ok: true, value: { orderCode: '', txList: [], claimTokenList: [] } };
-  }
-
-  return { ok: true, value: data };
-}
-
 // Export all API functions
 export const api = {
   listPools,
@@ -1088,8 +1014,6 @@ export const api = {
   getGlobalOverview,
   getKlines,
   getSwapQuote,
-  executeSwapAmm,
-  executeSwapRfq,
   listPositions,
   listTopPositions,
   encodeFee,
@@ -1098,5 +1022,4 @@ export const api = {
   getEpochBonus,
   getProviderOverview,
   encodeReward,
-  submitRewardOrder,
 };

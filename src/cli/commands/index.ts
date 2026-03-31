@@ -9,4 +9,3 @@ export { createSkillCommand } from './skill.js';
 export { createCatalogCommand } from './catalog.js';
 export { createWalletCommand } from './wallet.js';
 export { createConfigCommand } from './config.js';
-export { createSetupCommand } from './setup.js';

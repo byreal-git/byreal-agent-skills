@@ -1,5 +1,8 @@
 /**
- * Positions commands for Byreal CLI
+ * Positions commands for Byreal CLI (openclaw branch)
+ * Default: output unsigned base64 transactions.
+ * --dry-run: preview without generating transactions.
+ *
  * - positions list: List user positions
  * - positions open: Open a new position (SDK)
  * - positions close: Close a position (SDK)
@@ -9,25 +12,21 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import BN from "bn.js";
-import { Keypair, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import type { GlobalOptions } from "../../core/types.js";
 import { api } from "../../api/endpoints.js";
-import { resolveKeypair, resolveAddress } from "../../auth/keypair.js";
 import { uiToRaw, rawToUi } from "../../core/amounts.js";
 import { getConnection, getSlippageBps } from "../../core/solana.js";
 import {
   resolveExecutionMode,
-  requireExecutionMode,
   printDryRunBanner,
-  printConfirmBanner,
 } from "../../core/confirm.js";
 import {
   deserializeTransaction,
-  signTransaction,
-  sendAndConfirmTransaction,
   serializeTransaction,
 } from "../../core/transaction.js";
+import { missingWalletAddressError } from "../../core/errors.js";
 import {
   outputJson,
   outputErrorJson,
@@ -40,8 +39,6 @@ import {
   outputPositionClaimPreview,
   outputRewardsPreview,
   outputBonusPreview,
-  outputRewardOrderResult,
-  outputTransactionResult,
   outputPositionAnalysisTable,
   outputTopPositionsTable,
   outputCopyPositionPreview,
@@ -68,19 +65,20 @@ function createPositionsListCommand(): Command {
       const format = globalOptions.output;
       const startTime = Date.now();
 
-      // Resolve user address (required)
-      const addrResult = resolveAddress();
-      if (!addrResult.ok) {
+      // Resolve wallet address from global option
+      const walletAddress = globalOptions.walletAddress;
+      if (!walletAddress) {
+        const err = missingWalletAddressError();
         if (format === "json") {
-          outputErrorJson(addrResult.error);
+          outputErrorJson(err.toJSON());
         } else {
-          outputErrorTable(addrResult.error);
+          outputErrorTable(err.toJSON());
         }
         process.exit(1);
       }
 
       const result = await api.listPositions({
-        userAddress: addrResult.value.address,
+        userAddress: walletAddress,
         page: parseInt(options.page, 10),
         pageSize: parseInt(options.pageSize, 10),
         sortField: options.sortField,
@@ -322,9 +320,6 @@ function createPositionsOpenCommand(): Command {
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--raw", "Amount is already in raw (smallest unit) format")
     .option("--dry-run", "Preview the position without opening")
-    .option("--confirm", "Open the position")
-    .option("--unsigned-tx", "Output unsigned transaction as JSON (no signing)")
-    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
@@ -332,43 +327,19 @@ function createPositionsOpenCommand(): Command {
 
       // Check execution mode
       const mode = resolveExecutionMode(options);
-      requireExecutionMode(mode, "positions open");
 
-      // Resolve keypair or address based on mode
-      let keypair: Keypair | undefined;
-      let publicKey: PublicKey;
-
-      if (mode === 'unsigned-tx') {
-        let address: string;
-        if (options.walletAddress) {
-          address = options.walletAddress;
+      // Resolve wallet address from global option
+      const walletAddress = globalOptions.walletAddress;
+      if (!walletAddress) {
+        const err = missingWalletAddressError();
+        if (format === "json") {
+          outputErrorJson(err.toJSON());
         } else {
-          const addrResult = resolveAddress();
-          if (!addrResult.ok) {
-            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
-            if (format === "json") {
-              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
-            } else {
-              console.error(chalk.red(`\nError: ${errMsg}`));
-            }
-            process.exit(1);
-          }
-          address = addrResult.value.address;
+          outputErrorTable(err.toJSON());
         }
-        publicKey = new PublicKey(address);
-      } else {
-        const keypairResult = resolveKeypair();
-        if (!keypairResult.ok) {
-          if (format === "json") {
-            outputErrorJson(keypairResult.error);
-          } else {
-            outputErrorTable(keypairResult.error);
-          }
-          process.exit(1);
-        }
-        keypair = keypairResult.value.keypair;
-        publicKey = keypairResult.value.publicKey;
+        process.exit(1);
       }
+      const publicKey = new PublicKey(walletAddress);
 
       // Validate mutually exclusive options
       const useAmountUsd = !!options.amountUsd;
@@ -626,7 +597,7 @@ function createPositionsOpenCommand(): Command {
                 required: w.required,
                 available: w.available,
                 deficit: w.deficit,
-                suggestion: `Swap to get at least ${w.deficit} ${w.symbol} before opening position. Use: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount> --confirm`,
+                suggestion: `Swap to get at least ${w.deficit} ${w.symbol} before opening position. Use: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount>`,
               }));
               jsonData.walletBalances = walletBalances;
             }
@@ -643,7 +614,7 @@ function createPositionsOpenCommand(): Command {
                 );
                 console.log(
                   chalk.yellow(
-                    `    → Swap to get ${w.symbol}: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount> --confirm`,
+                    `    → Swap to get ${w.symbol}: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount>`,
                   ),
                 );
               }
@@ -659,32 +630,14 @@ function createPositionsOpenCommand(): Command {
             } else {
               console.log(chalk.green("\n  Balance check: sufficient"));
               console.log(
-                chalk.yellow("\n  Use --confirm to open this position"),
+                chalk.yellow("\n  Remove --dry-run to generate the unsigned transaction"),
               );
             }
           }
           return;
         }
 
-        // unsigned-tx: build transaction and output
-        if (mode === 'unsigned-tx') {
-          const result = await chain.createPositionInstructions({
-            userAddress: publicKey,
-            poolInfo,
-            tickLower,
-            tickUpper,
-            base,
-            baseAmount,
-            otherAmountMax,
-          });
-          const base64 = serializeTransaction(result.transaction);
-          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
-          return;
-        }
-
-        // Confirm: create position
-        printConfirmBanner();
-
+        // Default (execute): build transaction and output unsigned base64
         const result = await chain.createPositionInstructions({
           userAddress: publicKey,
           poolInfo,
@@ -694,35 +647,8 @@ function createPositionsOpenCommand(): Command {
           baseAmount,
           otherAmountMax,
         });
-
-        // Sign and send
-        result.transaction.sign([keypair!]);
-        const connection = getConnection();
-        const sendResult = await sendAndConfirmTransaction(
-          connection,
-          result.transaction,
-        );
-
-        if (!sendResult.ok) {
-          if (format === "json") {
-            outputErrorJson(sendResult.error);
-          } else {
-            outputErrorTable(sendResult.error);
-          }
-          process.exit(1);
-        }
-
-        const txData = {
-          signature: sendResult.value.signature,
-          confirmed: sendResult.value.confirmed,
-          nftAddress: result.nftAddress,
-        };
-
-        if (format === "json") {
-          outputJson(txData, startTime);
-        } else {
-          outputTransactionResult("Position Opened", txData);
-        }
+        const base64 = serializeTransaction(result.transaction);
+        console.log(JSON.stringify({ unsignedTransactions: [base64] }));
       } catch (e) {
         const message = (e as Error).message || "Unknown SDK error";
         if (format === "json") {
@@ -766,9 +692,6 @@ function createPositionsIncreaseCommand(): Command {
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--raw", "Amount is already in raw (smallest unit) format")
     .option("--dry-run", "Preview without executing")
-    .option("--confirm", "Execute the increase")
-    .option("--unsigned-tx", "Output unsigned transaction as JSON (no signing)")
-    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
@@ -776,43 +699,19 @@ function createPositionsIncreaseCommand(): Command {
 
       // Check execution mode
       const mode = resolveExecutionMode(options);
-      requireExecutionMode(mode, "positions increase");
 
-      // Resolve keypair or address based on mode
-      let keypair: Keypair | undefined;
-      let publicKey: PublicKey;
-
-      if (mode === 'unsigned-tx') {
-        let address: string;
-        if (options.walletAddress) {
-          address = options.walletAddress;
+      // Resolve wallet address from global option
+      const walletAddress = globalOptions.walletAddress;
+      if (!walletAddress) {
+        const err = missingWalletAddressError();
+        if (format === "json") {
+          outputErrorJson(err.toJSON());
         } else {
-          const addrResult = resolveAddress();
-          if (!addrResult.ok) {
-            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
-            if (format === "json") {
-              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
-            } else {
-              console.error(chalk.red(`\nError: ${errMsg}`));
-            }
-            process.exit(1);
-          }
-          address = addrResult.value.address;
+          outputErrorTable(err.toJSON());
         }
-        publicKey = new PublicKey(address);
-      } else {
-        const keypairResult = resolveKeypair();
-        if (!keypairResult.ok) {
-          if (format === "json") {
-            outputErrorJson(keypairResult.error);
-          } else {
-            outputErrorTable(keypairResult.error);
-          }
-          process.exit(1);
-        }
-        keypair = keypairResult.value.keypair;
-        publicKey = keypairResult.value.publicKey;
+        process.exit(1);
       }
+      const publicKey = new PublicKey(walletAddress);
 
       // Validate mutually exclusive options
       const useAmountUsd = !!options.amountUsd;
@@ -1039,7 +938,7 @@ function createPositionsIncreaseCommand(): Command {
                 required: w.required,
                 available: w.available,
                 deficit: w.deficit,
-                suggestion: `Swap to get at least ${w.deficit} ${w.symbol}. Use: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount> --confirm`,
+                suggestion: `Swap to get at least ${w.deficit} ${w.symbol}. Use: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount>`,
               }));
               jsonData.walletBalances = walletBalances;
             }
@@ -1056,7 +955,7 @@ function createPositionsIncreaseCommand(): Command {
                 );
                 console.log(
                   chalk.yellow(
-                    `    → Swap to get ${w.symbol}: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount> --confirm`,
+                    `    → Swap to get ${w.symbol}: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount>`,
                   ),
                 );
               }
@@ -1071,30 +970,14 @@ function createPositionsIncreaseCommand(): Command {
             } else {
               console.log(chalk.green("\n  Balance check: sufficient"));
               console.log(
-                chalk.yellow("\n  Use --confirm to add liquidity to this position"),
+                chalk.yellow("\n  Remove --dry-run to generate the unsigned transaction"),
               );
             }
           }
           return;
         }
 
-        // unsigned-tx: build transaction and output
-        if (mode === 'unsigned-tx') {
-          const result = await chain.addLiquidityInstructions({
-            userAddress: publicKey,
-            nftMint,
-            base,
-            baseAmount,
-            otherAmountMax,
-          });
-          const base64 = serializeTransaction(result.transaction);
-          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
-          return;
-        }
-
-        // Confirm: add liquidity
-        printConfirmBanner();
-
+        // Default (execute): build transaction and output unsigned base64
         const result = await chain.addLiquidityInstructions({
           userAddress: publicKey,
           nftMint,
@@ -1102,34 +985,8 @@ function createPositionsIncreaseCommand(): Command {
           baseAmount,
           otherAmountMax,
         });
-
-        // Sign and send
-        result.transaction.sign([keypair!]);
-        const connection = getConnection();
-        const sendResult = await sendAndConfirmTransaction(
-          connection,
-          result.transaction,
-        );
-
-        if (!sendResult.ok) {
-          if (format === "json") {
-            outputErrorJson(sendResult.error);
-          } else {
-            outputErrorTable(sendResult.error);
-          }
-          process.exit(1);
-        }
-
-        const txData = {
-          signature: sendResult.value.signature,
-          confirmed: sendResult.value.confirmed,
-        };
-
-        if (format === "json") {
-          outputJson(txData, startTime);
-        } else {
-          outputTransactionResult("Liquidity Increased", txData);
-        }
+        const base64 = serializeTransaction(result.transaction);
+        console.log(JSON.stringify({ unsignedTransactions: [base64] }));
       } catch (e) {
         const message = (e as Error).message || "Unknown SDK error";
         if (format === "json") {
@@ -1165,9 +1022,6 @@ function createPositionsDecreaseCommand(): Command {
     )
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--dry-run", "Preview without executing")
-    .option("--confirm", "Execute the decrease")
-    .option("--unsigned-tx", "Output unsigned transaction as JSON (no signing)")
-    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
@@ -1175,7 +1029,6 @@ function createPositionsDecreaseCommand(): Command {
 
       // Check execution mode
       const mode = resolveExecutionMode(options);
-      requireExecutionMode(mode, "positions decrease");
 
       // Validate: must provide one of --percentage or --amount-usd
       const hasPercentage = options.percentage !== undefined;
@@ -1227,41 +1080,18 @@ function createPositionsDecreaseCommand(): Command {
         }
       }
 
-      // Resolve keypair or address based on mode
-      let keypair: Keypair | undefined;
-      let publicKey: PublicKey;
-
-      if (mode === 'unsigned-tx') {
-        let address: string;
-        if (options.walletAddress) {
-          address = options.walletAddress;
+      // Resolve wallet address from global option
+      const walletAddress = globalOptions.walletAddress;
+      if (!walletAddress) {
+        const err = missingWalletAddressError();
+        if (format === "json") {
+          outputErrorJson(err.toJSON());
         } else {
-          const addrResult = resolveAddress();
-          if (!addrResult.ok) {
-            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
-            if (format === "json") {
-              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
-            } else {
-              console.error(chalk.red(`\nError: ${errMsg}`));
-            }
-            process.exit(1);
-          }
-          address = addrResult.value.address;
+          outputErrorTable(err.toJSON());
         }
-        publicKey = new PublicKey(address);
-      } else {
-        const keypairResult = resolveKeypair();
-        if (!keypairResult.ok) {
-          if (format === "json") {
-            outputErrorJson(keypairResult.error);
-          } else {
-            outputErrorTable(keypairResult.error);
-          }
-          process.exit(1);
-        }
-        keypair = keypairResult.value.keypair;
-        publicKey = keypairResult.value.publicKey;
+        process.exit(1);
       }
+      const publicKey = new PublicKey(walletAddress);
 
       try {
         // Lazy-load SDK
@@ -1411,13 +1241,13 @@ function createPositionsDecreaseCommand(): Command {
           } else {
             outputPositionDecreasePreview(previewData);
             console.log(
-              chalk.yellow("\n  Use --confirm to decrease liquidity"),
+              chalk.yellow("\n  Remove --dry-run to generate the unsigned transaction"),
             );
           }
           return;
         }
 
-        // Build transaction based on percentage
+        // Default (execute): build transaction and output unsigned base64
         let result;
         if (percentage >= 100) {
           // 100%: remove all liquidity but keep position NFT open
@@ -1436,43 +1266,8 @@ function createPositionsDecreaseCommand(): Command {
           });
         }
 
-        // unsigned-tx: output transaction
-        if (mode === 'unsigned-tx') {
-          const base64 = serializeTransaction(result.transaction);
-          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
-          return;
-        }
-
-        // Confirm: decrease liquidity
-        printConfirmBanner();
-
-        // Sign and send
-        result.transaction.sign([keypair!]);
-        const connection = getConnection();
-        const sendResult = await sendAndConfirmTransaction(
-          connection,
-          result.transaction,
-        );
-
-        if (!sendResult.ok) {
-          if (format === "json") {
-            outputErrorJson(sendResult.error);
-          } else {
-            outputErrorTable(sendResult.error);
-          }
-          process.exit(1);
-        }
-
-        const txData = {
-          signature: sendResult.value.signature,
-          confirmed: sendResult.value.confirmed,
-        };
-
-        if (format === "json") {
-          outputJson(txData, startTime);
-        } else {
-          outputTransactionResult("Liquidity Decreased", txData);
-        }
+        const base64 = serializeTransaction(result.transaction);
+        console.log(JSON.stringify({ unsignedTransactions: [base64] }));
       } catch (e) {
         const message = (e as Error).message || "Unknown SDK error";
         if (format === "json") {
@@ -1503,9 +1298,6 @@ function createPositionsCloseCommand(): Command {
     .requiredOption("--nft-mint <address>", "Position NFT mint address")
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--dry-run", "Preview the close without executing")
-    .option("--confirm", "Close the position")
-    .option("--unsigned-tx", "Output unsigned transaction as JSON (no signing)")
-    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
@@ -1513,43 +1305,19 @@ function createPositionsCloseCommand(): Command {
 
       // Check execution mode
       const mode = resolveExecutionMode(options);
-      requireExecutionMode(mode, "positions close");
 
-      // Resolve keypair or address based on mode
-      let keypair: Keypair | undefined;
-      let publicKey: PublicKey;
-
-      if (mode === 'unsigned-tx') {
-        let address: string;
-        if (options.walletAddress) {
-          address = options.walletAddress;
+      // Resolve wallet address from global option
+      const walletAddress = globalOptions.walletAddress;
+      if (!walletAddress) {
+        const err = missingWalletAddressError();
+        if (format === "json") {
+          outputErrorJson(err.toJSON());
         } else {
-          const addrResult = resolveAddress();
-          if (!addrResult.ok) {
-            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
-            if (format === "json") {
-              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
-            } else {
-              console.error(chalk.red(`\nError: ${errMsg}`));
-            }
-            process.exit(1);
-          }
-          address = addrResult.value.address;
+          outputErrorTable(err.toJSON());
         }
-        publicKey = new PublicKey(address);
-      } else {
-        const keypairResult = resolveKeypair();
-        if (!keypairResult.ok) {
-          if (format === "json") {
-            outputErrorJson(keypairResult.error);
-          } else {
-            outputErrorTable(keypairResult.error);
-          }
-          process.exit(1);
-        }
-        keypair = keypairResult.value.keypair;
-        publicKey = keypairResult.value.publicKey;
+        process.exit(1);
       }
+      const publicKey = new PublicKey(walletAddress);
 
       try {
         // Lazy-load SDK
@@ -1606,32 +1374,13 @@ function createPositionsCloseCommand(): Command {
           } else {
             outputPositionClosePreview(previewData);
             console.log(
-              chalk.yellow("\n  Use --confirm to close this position"),
+              chalk.yellow("\n  Remove --dry-run to generate the unsigned transaction"),
             );
           }
           return;
         }
 
-        // unsigned-tx: build transaction and output
-        if (mode === 'unsigned-tx') {
-          const slippage = options.slippage
-            ? parseInt(options.slippage, 10) / 10000
-            : getSlippageBps() / 10000;
-
-          const result = await chain.decreaseFullLiquidityInstructions({
-            userAddress: publicKey,
-            nftMint,
-            closePosition: true,
-            slippage,
-          });
-          const base64 = serializeTransaction(result.transaction);
-          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
-          return;
-        }
-
-        // Confirm: close position
-        printConfirmBanner();
-
+        // Default (execute): build transaction and output unsigned base64
         const slippage = options.slippage
           ? parseInt(options.slippage, 10) / 10000
           : getSlippageBps() / 10000;
@@ -1642,34 +1391,8 @@ function createPositionsCloseCommand(): Command {
           closePosition: true,
           slippage,
         });
-
-        // Sign and send
-        result.transaction.sign([keypair!]);
-        const connection = getConnection();
-        const sendResult = await sendAndConfirmTransaction(
-          connection,
-          result.transaction,
-        );
-
-        if (!sendResult.ok) {
-          if (format === "json") {
-            outputErrorJson(sendResult.error);
-          } else {
-            outputErrorTable(sendResult.error);
-          }
-          process.exit(1);
-        }
-
-        const txData = {
-          signature: sendResult.value.signature,
-          confirmed: sendResult.value.confirmed,
-        };
-
-        if (format === "json") {
-          outputJson(txData, startTime);
-        } else {
-          outputTransactionResult("Position Closed", txData);
-        }
+        const base64 = serializeTransaction(result.transaction);
+        console.log(JSON.stringify({ unsignedTransactions: [base64] }));
       } catch (e) {
         const message = (e as Error).message || "Unknown SDK error";
         if (format === "json") {
@@ -1702,9 +1425,6 @@ function createPositionsClaimCommand(): Command {
       "Comma-separated NFT mint addresses (from positions list)",
     )
     .option("--dry-run", "Preview the claim without executing")
-    .option("--confirm", "Execute the claim")
-    .option("--unsigned-tx", "Output unsigned transaction(s) as JSON (no signing)")
-    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
@@ -1712,46 +1432,24 @@ function createPositionsClaimCommand(): Command {
 
       // Check execution mode
       const mode = resolveExecutionMode(options);
-      requireExecutionMode(mode, "positions claim");
 
-      // Resolve keypair or address based on mode
-      let keypair: Keypair | undefined;
-      let address: string;
-
-      if (mode === 'unsigned-tx') {
-        if (options.walletAddress) {
-          address = options.walletAddress;
+      // Resolve wallet address from global option
+      const walletAddress = globalOptions.walletAddress;
+      if (!walletAddress) {
+        const err = missingWalletAddressError();
+        if (format === "json") {
+          outputErrorJson(err.toJSON());
         } else {
-          const addrResult = resolveAddress();
-          if (!addrResult.ok) {
-            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
-            if (format === "json") {
-              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
-            } else {
-              console.error(chalk.red(`\nError: ${errMsg}`));
-            }
-            process.exit(1);
-          }
-          address = addrResult.value.address;
+          outputErrorTable(err.toJSON());
         }
-      } else {
-        const keypairResult = resolveKeypair();
-        if (!keypairResult.ok) {
-          if (format === "json") {
-            outputErrorJson(keypairResult.error);
-          } else {
-            outputErrorTable(keypairResult.error);
-          }
-          process.exit(1);
-        }
-        keypair = keypairResult.value.keypair;
-        address = keypairResult.value.address;
+        process.exit(1);
       }
+
       const nftMints = options.nftMints.split(",").map((s: string) => s.trim());
 
-      // Resolve NFT mints → position addresses via positions list API
+      // Resolve NFT mints -> position addresses via positions list API
       const listResult = await api.listPositions({
-        userAddress: address,
+        userAddress: walletAddress,
         page: 1,
         pageSize: 100,
       });
@@ -1803,7 +1501,7 @@ function createPositionsClaimCommand(): Command {
 
       // Encode fee transactions
       const encodeResult = await api.encodeFee({
-        walletAddress: address,
+        walletAddress,
         positionAddresses,
       });
 
@@ -1836,79 +1534,14 @@ function createPositionsClaimCommand(): Command {
           outputJson({ mode: "dry-run", entries }, startTime);
         } else {
           outputPositionClaimPreview(entries);
-          console.log(chalk.yellow("\n  Use --confirm to claim these fees"));
+          console.log(chalk.yellow("\n  Remove --dry-run to generate the unsigned transaction(s)"));
         }
         return;
       }
 
-      // unsigned-tx: output raw transactions
-      if (mode === 'unsigned-tx') {
-        const unsignedTransactions = entries.map((entry: { txPayload: string }) => entry.txPayload);
-        console.log(JSON.stringify({ unsignedTransactions }));
-        return;
-      }
-
-      // Confirm: execute all fee claims
-      printConfirmBanner();
-
-      const connection = getConnection();
-      const results: {
-        positionAddress: string;
-        signature?: string;
-        error?: string;
-      }[] = [];
-
-      for (const entry of entries) {
-        const txResult = deserializeTransaction(entry.txPayload);
-        if (!txResult.ok) {
-          results.push({
-            positionAddress: entry.positionAddress,
-            error: txResult.error.message,
-          });
-          continue;
-        }
-
-        const signedTx = signTransaction(txResult.value, keypair!);
-        const sendResult = await sendAndConfirmTransaction(
-          connection,
-          signedTx,
-        );
-
-        if (!sendResult.ok) {
-          results.push({
-            positionAddress: entry.positionAddress,
-            error: sendResult.error.message,
-          });
-        } else {
-          results.push({
-            positionAddress: entry.positionAddress,
-            signature: sendResult.value.signature,
-          });
-        }
-      }
-
-      if (format === "json") {
-        outputJson({ results }, startTime);
-      } else {
-        console.log(chalk.green.bold("\nFee Claim Results\n"));
-        for (const r of results) {
-          if (r.signature) {
-            console.log(chalk.green(`  ${r.positionAddress}`));
-            console.log(chalk.gray(`    Signature: ${r.signature}`));
-            console.log(
-              chalk.blue(`    Explorer: https://solscan.io/tx/${r.signature}`),
-            );
-          } else {
-            console.log(chalk.red(`  ${r.positionAddress}`));
-            console.log(chalk.red(`    Error: ${r.error}`));
-          }
-          console.log();
-        }
-
-        const succeeded = results.filter((r) => r.signature).length;
-        const failed = results.filter((r) => r.error).length;
-        console.log(chalk.gray(`  ${succeeded} succeeded, ${failed} failed`));
-      }
+      // Default (execute): collect all unsigned transactions and output
+      const unsignedTransactions = entries.map((entry: { txPayload: string }) => entry.txPayload);
+      console.log(JSON.stringify({ unsignedTransactions }));
     });
 }
 
@@ -1920,65 +1553,28 @@ function createPositionsClaimRewardsCommand(): Command {
   return new Command("claim-rewards")
     .description("Claim incentive rewards from positions")
     .option("--dry-run", "Preview unclaimed rewards without claiming")
-    .option("--confirm", "Claim the rewards")
-    .option("--unsigned-tx", "Output unsigned transaction(s) as JSON (no signing)")
-    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
 
       const mode = resolveExecutionMode(options);
-      requireExecutionMode(mode, "positions claim-rewards");
 
-      // Resolve keypair or address
-      let keypair: Keypair | undefined;
-      let address: string;
-
-      if (mode === 'unsigned-tx') {
-        if (options.walletAddress) {
-          address = options.walletAddress;
+      // Resolve wallet address from global option
+      const walletAddress = globalOptions.walletAddress;
+      if (!walletAddress) {
+        const err = missingWalletAddressError();
+        if (format === "json") {
+          outputErrorJson(err.toJSON());
         } else {
-          const addrResult = resolveAddress();
-          if (!addrResult.ok) {
-            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
-            if (format === "json") {
-              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
-            } else {
-              console.error(chalk.red(`\nError: ${errMsg}`));
-            }
-            process.exit(1);
-          }
-          address = addrResult.value.address;
+          outputErrorTable(err.toJSON());
         }
-      } else if (mode === 'dry-run') {
-        const addrResult = resolveAddress();
-        if (!addrResult.ok) {
-          if (format === "json") {
-            outputErrorJson(addrResult.error);
-          } else {
-            outputErrorTable(addrResult.error);
-          }
-          process.exit(1);
-        }
-        address = addrResult.value.address;
-      } else {
-        const keypairResult = resolveKeypair();
-        if (!keypairResult.ok) {
-          if (format === "json") {
-            outputErrorJson(keypairResult.error);
-          } else {
-            outputErrorTable(keypairResult.error);
-          }
-          process.exit(1);
-        }
-        keypair = keypairResult.value.keypair;
-        address = keypairResult.value.address;
+        process.exit(1);
       }
 
       try {
         // Query unclaimed rewards
-        const unclaimedResult = await api.getUnclaimedData(address);
+        const unclaimedResult = await api.getUnclaimedData(walletAddress);
         if (!unclaimedResult.ok) {
           if (format === "json") {
             outputErrorJson(unclaimedResult.error);
@@ -2023,7 +1619,7 @@ function createPositionsClaimRewardsCommand(): Command {
               console.log(chalk.gray("\n  No unclaimed incentive rewards.\n"));
             } else {
               console.log(
-                chalk.yellow("\n  Use --confirm to claim these rewards"),
+                chalk.yellow("\n  Remove --dry-run to generate the unsigned transaction(s)"),
               );
             }
           }
@@ -2046,7 +1642,7 @@ function createPositionsClaimRewardsCommand(): Command {
 
         // Encode reward claim transactions
         const encodeResult = await api.encodeReward({
-          walletAddress: address,
+          walletAddress,
           positionAddresses,
           type: 1,
         });
@@ -2072,62 +1668,14 @@ function createPositionsClaimRewardsCommand(): Command {
           return;
         }
 
-        // unsigned-tx: output encoded transactions
-        if (mode === 'unsigned-tx') {
-          const txPayloads = rewardEncodeItems.map((item) => ({
-            poolAddress: item.poolAddress,
-            txPayload: item.txPayload,
-            txCode: item.txCode,
-            tokens: item.rewardClaimInfo,
-          }));
-          console.log(JSON.stringify({ orderCode, unsignedTransactions: txPayloads }));
-          return;
-        }
-
-        // Confirm: sign and submit
-        printConfirmBanner();
-
-        const signedPayloads: { txCode: string; poolAddress: string; signedTx: string }[] = [];
-        for (const item of rewardEncodeItems) {
-          const txResult = deserializeTransaction(item.txPayload);
-          if (!txResult.ok) {
-            const errMsg = `Failed to deserialize transaction for pool ${item.poolAddress}: ${txResult.error.message}`;
-            if (format === "json") {
-              outputErrorJson({ code: "TX_DESERIALIZE_ERROR", type: "SYSTEM", message: errMsg, retryable: false });
-            } else {
-              console.error(chalk.red(`\nError: ${errMsg}`));
-            }
-            process.exit(1);
-          }
-          const signedTx = signTransaction(txResult.value, keypair!);
-          signedPayloads.push({
-            txCode: item.txCode,
-            poolAddress: item.poolAddress,
-            signedTx: serializeTransaction(signedTx),
-          });
-        }
-
-        // Submit to backend
-        const orderResult = await api.submitRewardOrder({
-          orderCode,
-          walletAddress: address,
-          signedTxPayload: signedPayloads,
-        });
-
-        if (!orderResult.ok) {
-          if (format === "json") {
-            outputErrorJson(orderResult.error);
-          } else {
-            outputErrorTable(orderResult.error);
-          }
-          process.exit(1);
-        }
-
-        if (format === "json") {
-          outputJson(orderResult.value, startTime);
-        } else {
-          outputRewardOrderResult(orderResult.value);
-        }
+        // Default (execute): output encoded transactions
+        const txPayloads = rewardEncodeItems.map((item) => ({
+          poolAddress: item.poolAddress,
+          txPayload: item.txPayload,
+          txCode: item.txCode,
+          tokens: item.rewardClaimInfo,
+        }));
+        console.log(JSON.stringify({ orderCode, unsignedTransactions: txPayloads }));
       } catch (e) {
         const message = (e as Error).message || "Unknown error";
         if (format === "json") {
@@ -2151,67 +1699,30 @@ function createPositionsClaimBonusCommand(): Command {
   return new Command("claim-bonus")
     .description("Claim CopyFarmer bonus rewards")
     .option("--dry-run", "Preview claimable bonus without claiming")
-    .option("--confirm", "Claim the bonus")
-    .option("--unsigned-tx", "Output unsigned transaction(s) as JSON (no signing)")
-    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
 
       const mode = resolveExecutionMode(options);
-      requireExecutionMode(mode, "positions claim-bonus");
 
-      // Resolve keypair or address
-      let keypair: Keypair | undefined;
-      let address: string;
-
-      if (mode === 'unsigned-tx') {
-        if (options.walletAddress) {
-          address = options.walletAddress;
+      // Resolve wallet address from global option
+      const walletAddress = globalOptions.walletAddress;
+      if (!walletAddress) {
+        const err = missingWalletAddressError();
+        if (format === "json") {
+          outputErrorJson(err.toJSON());
         } else {
-          const addrResult = resolveAddress();
-          if (!addrResult.ok) {
-            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
-            if (format === "json") {
-              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
-            } else {
-              console.error(chalk.red(`\nError: ${errMsg}`));
-            }
-            process.exit(1);
-          }
-          address = addrResult.value.address;
+          outputErrorTable(err.toJSON());
         }
-      } else if (mode === 'dry-run') {
-        const addrResult = resolveAddress();
-        if (!addrResult.ok) {
-          if (format === "json") {
-            outputErrorJson(addrResult.error);
-          } else {
-            outputErrorTable(addrResult.error);
-          }
-          process.exit(1);
-        }
-        address = addrResult.value.address;
-      } else {
-        const keypairResult = resolveKeypair();
-        if (!keypairResult.ok) {
-          if (format === "json") {
-            outputErrorJson(keypairResult.error);
-          } else {
-            outputErrorTable(keypairResult.error);
-          }
-          process.exit(1);
-        }
-        keypair = keypairResult.value.keypair;
-        address = keypairResult.value.address;
+        process.exit(1);
       }
 
       try {
         // Query epoch bonus and provider overview in parallel
         const [epochResult, overviewResult] = await Promise.all([
-          api.getEpochBonus(address, -1),
-          api.getProviderOverview(address),
+          api.getEpochBonus(walletAddress, -1),
+          api.getProviderOverview(walletAddress),
         ]);
 
         if (!epochResult.ok) {
@@ -2259,7 +1770,7 @@ function createPositionsClaimBonusCommand(): Command {
             outputBonusPreview(overview, epochs);
             if (canClaim) {
               console.log(
-                chalk.yellow(`  Use --confirm to claim $${claimableEpoch!.totalBonusUsd} bonus\n`),
+                chalk.yellow(`  Remove --dry-run to claim $${claimableEpoch!.totalBonusUsd} bonus\n`),
               );
             } else {
               console.log(chalk.gray("  No bonus currently claimable.\n"));
@@ -2283,7 +1794,7 @@ function createPositionsClaimBonusCommand(): Command {
 
         // Encode bonus claim transactions (type=2, empty positionAddresses)
         const encodeResult = await api.encodeReward({
-          walletAddress: address,
+          walletAddress,
           positionAddresses: [],
           type: 2,
         });
@@ -2309,62 +1820,14 @@ function createPositionsClaimBonusCommand(): Command {
           return;
         }
 
-        // unsigned-tx: output encoded transactions
-        if (mode === 'unsigned-tx') {
-          const txPayloads = rewardEncodeItems.map((item) => ({
-            poolAddress: item.poolAddress,
-            txPayload: item.txPayload,
-            txCode: item.txCode,
-            tokens: item.rewardClaimInfo,
-          }));
-          console.log(JSON.stringify({ orderCode, unsignedTransactions: txPayloads }));
-          return;
-        }
-
-        // Confirm: sign and submit
-        printConfirmBanner();
-
-        const signedPayloads: { txCode: string; poolAddress: string; signedTx: string }[] = [];
-        for (const item of rewardEncodeItems) {
-          const txResult = deserializeTransaction(item.txPayload);
-          if (!txResult.ok) {
-            const errMsg = `Failed to deserialize transaction for pool ${item.poolAddress}: ${txResult.error.message}`;
-            if (format === "json") {
-              outputErrorJson({ code: "TX_DESERIALIZE_ERROR", type: "SYSTEM", message: errMsg, retryable: false });
-            } else {
-              console.error(chalk.red(`\nError: ${errMsg}`));
-            }
-            process.exit(1);
-          }
-          const signedTx = signTransaction(txResult.value, keypair!);
-          signedPayloads.push({
-            txCode: item.txCode,
-            poolAddress: item.poolAddress,
-            signedTx: serializeTransaction(signedTx),
-          });
-        }
-
-        // Submit to backend
-        const orderResult = await api.submitRewardOrder({
-          orderCode,
-          walletAddress: address,
-          signedTxPayload: signedPayloads,
-        });
-
-        if (!orderResult.ok) {
-          if (format === "json") {
-            outputErrorJson(orderResult.error);
-          } else {
-            outputErrorTable(orderResult.error);
-          }
-          process.exit(1);
-        }
-
-        if (format === "json") {
-          outputJson(orderResult.value, startTime);
-        } else {
-          outputRewardOrderResult(orderResult.value);
-        }
+        // Default (execute): output encoded transactions
+        const txPayloads = rewardEncodeItems.map((item) => ({
+          poolAddress: item.poolAddress,
+          txPayload: item.txPayload,
+          txCode: item.txCode,
+          tokens: item.rewardClaimInfo,
+        }));
+        console.log(JSON.stringify({ orderCode, unsignedTransactions: txPayloads }));
       } catch (e) {
         const message = (e as Error).message || "Unknown error";
         if (format === "json") {
@@ -2395,13 +1858,14 @@ function createPositionsAnalyzeCommand(): Command {
       const format = globalOptions.output;
       const startTime = Date.now();
 
-      // Resolve address (required for positions list lookup)
-      const addrResult = resolveAddress();
-      if (!addrResult.ok) {
+      // Resolve wallet address from global option
+      const walletAddress = globalOptions.walletAddress;
+      if (!walletAddress) {
+        const err = missingWalletAddressError();
         if (format === "json") {
-          outputErrorJson(addrResult.error);
+          outputErrorJson(err.toJSON());
         } else {
-          outputErrorTable(addrResult.error);
+          outputErrorTable(err.toJSON());
         }
         process.exit(1);
       }
@@ -2409,7 +1873,7 @@ function createPositionsAnalyzeCommand(): Command {
       try {
         // 1. Find position from positions list API
         const listResult = await api.listPositions({
-          userAddress: addrResult.value.address,
+          userAddress: walletAddress,
           page: 1,
           pageSize: 100,
         });
@@ -2701,9 +2165,6 @@ function createCopyPositionCommand(): Command {
     .requiredOption("--amount-usd <usd>", "Investment amount in USD")
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--dry-run", "Preview the copy without executing")
-    .option("--confirm", "Execute the copy")
-    .option("--unsigned-tx", "Output unsigned transaction as JSON (no signing)")
-    .option("--wallet-address <address>", "Wallet public key address (for --unsigned-tx without local keypair)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
@@ -2711,43 +2172,19 @@ function createCopyPositionCommand(): Command {
 
       // Check execution mode
       const mode = resolveExecutionMode(options);
-      requireExecutionMode(mode, "positions copy");
 
-      // Resolve keypair or address based on mode
-      let keypair: Keypair | undefined;
-      let publicKey: PublicKey;
-
-      if (mode === 'unsigned-tx') {
-        let address: string;
-        if (options.walletAddress) {
-          address = options.walletAddress;
+      // Resolve wallet address from global option
+      const walletAddress = globalOptions.walletAddress;
+      if (!walletAddress) {
+        const err = missingWalletAddressError();
+        if (format === "json") {
+          outputErrorJson(err.toJSON());
         } else {
-          const addrResult = resolveAddress();
-          if (!addrResult.ok) {
-            const errMsg = 'Address required for --unsigned-tx. Use --wallet-address <address> or configure a local wallet.';
-            if (format === "json") {
-              outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
-            } else {
-              console.error(chalk.red(`\nError: ${errMsg}`));
-            }
-            process.exit(1);
-          }
-          address = addrResult.value.address;
+          outputErrorTable(err.toJSON());
         }
-        publicKey = new PublicKey(address);
-      } else {
-        const keypairResult = resolveKeypair();
-        if (!keypairResult.ok) {
-          if (format === "json") {
-            outputErrorJson(keypairResult.error);
-          } else {
-            outputErrorTable(keypairResult.error);
-          }
-          process.exit(1);
-        }
-        keypair = keypairResult.value.keypair;
-        publicKey = keypairResult.value.publicKey;
+        process.exit(1);
       }
+      const publicKey = new PublicKey(walletAddress);
 
       try {
         const positionAddress = new PublicKey(options.position);
@@ -2932,7 +2369,7 @@ function createCopyPositionCommand(): Command {
                 required: w.required,
                 available: w.available,
                 deficit: w.deficit,
-                suggestion: `Swap to get at least ${w.deficit} ${w.symbol} before copying position. Use: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount> --confirm`,
+                suggestion: `Swap to get at least ${w.deficit} ${w.symbol} before copying position. Use: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount>`,
               }));
               jsonData.walletBalances = walletBalances;
             }
@@ -2949,7 +2386,7 @@ function createCopyPositionCommand(): Command {
                 );
                 console.log(
                   chalk.yellow(
-                    `    → Swap to get ${w.symbol}: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount> --confirm`,
+                    `    → Swap to get ${w.symbol}: byreal-cli swap execute --output-mint ${w.mint} --input-mint <source-token-mint> --amount <amount>`,
                   ),
                 );
               }
@@ -2969,7 +2406,7 @@ function createCopyPositionCommand(): Command {
               console.log(chalk.green("\n  Balance check: sufficient"));
               console.log(
                 chalk.yellow(
-                  "\n  Use --confirm to copy this position",
+                  "\n  Remove --dry-run to generate the unsigned transaction",
                 ),
               );
             }
@@ -2977,26 +2414,7 @@ function createCopyPositionCommand(): Command {
           return;
         }
 
-        // unsigned-tx: build transaction and output
-        if (mode === 'unsigned-tx') {
-          const result = await chain.createPositionInstructions({
-            userAddress: publicKey,
-            poolInfo,
-            tickLower,
-            tickUpper,
-            base: "MintA",
-            baseAmount: amountA,
-            otherAmountMax: amountBMax,
-            refererPosition: options.position,
-          });
-          const base64 = serializeTransaction(result.transaction);
-          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
-          return;
-        }
-
-        // Confirm: create copied position
-        printConfirmBanner();
-
+        // Default (execute): build transaction and output unsigned base64
         const result = await chain.createPositionInstructions({
           userAddress: publicKey,
           poolInfo,
@@ -3007,48 +2425,8 @@ function createCopyPositionCommand(): Command {
           otherAmountMax: amountBMax,
           refererPosition: options.position,
         });
-
-        // Sign and send
-        result.transaction.sign([keypair!]);
-        const connection = getConnection();
-        const sendResult = await sendAndConfirmTransaction(
-          connection,
-          result.transaction,
-        );
-
-        if (!sendResult.ok) {
-          if (format === "json") {
-            outputErrorJson(sendResult.error);
-          } else {
-            outputErrorTable(sendResult.error);
-          }
-          process.exit(1);
-        }
-
-        const txData = {
-          signature: sendResult.value.signature,
-          confirmed: sendResult.value.confirmed,
-          nftAddress: result.nftAddress,
-          parentPositionAddress: options.position,
-          poolAddress,
-          pair,
-        };
-
-        if (format === "json") {
-          outputJson(txData, startTime);
-        } else {
-          outputTransactionResult("Position Copied", txData);
-          console.log(
-            chalk.green(
-              `\n  Copied from: ${options.position}`,
-            ),
-          );
-          console.log(
-            chalk.green(
-              "  Referral memo recorded on-chain for copy bonus rewards",
-            ),
-          );
-        }
+        const base64 = serializeTransaction(result.transaction);
+        console.log(JSON.stringify({ unsignedTransactions: [base64] }));
       } catch (e) {
         const message = (e as Error).message || "Unknown SDK error";
         if (format === "json") {

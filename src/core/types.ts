@@ -11,7 +11,7 @@ export type OutputFormat = 'json' | 'table' | 'csv';
 export interface GlobalOptions {
   output: OutputFormat;
   debug: boolean;
-  nonInteractive?: boolean;
+  walletAddress?: string;
 }
 
 // ============================================
@@ -231,48 +231,18 @@ export function err<E>(error: E): Result<never, E> {
 }
 
 // ============================================
-// Key Source Types
-// ============================================
-
-/** 密钥来源：仅支持配置文件 */
-export type KeySource =
-  | 'config'             // ~/.config/byreal/config.json（通过 wallet set 配置）
-  | 'none';              // 未配置
-
-export interface KeySourceInfo {
-  source: KeySource;
-  label: string;
-  path?: string;
-}
-
-// ============================================
 // Config Types
 // ============================================
 
 export interface ByrealDefaults {
   priority_fee_micro_lamports: number;
   slippage_bps: number;
-  require_confirmation: boolean;
-  auto_confirm_threshold_usd: number;
 }
 
 export interface ByrealConfig {
-  keypair_path?: string;
   rpc_url: string;
   cluster: string;
   defaults: ByrealDefaults;
-}
-
-// ============================================
-// Wallet Types
-// ============================================
-
-export interface WalletInfo {
-  address: string;
-  source: KeySource;
-  source_label: string;
-  keypair_path?: string;
-  config_path?: string;
 }
 
 export interface WalletBalance {
@@ -317,17 +287,6 @@ export interface SwapQuote {
   poolAddresses: string[];
 }
 
-export interface SwapAmmExecuteParams {
-  preData: string[];
-  data: string[];
-  userSignTime: number;
-}
-
-export interface SwapRfqExecuteParams {
-  quoteId: string;
-  requestId: string;
-  transaction: string;
-}
 
 // ============================================
 // Position Types
@@ -500,27 +459,3 @@ export interface RewardEncodeResult {
   rewardEncodeItems: RewardClaimRawTxInfo[];
 }
 
-export interface RewardOrderParams {
-  orderCode: string;
-  walletAddress: string;
-  signedTxPayload: { txCode: string; poolAddress: string; signedTx: string }[];
-}
-
-export interface RewardClaimTxResult {
-  poolAddress: string;
-  txSignature: string;
-  status: number;
-}
-
-export interface ClaimTokenItem {
-  tokenAddress: string;
-  tokenSymbol: string;
-  tokenAmount: string;
-  tokenDecimals: number;
-}
-
-export interface RewardOrderResult {
-  orderCode: string;
-  txList: RewardClaimTxResult[];
-  claimTokenList: ClaimTokenItem[];
-}

@@ -7,11 +7,10 @@ metadata:
     requires:
       bins:
         - byreal-cli
-      config:
-        - ~/.config/byreal/keys/
+      config: []
     install:
       - kind: node
-        package: "@byreal-io/byreal-cli"
+        package: "@byreal-io/byreal-cli-realclaw"
         global: true
 ---
 
@@ -39,7 +38,7 @@ byreal-cli catalog show <capability-id>
 which byreal-cli && byreal-cli --version
 
 # Install
-npm install -g @byreal-io/byreal-cli
+npm install -g @byreal-io/byreal-cli-realclaw
 ```
 
 ## Check for Updates
@@ -57,17 +56,12 @@ byreal-cli update install
 ## Credentials & Permissions
 
 - **Read-only commands** (pool, token, tvl, stats): No wallet required
-- **Write commands** (swap, position open/close/claim): Require wallet setup via `byreal-cli wallet set` or `byreal-cli setup`
-- Private keys are stored locally at `~/.config/byreal/keys/` with strict file permissions (mode 0600)
-- The CLI never transmits private keys over the network — keys are only used locally for transaction signing
-- AI agents should **never** ask users to paste private keys in chat; always direct them to run `byreal-cli setup` interactively
+- **Write commands** (swap, position open/close/claim): All write commands require `--wallet-address <address>` global option. No local keypair is needed.
 
 ## Hard Constraints
 
 1. **`-o json` only for parsing** — when showing results to the user, **omit it** and let the CLI's built-in tables/charts render directly. Never fetch JSON then re-draw charts yourself.
 2. **Never truncate on-chain data** — always display the FULL string for: transaction signatures (txid), mint addresses, pool addresses, NFT addresses, wallet addresses. Never use `xxx...yyy` abbreviation.
-3. **Never display private keys** - use keypair paths only
-4. **Preview first** with `--dry-run`, then `--confirm`
-5. **Large amounts (>$1000)** require explicit confirmation
-6. **High slippage (>200 bps)** must warn user
-7. **Check wallet before write ops** — run `wallet address` before any wallet-required command
+3. **Default mode outputs unsigned base64 transactions.** Use `--dry-run` for preview.
+4. **Large amounts (>$1000)** require explicit confirmation
+5. **High slippage (>200 bps)** must warn user

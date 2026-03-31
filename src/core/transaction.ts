@@ -1,16 +1,12 @@
 /**
- * Transaction utilities for Byreal CLI
- * Handles deserialization, signing, and sending of Solana transactions
+ * Transaction utilities for Byreal CLI (openclaw branch)
+ * Handles deserialization and serialization only — no signing or sending.
  */
 
-import {
-  VersionedTransaction,
-  type Connection,
-  type Keypair,
-} from '@solana/web3.js';
+import { VersionedTransaction } from '@solana/web3.js';
 import { ok, err } from './types.js';
 import type { Result } from './types.js';
-import { ByrealError, transactionError, transactionTimeoutError } from './errors.js';
+import { ByrealError, transactionError } from './errors.js';
 
 /**
  * Deserialize a Base64-encoded transaction
@@ -26,73 +22,8 @@ export function deserializeTransaction(base64Tx: string): Result<VersionedTransa
 }
 
 /**
- * Sign a versioned transaction with a keypair
- */
-export function signTransaction(tx: VersionedTransaction, keypair: Keypair): VersionedTransaction {
-  tx.sign([keypair]);
-  return tx;
-}
-
-/**
  * Serialize a versioned transaction to Base64
  */
 export function serializeTransaction(tx: VersionedTransaction): string {
   return Buffer.from(tx.serialize()).toString('base64');
-}
-
-/**
- * Send and confirm a signed transaction
- */
-export async function sendAndConfirmTransaction(
-  connection: Connection,
-  signedTx: VersionedTransaction,
-  options?: {
-    skipPreflight?: boolean;
-    maxRetries?: number;
-    confirmationTimeoutMs?: number;
-  }
-): Promise<Result<{ signature: string; confirmed: boolean }, ByrealError>> {
-  const timeoutMs = options?.confirmationTimeoutMs ?? 60000;
-
-  try {
-    const signature = await connection.sendRawTransaction(signedTx.serialize(), {
-      skipPreflight: options?.skipPreflight ?? false,
-      maxRetries: options?.maxRetries ?? 3,
-    });
-
-    if (process.env.DEBUG) {
-      console.error(`[DEBUG] Transaction sent: ${signature}`);
-    }
-
-    // Wait for confirmation
-    const startTime = Date.now();
-    const result = await connection.confirmTransaction(
-      {
-        signature,
-        blockhash: signedTx.message.recentBlockhash,
-        lastValidBlockHeight: (await connection.getLatestBlockhash()).lastValidBlockHeight,
-      },
-      'confirmed'
-    );
-
-    if (result.value.err) {
-      return err(transactionError(
-        `Transaction confirmed but failed: ${JSON.stringify(result.value.err)}`,
-        signature
-      ));
-    }
-
-    const elapsed = Date.now() - startTime;
-    if (process.env.DEBUG) {
-      console.error(`[DEBUG] Transaction confirmed in ${elapsed}ms`);
-    }
-
-    return ok({ signature, confirmed: true });
-  } catch (e) {
-    const message = (e as Error).message || 'Unknown error';
-    if (message.includes('timeout') || message.includes('Timeout')) {
-      return err(transactionTimeoutError());
-    }
-    return err(transactionError(message));
-  }
 }

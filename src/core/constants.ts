@@ -2,7 +2,7 @@
  * Constants for Byreal CLI
  */
 
-import type { KeySource, ByrealConfig } from './types.js';
+import type { ByrealConfig } from './types.js';
 
 // ============================================
 // Version
@@ -17,7 +17,7 @@ const INJECTED_VERSION =
 
 export const VERSION = INJECTED_VERSION ?? process.env.npm_package_version ?? '0.0.0';
 export const CLI_NAME = 'byreal-cli';
-export const GITHUB_REPO = 'byreal-git/byreal-cli';
+export const NPM_PACKAGE = '@byreal-io/byreal-cli-realclaw';
 
 // ============================================
 // API Configuration
@@ -40,8 +40,6 @@ export const API_ENDPOINTS = {
 
   // Swap endpoints
   SWAP_QUOTE: '/byreal/api/router/v1/router-service/swap',
-  SWAP_EXECUTE_AMM: '/byreal/api/dex/v2/send-swap-tx',
-  SWAP_EXECUTE_RFQ: '/byreal/api/rfq/v1/swap',
 
   // Position endpoints
   POSITIONS_LIST: '/byreal/api/dex/v2/position/list',
@@ -55,7 +53,6 @@ export const API_ENDPOINTS = {
   // Reward / Bonus claim endpoints
   UNCLAIMED_DATA: '/byreal/api/dex/v2/position/unclaimed-data',
   REWARD_ENCODE: '/byreal/api/dex/v2/incentive/encode-v2',
-  REWARD_ORDER: '/byreal/api/dex/v2/incentive/order-v2',
 
   // Fee endpoints
   AUTO_FEE: '/byreal/api/dex/v2/main/auto-fee',
@@ -76,12 +73,6 @@ export const CONFIG_DIR = '~/.config/byreal';
 export const CONFIG_FILE = 'config.json';
 
 // ============================================
-// Byreal Keys Directory（隔离存储，不与 Solana CLI/Anchor 交叉）
-// ============================================
-
-export const BYREAL_KEYS_DIR = '~/.config/byreal/keys';
-
-// ============================================
 // Defaults
 // ============================================
 
@@ -93,7 +84,6 @@ export const DEFAULTS = {
   MAX_SLIPPAGE_BPS: 500,
   PRIORITY_FEE_MICRO_LAMPORTS: 50000,
   REQUEST_TIMEOUT_MS: 30000,
-  AUTO_CONFIRM_THRESHOLD_USD: 10,
 } as const;
 
 // ============================================
@@ -140,17 +130,8 @@ export const LOGO = `
 
 export const EXPERIMENTAL_WARNING = `
 ⚠️  WARNING: This CLI is experimental and under active development.
-    Use at your own risk. Always verify transactions before confirming.
+    Use at your own risk. Always verify transactions before signing.
 `;
-
-// ============================================
-// Key Source Labels
-// ============================================
-
-export const KEY_SOURCE_LABELS: Record<KeySource, string> = {
-  'config': 'config file (~/.config/byreal/config.json)',
-  'none': 'not configured',
-};
 
 // ============================================
 // Default Config
@@ -162,8 +143,6 @@ export const DEFAULT_CONFIG: ByrealConfig = {
   defaults: {
     priority_fee_micro_lamports: 50000,
     slippage_bps: 100,
-    require_confirmation: true,
-    auto_confirm_threshold_usd: 10,
   },
 };
 
@@ -172,4 +151,3 @@ export const DEFAULT_CONFIG: ByrealConfig = {
 // ============================================
 
 export const DIR_PERMISSIONS = 0o700;
-export const FILE_PERMISSIONS = 0o600;

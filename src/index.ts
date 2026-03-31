@@ -12,7 +12,6 @@ import { createSkillCommand } from './cli/commands/skill.js';
 import { createCatalogCommand } from './cli/commands/catalog.js';
 import { createWalletCommand } from './cli/commands/wallet.js';
 import { createConfigCommand } from './cli/commands/config.js';
-import { createSetupCommand } from './cli/commands/setup.js';
 import { createSwapCommand } from './cli/commands/swap.js';
 import { createPositionsCommand } from './cli/commands/positions.js';
 import { createUpdateCommand } from './cli/commands/update.js';
@@ -31,7 +30,7 @@ program
   .version(VERSION, '-v, --version', 'Output the version number')
   .option('-o, --output <format>', 'Output format (json, table)', 'table')
   .option('--debug', 'Show debug information')
-.option('--non-interactive', 'Disable interactive prompts')
+  .option('--wallet-address <address>', 'Wallet public key address (required for write commands)')
   .addHelpText('before', chalk.cyan(LOGO) + chalk.yellow(EXPERIMENTAL_WARNING))
   .hook('preAction', (thisCommand) => {
     const opts = thisCommand.opts();
@@ -51,7 +50,6 @@ program.addCommand(createSkillCommand());
 program.addCommand(createCatalogCommand());
 program.addCommand(createWalletCommand());
 program.addCommand(createConfigCommand());
-program.addCommand(createSetupCommand());
 program.addCommand(createSwapCommand());
 program.addCommand(createPositionsCommand());
 program.addCommand(createUpdateCommand());

@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import chalk from "chalk";
-import { VERSION } from "./constants.js";
+import { VERSION, NPM_PACKAGE } from "./constants.js";
 
 // ============================================
 // Types
@@ -31,8 +31,6 @@ interface UpdateResult {
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 const CACHE_DIR = join(homedir(), ".config", "byreal");
 const CACHE_FILE = join(CACHE_DIR, "update-check.json");
-
-const NPM_PACKAGE = "@byreal-io/byreal-cli";
 
 function getInstallCommand(_version?: string): string {
   return `npm install -g ${NPM_PACKAGE}`;

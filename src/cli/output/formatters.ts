@@ -13,7 +13,6 @@ import type {
   GlobalOverview,
   CliError,
   Kline,
-  WalletInfo,
   WalletBalance,
   ByrealConfig,
   SwapQuote,
@@ -23,7 +22,6 @@ import type {
   PositionRewardItem,
   EpochBonusInfo,
   ProviderOverviewInfo,
-  RewardOrderResult,
 } from '../../core/types.js';
 import { rawToUi } from '../../core/amounts.js';
 
@@ -311,30 +309,6 @@ export function outputKlineChart(klines: Kline[], poolId: string, token: string)
 // Wallet Formatters
 // ============================================
 
-export function outputWalletAddress(address: string, source: string): void {
-  console.log(chalk.cyan.bold('\nWallet Address\n'));
-  console.log(chalk.white.bold(`  ${address}`));
-  console.log(chalk.gray(`  Source: ${source}`));
-}
-
-export function outputWalletInfo(info: WalletInfo): void {
-  console.log(chalk.cyan.bold('\nWallet Information\n'));
-
-  const table = createTable(['Field', 'Value']);
-  table.push(
-    ['Address', chalk.white.bold(info.address)],
-    ['Source', info.source_label],
-  );
-
-  if (info.keypair_path) {
-    table.push(['Keypair Path', chalk.gray(info.keypair_path)]);
-  }
-  if (info.config_path) {
-    table.push(['Config Path', chalk.gray(info.config_path)]);
-  }
-  console.log(table.toString());
-}
-
 export function outputWalletBalance(balance: WalletBalance, address: string): void {
   console.log(chalk.cyan.bold(`\nBalance: ${address}\n`));
 
@@ -364,13 +338,10 @@ export function outputConfigList(config: ByrealConfig): void {
 
   const table = createTable(['Key', 'Value']);
   table.push(
-    ['keypair_path', config.keypair_path || chalk.gray('(not set)')],
     ['rpc_url', config.rpc_url],
     ['cluster', config.cluster],
     ['defaults.priority_fee_micro_lamports', String(config.defaults.priority_fee_micro_lamports)],
     ['defaults.slippage_bps', String(config.defaults.slippage_bps)],
-    ['defaults.require_confirmation', String(config.defaults.require_confirmation)],
-    ['defaults.auto_confirm_threshold_usd', String(config.defaults.auto_confirm_threshold_usd)],
   );
 
   console.log(table.toString());
@@ -437,48 +408,6 @@ export function outputSwapQuoteTable(quote: SwapQuote, uiInAmount: string, uiOut
   }
   if (quote.quoteId) {
     table.push(['Quote ID', chalk.gray(quote.quoteId)]);
-  }
-
-  console.log(table.toString());
-}
-
-export function outputSwapResultTable(
-  data: { signatures?: string[]; txSignature?: string; state?: string },
-  uiInAmount?: string,
-  uiOutAmount?: string,
-  priceImpactPct?: string,
-  confirmed?: boolean,
-): void {
-  if (confirmed === false) {
-    console.log(chalk.yellow.bold('\nSwap Submitted (Unconfirmed)\n'));
-    console.log(chalk.yellow('Transaction was submitted but confirmation timed out. Check explorer for status.\n'));
-  } else {
-    console.log(chalk.green.bold('\nSwap Executed Successfully\n'));
-  }
-
-  const table = createTable(['Field', 'Value']);
-
-  if (uiInAmount) {
-    table.push(['Input Amount', uiInAmount]);
-  }
-  if (uiOutAmount) {
-    table.push(['Output Amount', chalk.green.bold(uiOutAmount)]);
-  }
-  if (priceImpactPct) {
-    const impact = parseFloat(priceImpactPct);
-    const color = impact > 1 ? chalk.red : impact > 0.5 ? chalk.yellow : chalk.green;
-    table.push(['Price Impact', color(`${impact.toFixed(4)}%`)]);
-  }
-
-  const sigs = data.signatures || (data.txSignature ? [data.txSignature] : []);
-  for (let i = 0; i < sigs.length; i++) {
-    const label = sigs.length > 1 ? `Signature ${i + 1}` : 'Signature';
-    table.push([label, chalk.gray(sigs[i])]);
-    table.push(['Explorer', chalk.blue(`https://solscan.io/tx/${sigs[i]}`)]);
-  }
-
-  if (data.state) {
-    table.push(['State', data.state]);
   }
 
   console.log(table.toString());
@@ -738,49 +667,6 @@ export function outputBonusPreview(
     console.log(chalk.white(`  ${label}: ${amount}${claimWindow}`));
   }
   console.log();
-}
-
-export function outputRewardOrderResult(result: RewardOrderResult): void {
-  console.log(chalk.green.bold('\nRewards Claimed\n'));
-
-  if (result.claimTokenList.length > 0) {
-    console.log(chalk.white.bold('  Claimed Tokens:'));
-    for (const token of result.claimTokenList) {
-      console.log(chalk.gray(`    ${token.tokenAmount} ${token.tokenSymbol} (${token.tokenAddress})`));
-    }
-    console.log();
-  }
-
-  if (result.txList.length > 0) {
-    console.log(chalk.white.bold('  Transactions:'));
-    for (const tx of result.txList) {
-      const statusLabel = tx.status === 1 ? chalk.green('Success') : tx.status === 2 ? chalk.red('Failed') : chalk.yellow('Sent');
-      console.log(chalk.gray(`    ${tx.txSignature} ${statusLabel}`));
-      console.log(chalk.blue(`    https://solscan.io/tx/${tx.txSignature}`));
-    }
-    console.log();
-  }
-}
-
-export function outputTransactionResult(title: string, data: {
-  signature: string;
-  confirmed: boolean;
-  nftAddress?: string;
-}): void {
-  console.log(chalk.green.bold(`\n${title}\n`));
-
-  const table = createTable(['Field', 'Value']);
-  table.push(
-    ['Signature', chalk.gray(data.signature)],
-    ['Explorer', chalk.blue(`https://solscan.io/tx/${data.signature}`)],
-    ['Confirmed', data.confirmed ? chalk.green('Yes') : chalk.yellow('Pending')],
-  );
-
-  if (data.nftAddress) {
-    table.push(['NFT Address', chalk.gray(data.nftAddress)]);
-  }
-
-  console.log(table.toString());
 }
 
 // ============================================

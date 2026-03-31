@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - 'realclaw-v*'
 
 jobs:
   release:
@@ -19,7 +19,7 @@ jobs:
 
       - name: Sync version from git tag
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${GITHUB_REF_NAME#realclaw-v}"
           CURRENT_VERSION="$(node -p "require('./package.json').version")"
 
           if [ "$CURRENT_VERSION" = "$VERSION" ]; then
@@ -37,18 +37,10 @@ jobs:
       - name: Verify build
         run: node dist/index.cjs --version
 
-      - name: Create release tarballs
+      - name: Create release tarball
         run: |
-          # Main scoped package tarball for direct download / inspection
           PACK_FILE="$(npm pack --silent)"
           echo "PACK_FILE=$PACK_FILE" >> "$GITHUB_ENV"
-
-          # 0.2.x bridge artifact for legacy updater path (GitHub byreal-cli.tgz)
-          cp package.json package.json.bak
-          node -e "const fs=require('fs');const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));pkg.name='byreal-cli';fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
-          LEGACY_PACK_FILE="$(npm pack --silent)"
-          mv "$LEGACY_PACK_FILE" byreal-cli.tgz
-          mv package.json.bak package.json
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -56,4 +48,3 @@ jobs:
           generate_release_notes: true
           files: |
             ${{ env.PACK_FILE }}
-            byreal-cli.tgz

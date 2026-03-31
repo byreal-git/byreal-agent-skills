@@ -8,52 +8,6 @@ import { execSync } from 'child_process';
 import { VERSION } from '../../core/constants.js';
 import { checkForUpdate, getInstallCommand } from '../../core/update-check.js';
 
-const SCOPED_PACKAGE = '@byreal-io/byreal-cli';
-const LEGACY_PACKAGE = 'byreal-cli';
-
-interface ExecErrorLike {
-  message?: string;
-  stdout?: string | Buffer;
-  stderr?: string | Buffer;
-}
-
-function normalizeOutput(value: string | Buffer | undefined): string {
-  if (!value) return '';
-  if (typeof value === 'string') return value;
-  return value.toString('utf-8');
-}
-
-function runCommand(command: string): { success: true } | { success: false; output: string } {
-  try {
-    const stdout = execSync(command, {
-      encoding: 'utf-8',
-      stdio: ['inherit', 'pipe', 'pipe'],
-    });
-    if (stdout) process.stdout.write(stdout);
-    return { success: true };
-  } catch (error) {
-    const execError = error as ExecErrorLike;
-    const stdout = normalizeOutput(execError.stdout);
-    const stderr = normalizeOutput(execError.stderr);
-    const message = execError.message ?? '';
-
-    if (stdout) process.stdout.write(stdout);
-    if (stderr) process.stderr.write(stderr);
-
-    return {
-      success: false,
-      output: [message, stdout, stderr].filter(Boolean).join('\n'),
-    };
-  }
-}
-
-function isLegacyBinaryConflict(output: string, installCommand: string): boolean {
-  if (!installCommand.includes(SCOPED_PACKAGE)) return false;
-  const lower = output.toLowerCase();
-  return output.includes('EEXIST')
-    && (lower.includes('/bin/byreal-cli') || lower.includes('file exists'));
-}
-
 // ============================================
 // Create Update Command
 // ============================================
@@ -110,36 +64,21 @@ export function createUpdateCommand(): Command {
       console.log(chalk.cyan(`Installing latest version from npm registry...`));
       console.log(chalk.gray(`> ${installCommand}\n`));
 
-      const installResult = runCommand(installCommand);
-      if (installResult.success) {
+      try {
+        const stdout = execSync(installCommand, {
+          encoding: 'utf-8',
+          stdio: ['inherit', 'pipe', 'pipe'],
+        });
+        if (stdout) process.stdout.write(stdout);
         console.log(chalk.green('\nUpdate complete!'));
-        return;
+      } catch (error) {
+        const execError = error as { stdout?: string | Buffer; stderr?: string | Buffer };
+        if (execError.stdout) process.stdout.write(String(execError.stdout));
+        if (execError.stderr) process.stderr.write(String(execError.stderr));
+        console.error(chalk.red('\nUpdate failed. Try running manually:'));
+        console.error(chalk.gray(`  ${installCommand}`));
+        process.exit(1);
       }
-
-      // TODO(v0.3.x): Remove this migration fallback after all users are off the legacy package name.
-      if (isLegacyBinaryConflict(installResult.output, installCommand)) {
-        console.log(chalk.yellow('\nDetected legacy global installation conflict.'));
-        console.log(chalk.yellow('Attempting automatic migration from `byreal-cli` to `@byreal-io/byreal-cli`...\n'));
-
-        const uninstallCommand = `npm uninstall -g ${LEGACY_PACKAGE}`;
-        console.log(chalk.gray(`> ${uninstallCommand}`));
-        const uninstallResult = runCommand(uninstallCommand);
-        if (!uninstallResult.success) {
-          console.log(chalk.gray('Legacy uninstall did not fully succeed; retrying install anyway.\n'));
-        }
-
-        console.log(chalk.gray(`> ${installCommand}\n`));
-        const retryResult = runCommand(installCommand);
-        if (retryResult.success) {
-          console.log(chalk.green('\nUpdate complete!'));
-          return;
-        }
-      }
-
-      console.error(chalk.red('\nUpdate failed. Try running manually:'));
-      console.error(chalk.gray(`  npm uninstall -g ${LEGACY_PACKAGE}`));
-      console.error(chalk.gray(`  ${installCommand}`));
-      process.exit(1);
     });
 
   return update;

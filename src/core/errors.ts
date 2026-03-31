@@ -22,10 +22,7 @@ export const ErrorCodes = {
   POSITION_NOT_FOUND: 'POSITION_NOT_FOUND',
 
   // Auth errors
-  KEYPAIR_NOT_FOUND: 'KEYPAIR_NOT_FOUND',
-  INVALID_KEYPAIR: 'INVALID_KEYPAIR',
-  PERMISSION_DENIED: 'PERMISSION_DENIED',
-  WALLET_NOT_CONFIGURED: 'WALLET_NOT_CONFIGURED',
+  MISSING_WALLET_ADDRESS: 'MISSING_WALLET_ADDRESS',
 
   // Config errors
   CONFIG_NOT_FOUND: 'CONFIG_NOT_FOUND',
@@ -155,54 +152,16 @@ export function validationError(message: string, field?: string): ByrealError {
   });
 }
 
-export function keypairNotFoundError(): ByrealError {
+export function missingWalletAddressError(): ByrealError {
   return new ByrealError({
-    code: ErrorCodes.KEYPAIR_NOT_FOUND,
+    code: ErrorCodes.MISSING_WALLET_ADDRESS,
     type: 'AUTH',
-    message: 'No keypair found. Please configure a wallet.',
+    message: 'Missing --wallet-address option. Provide a wallet public key address.',
     suggestions: [
       {
-        action: 'set',
-        description: 'Set keypair via wallet set',
-        command: 'byreal-cli wallet set --private-key "<base58-private-key>"',
-      },
-      {
-        action: 'setup',
-        description: 'Or run interactive setup',
-        command: 'byreal-cli setup',
-      },
-    ],
-    retryable: false,
-  });
-}
-
-export function invalidKeypairError(reason: string, path?: string): ByrealError {
-  return new ByrealError({
-    code: ErrorCodes.INVALID_KEYPAIR,
-    type: 'AUTH',
-    message: `Invalid keypair${path ? ` at ${path}` : ''}: ${reason}`,
-    details: path ? { path } : undefined,
-    suggestions: [
-      {
-        action: 'check',
-        description: 'Ensure the file is a valid Solana keypair JSON (64-byte number array)',
-      },
-    ],
-    retryable: false,
-  });
-}
-
-export function permissionError(filePath: string, expected: string, actual: string): ByrealError {
-  return new ByrealError({
-    code: ErrorCodes.FILE_PERMISSION_ERROR,
-    type: 'AUTH',
-    message: `File permission too open: ${filePath} (expected ${expected}, got ${actual})`,
-    details: { path: filePath, expected, actual },
-    suggestions: [
-      {
-        action: 'fix',
-        description: `Fix permissions with chmod`,
-        command: `chmod ${expected} ${filePath}`,
+        action: 'add-flag',
+        description: 'Add --wallet-address to your command',
+        command: 'byreal-cli <command> --wallet-address <your-wallet-address>',
       },
     ],
     retryable: false,
@@ -217,8 +176,8 @@ export function configNotFoundError(): ByrealError {
     suggestions: [
       {
         action: 'set',
-        description: 'Create config by setting a keypair',
-        command: 'byreal-cli wallet set --private-key "<base58-private-key>"',
+        description: 'Create config by setting RPC URL',
+        command: 'byreal-cli config set rpc_url <url>',
       },
     ],
     retryable: false,
@@ -232,30 +191,8 @@ export function configInvalidError(reason: string): ByrealError {
     message: `Invalid configuration: ${reason}`,
     suggestions: [
       {
-        action: 'reset',
-        description: 'Reset configuration',
-        command: 'byreal-cli wallet reset --confirm',
-      },
-    ],
-    retryable: false,
-  });
-}
-
-export function walletNotConfiguredError(): ByrealError {
-  return new ByrealError({
-    code: ErrorCodes.WALLET_NOT_CONFIGURED,
-    type: 'AUTH',
-    message: 'No wallet configured. Set a keypair to get started.',
-    suggestions: [
-      {
-        action: 'set',
-        description: 'Set keypair via wallet set',
-        command: 'byreal-cli wallet set --private-key "<base58-private-key>"',
-      },
-      {
-        action: 'setup',
-        description: 'Or run interactive setup',
-        command: 'byreal-cli setup',
+        action: 'check',
+        description: 'Check your config file at ~/.config/byreal/config.json',
       },
     ],
     retryable: false,
@@ -279,22 +216,6 @@ export function transactionError(message: string, signature?: string): ByrealErr
   });
 }
 
-export function transactionTimeoutError(signature?: string): ByrealError {
-  return new ByrealError({
-    code: ErrorCodes.TRANSACTION_TIMEOUT,
-    type: 'SYSTEM',
-    message: 'Transaction confirmation timed out',
-    details: signature ? { signature } : undefined,
-    suggestions: [
-      {
-        action: 'check',
-        description: 'The transaction may still be processed. Check the explorer.',
-        command: signature ? `https://solscan.io/tx/${signature}` : undefined,
-      },
-    ],
-    retryable: true,
-  });
-}
 
 export function sdkError(message: string, details?: Record<string, unknown>): ByrealError {
   return new ByrealError({
@@ -316,7 +237,7 @@ export function insufficientBalanceError(details?: Record<string, unknown>): Byr
       {
         action: 'check',
         description: 'Check your wallet balance',
-        command: 'byreal-cli wallet balance',
+        command: 'byreal-cli wallet balance --wallet-address <address>',
       },
     ],
     retryable: false,

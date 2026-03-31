@@ -10,7 +10,6 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 import { api } from '../../api/endpoints.js';
 import { DEFAULTS, SOLANA_RPC_URL } from '../../core/constants.js';
-import { resolveKeypair } from '../../auth/keypair.js';
 import { loadConfig } from '../../auth/config.js';
 import {
   output,
@@ -161,12 +160,12 @@ function buildRiskSummary(
 
 const SOL_NATIVE_MINT = 'So11111111111111111111111111111111111111112';
 
-async function getWalletUsdValue(): Promise<{ totalUsd: number; address: string } | null> {
+async function getWalletUsdValue(walletAddress?: string): Promise<{ totalUsd: number; address: string } | null> {
   try {
-    const keypairResult = resolveKeypair();
-    if (!keypairResult.ok) return null;
+    if (!walletAddress) return null;
 
-    const { publicKey, address } = keypairResult.value;
+    const publicKey = new PublicKey(walletAddress);
+    const address = walletAddress;
     const configResult = loadConfig();
     const rpcUrl = configResult.ok ? configResult.value.rpc_url : SOLANA_RPC_URL;
     const connection = new Connection(rpcUrl);
@@ -259,7 +258,7 @@ function createPoolsAnalyzeCommand(): Command {
       let walletAddress: string | undefined;
       let walletWarning: string | undefined;
       if (!options.amount) {
-        const walletResult = await getWalletUsdValue();
+        const walletResult = await getWalletUsdValue(globalOptions.walletAddress);
         if (walletResult) {
           walletBalanceUsd = parseFloat(walletResult.totalUsd.toFixed(2));
           walletAddress = walletResult.address;
