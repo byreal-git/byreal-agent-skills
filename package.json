@@ -1,6 +1,6 @@
 {
   "name": "@byreal-io/byreal-cli-realclaw",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "AI-native CLI for Byreal CLMM DEX on Solana",
   "type": "module",
   "main": "dist/index.cjs",
