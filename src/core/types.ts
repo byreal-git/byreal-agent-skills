@@ -56,13 +56,17 @@ export interface Pool {
   volume_7d_usd: number;
   fee_rate_bps: number;
   fee_24h_usd: number;
-  apr: number;
-  current_price: number;  // 池子价格 (token_a / token_b)
+  apr: number;              // Fee APR (percentage)
+  reward_apr: number;       // Sum of active reward APRs (percentage)
+  total_apr: number;        // Fee APR + Reward APR (percentage)
+  current_price: number;    // 池子价格 (token_a / token_b)
   created_at: string;
   // Price change fields (available from list API)
   price_change_1h?: number;
   price_change_24h?: number;
   price_change_7d?: number;
+  // Active reward incentives (present when pool has rewards)
+  rewards?: PoolReward[];
 }
 
 export interface PoolReward {
@@ -71,6 +75,11 @@ export interface PoolReward {
   rewardPerSecond: string;
   openTime: number;
   endTime: number;
+  // Incentive fields
+  apr: number;              // Individual reward APR (percentage)
+  daily_amount: string;     // Daily emission amount
+  daily_amount_usd: number; // Daily emission in USD
+  price_usd: number;        // Reward token price in USD
 }
 
 export interface PoolDetail extends Pool {
@@ -84,7 +93,6 @@ export interface PoolDetail extends Pool {
   price_change_7d?: number;
   fee_7d_usd?: number;
   category?: number;
-  rewards?: PoolReward[];
 }
 
 // ============================================

@@ -34,7 +34,7 @@ const CAPABILITIES: Capability[] = [
   {
     id: 'dex.pool.list',
     name: 'List Pools',
-    description: 'Query available liquidity pools with sorting and filtering',
+    description: 'Query available liquidity pools with Est. APR (fee + reward incentive), sorting and filtering',
     category: 'query',
     auth_required: false,
     command: 'byreal-cli pools list',
@@ -75,7 +75,7 @@ const CAPABILITIES: Capability[] = [
   {
     id: 'dex.pool.analyze',
     name: 'Pool Analysis',
-    description: 'Comprehensive pool analysis: metrics, volatility, multi-range APR comparison, risk assessment, and investment projection',
+    description: 'Comprehensive pool analysis: metrics (fee APR, reward APR, total APR), volatility, multi-range APR comparison, risk assessment, and investment projection',
     category: 'analyze',
     auth_required: false,
     command: 'byreal-cli pools analyze <pool-id>',

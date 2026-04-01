@@ -309,19 +309,18 @@ function createPoolsAnalyzeCommand(): Command {
         const dayPriceHigh = pool.price_range_24h.high;
         const dayPriceRangePercent = currentPrice > 0 ? ((dayPriceHigh - dayPriceLow) / currentPrice) * 100 : 0;
 
-        // 6. Rewards
-        const now = Math.floor(Date.now() / 1000);
-        const rewardsOutput = (pool.rewards || [])
-          .filter((r) => r.endTime > now)
-          .map((r) => {
-            // Estimate reward APR: rewardPerSecond * 86400 * priceUsd / tvl * 365 * 100
-            // We don't have the reward token price easily, so we just report what we have
-            return {
-              token: r.symbol || r.mint,
-              rewardPerSecond: r.rewardPerSecond,
-              endTime: new Date(r.endTime * 1000).toISOString().slice(0, 10),
-            };
-          });
+        // 6. Rewards (already transformed with APR and daily amounts by transformPool)
+        const activeRewards = (pool.rewards || []);
+        const totalRewardApr = pool.reward_apr;
+        const rewardsOutput = activeRewards.map((r) => ({
+          token: r.symbol || r.mint,
+          apr: `${r.apr.toFixed(2)}%`,
+          dailyAmount: r.daily_amount ? parseFloat(r.daily_amount).toLocaleString() : '-',
+          dailyAmountUsd: r.daily_amount_usd > 0 ? `$${r.daily_amount_usd.toFixed(2)}` : '-',
+          endTime: r.endTime > 0
+            ? new Date(r.endTime * 1000).toISOString().slice(0, 10)
+            : 'Ongoing',
+        }));
 
         // 7. Range Analysis — use SDK calculateRangeAprs
         const rangeAprs = calculateRangeAprs({
@@ -382,7 +381,7 @@ function createPoolsAnalyzeCommand(): Command {
             priceLower: alignedPriceLower.toFixed(8).replace(/0+$/, '').replace(/\.$/, ''),
             priceUpper: alignedPriceUpper.toFixed(8).replace(/0+$/, '').replace(/\.$/, ''),
             estimatedFeeApr: `${feeApr.toFixed(1)}%`,
-            estimatedTotalApr: `${feeApr.toFixed(1)}%`, // same as feeApr if no rewards calculated
+            estimatedTotalApr: `${(feeApr + totalRewardApr).toFixed(1)}%`,
             inRangeLikelihood,
             rebalanceFrequency,
           };
@@ -395,7 +394,7 @@ function createPoolsAnalyzeCommand(): Command {
 
         // 9. Investment Projection — use default range (10% or middle range)
         const projectionRange = rangePercents.includes(10) ? 10 : rangePercents[Math.floor(rangePercents.length / 2)];
-        const projectionApr = rangeAprs[projectionRange] || 0;
+        const projectionApr = (rangeAprs[projectionRange] || 0) + totalRewardApr;
         const dailyFee = (projectionApr / 100 / 365) * investAmount;
         const weeklyFee = dailyFee * 7;
         const monthlyFee = dailyFee * 30;
@@ -419,6 +418,8 @@ function createPoolsAnalyzeCommand(): Command {
             fee24h: fee24h.toFixed(2),
             fee7d: fee7d.toFixed(2),
             feeApr24h: `${feeApr24h.toFixed(2)}%`,
+            rewardApr: totalRewardApr > 0 ? `${totalRewardApr.toFixed(2)}%` : undefined,
+            totalApr: `${(feeApr24h + totalRewardApr).toFixed(2)}%`,
             volumeToTvl: volumeToTvl.toFixed(2),
           },
           volatility: {

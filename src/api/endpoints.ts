@@ -9,6 +9,7 @@ import { poolNotFoundError, apiError } from '../core/errors.js';
 import type {
   Pool,
   PoolDetail,
+  PoolReward,
   Token,
   GlobalOverview,
   Kline,
@@ -95,11 +96,18 @@ interface ApiPoolFeeRate {
 }
 
 interface ApiPoolRewardItem {
-  mint: ApiMintInfo;
-  rewardPerSecond: string;
-  rewardOpenTime: number;
-  rewardEndTime: number;
-  rewardType: number;
+  // New API format (preferred)
+  token?: ApiMintWithPrice;
+  dailyMaxAmount?: string;
+  dailyAmountDisplay?: string;
+  endTimestamp?: number;
+  apr?: string;
+  // Old API format (backward compatibility)
+  mint?: ApiMintInfo;
+  rewardPerSecond?: string;
+  rewardOpenTime?: number;
+  rewardEndTime?: number;
+  rewardType?: number;
 }
 
 interface ApiSimplePoolInfo {
@@ -358,6 +366,45 @@ interface ApiFeeEncodeResponse extends ApiResponse<ApiFeeEncodeEntry[]> {}
 // Transform Functions
 // ============================================
 
+function transformReward(r: ApiPoolRewardItem): PoolReward {
+  // Detect new vs old API format
+  const isNewFormat = r.token !== undefined;
+
+  const mintInfo = isNewFormat ? r.token?.mintInfo : r.mint;
+  const mint = mintInfo?.address || '';
+  const symbol = mintInfo?.symbol || '';
+  const priceUsd = isNewFormat ? parseFloat(r.token?.price || '0') : 0;
+  const apr = parseFloat(r.apr || '0') * 100; // decimal to percentage
+  const rawEndTime = isNewFormat ? (r.endTimestamp || 0) : (r.rewardEndTime || 0);
+  const endTime = rawEndTime > 1e12 ? Math.floor(rawEndTime / 1000) : rawEndTime; // normalize to seconds
+  const rawOpenTime = r.rewardOpenTime || 0;
+  const openTime = rawOpenTime > 1e12 ? Math.floor(rawOpenTime / 1000) : rawOpenTime;
+
+  // Daily amount: prefer dailyAmountDisplay > dailyMaxAmount > compute from rewardPerSecond
+  let dailyAmount = r.dailyAmountDisplay || r.dailyMaxAmount || '';
+  if (!dailyAmount && r.rewardPerSecond) {
+    const rps = parseFloat(r.rewardPerSecond);
+    if (rps > 0) {
+      dailyAmount = (rps * 86400).toString();
+    }
+  }
+
+  const dailyAmountNum = parseFloat(dailyAmount || '0');
+  const dailyAmountUsd = dailyAmountNum * priceUsd;
+
+  return {
+    mint,
+    symbol,
+    rewardPerSecond: r.rewardPerSecond || '0',
+    openTime,
+    endTime,
+    apr,
+    daily_amount: dailyAmount,
+    daily_amount_usd: dailyAmountUsd,
+    price_usd: priceUsd,
+  };
+}
+
 function transformPool(apiPool: ApiSimplePoolInfo): Pool {
   const mintA = apiPool.mintA?.mintInfo || {};
   const mintB = apiPool.mintB?.mintInfo || {};
@@ -366,6 +413,15 @@ function transformPool(apiPool: ApiSimplePoolInfo): Pool {
   const baseMintPrice = parseFloat(apiPool.baseMint?.price || apiPool.mintA?.price || '0');
   const quoteMintPrice = parseFloat(apiPool.quoteMint?.price || apiPool.mintB?.price || '0');
   const poolPrice = quoteMintPrice > 0 ? baseMintPrice / quoteMintPrice : 0;
+
+  // Extract active rewards
+  const now = Math.floor(Date.now() / 1000);
+  const activeRewards = (apiPool.rewards || [])
+    .map(transformReward)
+    .filter(r => r.endTime > now || r.endTime === 0);
+
+  const feeApr = parseFloat(apiPool.feeApr24h || '0') * 100; // 转换为百分比
+  const rewardApr = activeRewards.reduce((sum, r) => sum + r.apr, 0);
 
   return {
     id: apiPool.poolAddress,
@@ -391,12 +447,15 @@ function transformPool(apiPool: ApiSimplePoolInfo): Pool {
     volume_7d_usd: parseFloat(apiPool.volumeUsd7d || '0'),
     fee_rate_bps: parseInt(apiPool.feeRate?.fixFeeRate || '0', 10) / 100, // fixFeeRate is in 1/100 bps
     fee_24h_usd: parseFloat(apiPool.feeUsd1d || apiPool.feeUsd24h || '0'),
-    apr: parseFloat(apiPool.feeApr24h || '0') * 100, // 转换为百分比
+    apr: feeApr,
+    reward_apr: rewardApr,
+    total_apr: feeApr + rewardApr,
     current_price: poolPrice,
     created_at: apiPool.openTime ? new Date(apiPool.openTime).toISOString() : '',
     price_change_1h: apiPool.priceChange1h ? parseFloat(apiPool.priceChange1h) * 100 : undefined,
     price_change_24h: apiPool.priceChange1d ? parseFloat(apiPool.priceChange1d) * 100 : undefined,
     price_change_7d: apiPool.priceChange7d ? parseFloat(apiPool.priceChange7d) * 100 : undefined,
+    rewards: activeRewards.length > 0 ? activeRewards : undefined,
   };
 }
 
@@ -510,16 +569,8 @@ export async function getPoolInfo(
     };
   }
 
+  // transformPool already handles rewards, reward_apr, total_apr
   const pool = transformPool(poolData);
-
-  // Map rewards
-  const rewards = (poolData.rewards || []).map((r) => ({
-    mint: r.mint?.address || '',
-    symbol: r.mint?.symbol || '',
-    rewardPerSecond: r.rewardPerSecond || '0',
-    openTime: r.rewardOpenTime || 0,
-    endTime: r.rewardEndTime || 0,
-  }));
 
   return {
     ok: true,
@@ -534,7 +585,6 @@ export async function getPoolInfo(
       price_change_7d: parseFloat(poolData.priceChange7d || '0') * 100,
       fee_7d_usd: parseFloat(poolData.feeUsd7d || '0'),
       category: poolData.category,
-      rewards: rewards.length > 0 ? rewards : undefined,
     },
   };
 }

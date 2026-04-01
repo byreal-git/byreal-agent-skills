@@ -126,21 +126,28 @@ function formatApr(value: number): string {
 // ============================================
 
 export function outputPoolsTable(pools: Pool[], total: number): void {
-  const table = createTable(['Pair', 'Pool ID', 'TVL', 'Volume 24h', 'APR', 'Fee Rate']);
+  const table = createTable(['Pair', 'Pool ID', 'TVL', 'Volume 24h', 'Est. APR', 'Fee Rate']);
 
   for (const pool of pools) {
+    const hasRewards = pool.reward_apr > 0;
+    const aprDisplay = formatApr(pool.total_apr) + (hasRewards ? chalk.magenta(' (+R)') : '');
+
     table.push([
       chalk.white.bold(pool.pair),
       chalk.gray(pool.id),
       formatUsd(pool.tvl_usd),
       formatUsd(pool.volume_24h_usd),
-      formatApr(pool.apr),
+      aprDisplay,
       `${(pool.fee_rate_bps / 100).toFixed(2)}%`,
     ]);
   }
 
   console.log(table.toString());
   console.log(chalk.gray(`\nShowing ${pools.length} of ${total} pools`));
+  const hasAnyRewards = pools.some(p => p.reward_apr > 0);
+  if (hasAnyRewards) {
+    console.log(chalk.magenta('(+R)') + chalk.gray(' = includes reward incentives'));
+  }
 }
 
 export function outputPoolDetail(pool: PoolDetail): void {
@@ -154,10 +161,31 @@ export function outputPoolDetail(pool: PoolDetail): void {
     ['Volume (7d)', formatUsd(pool.volume_7d_usd)],
     ['Fees (24h)', formatUsd(pool.fee_24h_usd)],
     ['Fee Rate', `${(pool.fee_rate_bps / 100).toFixed(2)}%`],
-    ['APR', formatApr(pool.apr)]
+    ['Fee APR', formatApr(pool.apr)],
+    ['Reward APR', pool.reward_apr > 0 ? formatApr(pool.reward_apr) : chalk.gray('None')],
+    ['Total APR', chalk.bold(formatApr(pool.total_apr))]
   );
 
   console.log(table.toString());
+
+  // Active Rewards
+  if (pool.rewards && pool.rewards.length > 0) {
+    console.log(chalk.cyan('\nActive Rewards:'));
+    const rewardsTable = createTable(['Token', 'APR', 'Daily Amount', 'Daily USD', 'Ends']);
+    for (const r of pool.rewards) {
+      const endDate = r.endTime > 0
+        ? new Date(r.endTime * 1000).toISOString().slice(0, 10)
+        : 'Ongoing';
+      rewardsTable.push([
+        chalk.white.bold(r.symbol || r.mint),
+        formatApr(r.apr),
+        r.daily_amount ? parseFloat(r.daily_amount).toLocaleString() : '-',
+        r.daily_amount_usd > 0 ? formatUsd(r.daily_amount_usd) : '-',
+        chalk.gray(endDate),
+      ]);
+    }
+    console.log(rewardsTable.toString());
+  }
 
   // 价格信息
   console.log(chalk.cyan('\nPrices:'));
@@ -793,6 +821,8 @@ export function outputPoolAnalysisTable(data: any): void {
     ['Fees (24h)', `$${data.metrics.fee24h}`],
     ['Fees (7d)', `$${data.metrics.fee7d}`],
     ['Fee APR (24h)', data.metrics.feeApr24h],
+    ['Reward APR', data.metrics.rewardApr || chalk.gray('None')],
+    ['Total APR', chalk.bold(data.metrics.totalApr)],
     ['Volume/TVL', data.metrics.volumeToTvl],
   );
   console.log(metricsTable.toString());
@@ -809,9 +839,15 @@ export function outputPoolAnalysisTable(data: any): void {
   // Rewards
   if (data.rewards && data.rewards.length > 0) {
     console.log(chalk.cyan.bold('\nRewards'));
-    const rewardsTable = createTable(['Token', 'End Date']);
+    const rewardsTable = createTable(['Token', 'APR', 'Daily Amount', 'Daily USD', 'End Date']);
     for (const r of data.rewards) {
-      rewardsTable.push([r.token, r.endTime]);
+      rewardsTable.push([
+        r.token,
+        r.apr || '-',
+        r.dailyAmount || '-',
+        r.dailyAmountUsd || '-',
+        r.endTime,
+      ]);
     }
     console.log(rewardsTable.toString());
   }
