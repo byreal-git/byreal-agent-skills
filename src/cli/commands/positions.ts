@@ -2094,7 +2094,7 @@ function createTopPositionsCommand(): Command {
     .option("--page-size <n>", "Page size", "20")
     .option(
       "--sort-field <field>",
-      "Sort: liquidity, apr, earned, pnl, copies, bonus",
+      "Sort: liquidity, earned, pnl, copies, bonus",
       "liquidity",
     )
     .option("--sort-type <type>", "Sort order: asc, desc", "desc")
