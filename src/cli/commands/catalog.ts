@@ -293,6 +293,18 @@ const CAPABILITIES: Capability[] = [
     ],
   },
   {
+    id: 'dex.position.submitRewards',
+    name: 'Submit Signed Rewards',
+    description: 'Submit signed reward/bonus claim transactions to backend for broadcasting. Used after claim-rewards or claim-bonus generates unsigned transactions and the external wallet signs them. Requires --wallet-address global option.',
+    category: 'execute',
+    auth_required: true,
+    command: 'byreal-cli positions submit-rewards --wallet-address <address>',
+    params: [
+      { name: 'order-code', type: 'string', required: true, description: 'Order code from claim-rewards or claim-bonus output' },
+      { name: 'signed-payloads', type: 'string', required: true, description: 'JSON array of signed transactions: [{"txCode":"...","poolAddress":"...","signedTx":"<base64>"}]' },
+    ],
+  },
+  {
     id: 'dex.position.topPositions',
     name: 'Top Positions',
     description: 'Query top positions in a pool for copy trading. Each position includes inRange status indicating whether it is currently earning fees.',

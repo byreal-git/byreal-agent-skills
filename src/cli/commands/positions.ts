@@ -42,6 +42,7 @@ import {
   outputPositionAnalysisTable,
   outputTopPositionsTable,
   outputCopyPositionPreview,
+  outputRewardOrderResult,
 } from "../output/formatters.js";
 
 // ============================================
@@ -2448,6 +2449,97 @@ function createCopyPositionCommand(): Command {
 }
 
 // ============================================
+// positions submit-rewards
+// ============================================
+
+function createSubmitRewardsCommand(): Command {
+  return new Command("submit-rewards")
+    .description(
+      "Submit signed reward/bonus transactions to backend for broadcasting",
+    )
+    .requiredOption(
+      "--order-code <code>",
+      "Order code from claim-rewards or claim-bonus output",
+    )
+    .requiredOption(
+      "--signed-payloads <json>",
+      'JSON array: [{"txCode":"...","poolAddress":"...","signedTx":"<base64>"}]',
+    )
+    .action(async (options, cmdObj: Command) => {
+      const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
+      const format = globalOptions.output;
+      const startTime = Date.now();
+
+      // Resolve wallet address
+      const walletAddress = globalOptions.walletAddress;
+      if (!walletAddress) {
+        const err = missingWalletAddressError();
+        if (format === "json") {
+          outputErrorJson(err.toJSON());
+        } else {
+          outputErrorTable(err.toJSON());
+        }
+        process.exit(1);
+      }
+
+      // Parse signed payloads
+      let signedPayloads: {
+        txCode: string;
+        poolAddress: string;
+        signedTx: string;
+      }[];
+      try {
+        signedPayloads = JSON.parse(options.signedPayloads);
+        if (!Array.isArray(signedPayloads) || signedPayloads.length === 0) {
+          throw new Error("must be a non-empty array");
+        }
+        for (const p of signedPayloads) {
+          if (!p.txCode || !p.poolAddress || !p.signedTx) {
+            throw new Error(
+              "each entry must have txCode, poolAddress, signedTx",
+            );
+          }
+        }
+      } catch (e) {
+        const errMsg = `Invalid --signed-payloads: ${(e as Error).message}`;
+        if (format === "json") {
+          outputErrorJson({
+            code: "INVALID_PARAMETER",
+            type: "VALIDATION",
+            message: errMsg,
+            retryable: false,
+          });
+        } else {
+          console.error(chalk.red(`\nError: ${errMsg}`));
+        }
+        process.exit(1);
+      }
+
+      // Submit to backend
+      const orderResult = await api.submitRewardOrder({
+        orderCode: options.orderCode,
+        walletAddress,
+        signedTxPayload: signedPayloads,
+      });
+
+      if (!orderResult.ok) {
+        if (format === "json") {
+          outputErrorJson(orderResult.error);
+        } else {
+          outputErrorTable(orderResult.error);
+        }
+        process.exit(1);
+      }
+
+      if (format === "json") {
+        outputJson(orderResult.value, startTime);
+      } else {
+        outputRewardOrderResult(orderResult.value);
+      }
+    });
+}
+
+// ============================================
 // positions (parent command)
 // ============================================
 
@@ -2462,6 +2554,7 @@ export function createPositionsCommand(): Command {
   cmd.addCommand(createPositionsClaimCommand());
   cmd.addCommand(createPositionsClaimRewardsCommand());
   cmd.addCommand(createPositionsClaimBonusCommand());
+  cmd.addCommand(createSubmitRewardsCommand());
   cmd.addCommand(createPositionsAnalyzeCommand());
   cmd.addCommand(createTopPositionsCommand());
   cmd.addCommand(createCopyPositionCommand());

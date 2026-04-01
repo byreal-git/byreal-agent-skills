@@ -31,6 +31,8 @@ import type {
   ProviderOverviewInfo,
   RewardEncodeParams,
   RewardEncodeResult,
+  RewardOrderParams,
+  RewardOrderResult,
 } from '../core/types.js';
 import type { ByrealError } from '../core/errors.js';
 
@@ -1006,6 +1008,28 @@ export async function encodeReward(
   return { ok: true, value: data };
 }
 
+/**
+ * Submit signed reward/bonus claim transactions to backend
+ */
+export async function submitRewardOrder(
+  params: RewardOrderParams
+): Promise<Result<RewardOrderResult, ByrealError>> {
+  const result = await apiClient.post<ApiResponse<RewardOrderResult>>(API_ENDPOINTS.REWARD_ORDER, {
+    orderCode: params.orderCode,
+    walletAddress: params.walletAddress,
+    signedTxPayload: params.signedTxPayload,
+  });
+
+  if (!result.ok) return result;
+
+  const data = result.value.result?.data;
+  if (!data) {
+    return { ok: true, value: { orderCode: '', txList: [], claimTokenList: [] } };
+  }
+
+  return { ok: true, value: data };
+}
+
 // Export all API functions
 export const api = {
   listPools,
@@ -1022,4 +1046,5 @@ export const api = {
   getEpochBonus,
   getProviderOverview,
   encodeReward,
+  submitRewardOrder,
 };

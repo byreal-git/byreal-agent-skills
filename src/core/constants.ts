@@ -53,6 +53,7 @@ export const API_ENDPOINTS = {
   // Reward / Bonus claim endpoints
   UNCLAIMED_DATA: '/byreal/api/dex/v2/position/unclaimed-data',
   REWARD_ENCODE: '/byreal/api/dex/v2/incentive/encode-v2',
+  REWARD_ORDER: '/byreal/api/dex/v2/incentive/order-v2',
 
   // Fee endpoints
   AUTO_FEE: '/byreal/api/dex/v2/main/auto-fee',

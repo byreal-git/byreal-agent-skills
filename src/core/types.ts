@@ -459,3 +459,28 @@ export interface RewardEncodeResult {
   rewardEncodeItems: RewardClaimRawTxInfo[];
 }
 
+export interface RewardOrderParams {
+  orderCode: string;
+  walletAddress: string;
+  signedTxPayload: { txCode: string; poolAddress: string; signedTx: string }[];
+}
+
+export interface RewardClaimTxResult {
+  poolAddress: string;
+  txSignature: string;
+  status: number;
+}
+
+export interface ClaimTokenItem {
+  tokenAddress: string;
+  tokenSymbol: string;
+  tokenAmount: string;
+  tokenDecimals: number;
+}
+
+export interface RewardOrderResult {
+  orderCode: string;
+  txList: RewardClaimTxResult[];
+  claimTokenList: ClaimTokenItem[];
+}
+

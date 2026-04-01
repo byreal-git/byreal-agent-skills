@@ -494,6 +494,9 @@ Options:
 - **Incentive rewards** → \`positions claim-rewards\` (this command)
 - **Copy bonus** → \`positions claim-bonus\` (see below)
 
+**IMPORTANT — claim-rewards is a multi-step flow:**
+The output includes \`orderCode\` and per-transaction \`txCode\`. After the wallet signs each transaction, you MUST call \`positions submit-rewards\` to send the signed transactions back to the backend for broadcasting. See "Workflow: Claim Rewards / Bonus" below.
+
 ### positions claim-bonus
 Claim CopyFarmer bonus rewards earned from copying other users' positions. Bonuses accrue in epochs and become claimable in time windows.
 
@@ -508,6 +511,24 @@ Options:
 - **Accruing**: Current epoch, bonus is accumulating
 - **Pending**: Settlement period, not yet claimable
 - **Claimable**: Ready to claim within the time window
+
+**IMPORTANT — claim-bonus is a multi-step flow** (same as claim-rewards): After signing, call \`positions submit-rewards\` to complete the claim.
+
+### positions submit-rewards
+Submit signed reward/bonus claim transactions to the backend for on-chain broadcasting. This is the final step after \`claim-rewards\` or \`claim-bonus\` generates unsigned transactions and the wallet signs them.
+
+\`\`\`bash
+byreal-cli positions submit-rewards [options]
+
+Options:
+  --order-code <code>         Order code from claim-rewards or claim-bonus output (required)
+  --signed-payloads <json>    JSON array of signed transactions (required)
+\`\`\`
+
+The \`--signed-payloads\` format:
+\`\`\`json
+[{"txCode":"<from output>","poolAddress":"<from output>","signedTx":"<base64 signed tx>"}]
+\`\`\`
 
 ### positions top-positions
 Query top positions in a pool. Use this to discover high-performing positions that can be copied.
@@ -685,6 +706,42 @@ When user asks vague questions like "有什么仓位可以 copy？", "最近有�
 - Always explain WHY you recommend a position (e.g., "高手续费收益 + 低无常损失 + 在区间内")
 - If user's balance is low (<$20), suggest starting with a single position to minimize gas cost
 - If all positions in a pool are out-of-range, skip that pool and explain why
+
+## Workflow: Claim Rewards / Bonus (Multi-Step)
+
+Claiming incentive rewards (\`claim-rewards\`) and CopyFarmer bonus (\`claim-bonus\`) requires a **3-step flow** because the backend co-signs and broadcasts these transactions:
+
+**Step 1 — Preview** (optional but recommended):
+\`\`\`bash
+byreal-cli positions claim-rewards --dry-run --wallet-address <addr> -o json
+\`\`\`
+
+**Step 2 — Generate unsigned transactions**:
+\`\`\`bash
+byreal-cli positions claim-rewards --wallet-address <addr> -o json
+\`\`\`
+Output:
+\`\`\`json
+{
+  "orderCode": "ORD_xxx",
+  "unsignedTransactions": [
+    { "poolAddress": "...", "txPayload": "<base64>", "txCode": "TX_xxx", "tokens": [...] }
+  ]
+}
+\`\`\`
+
+**Step 3 — Sign each \`txPayload\` with the user's wallet**, then submit:
+\`\`\`bash
+byreal-cli positions submit-rewards \\
+  --order-code "ORD_xxx" \\
+  --signed-payloads '[{"txCode":"TX_xxx","poolAddress":"...","signedTx":"<base64 signed>"}]' \\
+  --wallet-address <addr> -o json
+\`\`\`
+The backend broadcasts the signed transactions on-chain and returns tx signatures + status.
+
+**For claim-bonus**: Same flow — replace \`claim-rewards\` with \`claim-bonus\` in Step 1-2; Step 3 is identical (\`submit-rewards\`).
+
+**Critical**: Do NOT skip Step 3. Without \`submit-rewards\`, the signed transactions are never sent to the blockchain. The \`orderCode\` ties the encode and submit steps together — always pass the same \`orderCode\` from Step 2 into Step 3.
 
 ## Output Format
 

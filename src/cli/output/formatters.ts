@@ -22,6 +22,7 @@ import type {
   PositionRewardItem,
   EpochBonusInfo,
   ProviderOverviewInfo,
+  RewardOrderResult,
 } from '../../core/types.js';
 import { rawToUi } from '../../core/amounts.js';
 
@@ -972,5 +973,31 @@ export function outputError(error: CliError, format: OutputFormat): void {
     outputErrorJson(error);
   } else {
     outputErrorTable(error);
+  }
+}
+
+// ============================================
+// Reward Order Result Formatter
+// ============================================
+
+export function outputRewardOrderResult(result: RewardOrderResult): void {
+  console.log(chalk.green.bold('\nRewards Claimed\n'));
+
+  if (result.claimTokenList.length > 0) {
+    console.log(chalk.white.bold('  Claimed Tokens:'));
+    for (const token of result.claimTokenList) {
+      console.log(chalk.gray(`    ${token.tokenAmount} ${token.tokenSymbol} (${token.tokenAddress})`));
+    }
+    console.log();
+  }
+
+  if (result.txList.length > 0) {
+    console.log(chalk.white.bold('  Transactions:'));
+    for (const tx of result.txList) {
+      const statusLabel = tx.status === 1 ? chalk.green('Success') : tx.status === 2 ? chalk.red('Failed') : chalk.yellow('Sent');
+      console.log(chalk.gray(`    ${tx.txSignature} ${statusLabel}`));
+      console.log(chalk.blue(`    https://solscan.io/tx/${tx.txSignature}`));
+    }
+    console.log();
   }
 }
