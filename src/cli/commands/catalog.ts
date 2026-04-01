@@ -377,7 +377,7 @@ const CAPABILITIES: Capability[] = [
       { name: 'pool', type: 'string', required: true, description: 'Pool address' },
       { name: 'page', type: 'integer', required: false, description: 'Page number', default: '1' },
       { name: 'page-size', type: 'integer', required: false, description: 'Page size', default: '20' },
-      { name: 'sort-field', type: 'string', required: false, description: 'Sort field', default: 'liquidity', enum: ['liquidity', 'apr', 'earned', 'pnl', 'copies', 'bonus', 'closeTime'] },
+      { name: 'sort-field', type: 'string', required: false, description: 'Sort field', default: 'liquidity', enum: ['liquidity', 'earned', 'pnl', 'copies', 'bonus', 'closeTime'] },
       { name: 'sort-type', type: 'string', required: false, description: 'Sort order', default: 'desc', enum: ['asc', 'desc'] },
       { name: 'status', type: 'integer', required: false, description: 'Position status: 0=open, 1=closed', default: '0' },
     ],

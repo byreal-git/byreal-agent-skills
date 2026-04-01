@@ -380,7 +380,7 @@ export interface PositionListResult {
 // Copy Farmer / Top Positions Types
 // ============================================
 
-export type TopPositionsSortField = 'liquidity' | 'apr' | 'earned' | 'pnl' | 'copies' | 'bonus' | 'closeTime';
+export type TopPositionsSortField = 'liquidity' | 'earned' | 'pnl' | 'copies' | 'bonus' | 'closeTime';
 
 export interface TopPositionsParams {
   poolAddress: string;
