@@ -222,11 +222,12 @@ const CAPABILITIES: Capability[] = [
   {
     id: 'dex.position.list',
     name: 'List Positions',
-    description: 'List user CLMM positions with filtering and sorting',
+    description: 'List CLMM positions for your wallet or any wallet address. Use --user to query another wallet (read-only, no --wallet-address needed).',
     category: 'query',
-    auth_required: true,
+    auth_required: false,
     command: 'byreal-cli positions list',
     params: [
+      { name: 'user', type: 'string', required: false, description: 'Query positions for a specific wallet address (read-only)' },
       { name: 'page', type: 'integer', required: false, description: 'Page number', default: '1' },
       { name: 'page-size', type: 'integer', required: false, description: 'Page size', default: '20' },
       { name: 'sort-field', type: 'string', required: false, description: 'Sort field' },
