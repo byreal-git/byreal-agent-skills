@@ -51,7 +51,8 @@ import {
 
 function createPositionsListCommand(): Command {
   return new Command("list")
-    .description("List your positions")
+    .description("List positions for your wallet or any wallet address")
+    .option("--user <address>", "Query positions for a specific wallet address (read-only, no --wallet-address needed)")
     .option("--page <n>", "Page number", "1")
     .option("--page-size <n>", "Page size", "20")
     .option("--sort-field <field>", "Sort field")
@@ -66,20 +67,24 @@ function createPositionsListCommand(): Command {
       const format = globalOptions.output;
       const startTime = Date.now();
 
-      // Resolve wallet address from global option
-      const walletAddress = globalOptions.walletAddress;
-      if (!walletAddress) {
-        const err = missingWalletAddressError();
+      // Resolve target address: --user takes priority, fallback to --wallet-address
+      const userAddress = options.user || globalOptions.walletAddress;
+      if (!userAddress) {
+        const errMsg = "Provide --user <address> or global --wallet-address to specify which wallet to query.";
         if (format === "json") {
-          outputErrorJson(err.toJSON());
+          outputErrorJson({ code: "MISSING_ADDRESS", type: "VALIDATION", message: errMsg, retryable: false });
         } else {
-          outputErrorTable(err.toJSON());
+          console.error(chalk.red(`\nError: ${errMsg}`));
         }
         process.exit(1);
       }
 
+      if (options.user && format !== "json") {
+        console.log(chalk.gray(`\n  Positions for: ${options.user}\n`));
+      }
+
       const result = await api.listPositions({
-        userAddress: walletAddress,
+        userAddress,
         page: parseInt(options.page, 10),
         pageSize: parseInt(options.pageSize, 10),
         sortField: options.sortField,

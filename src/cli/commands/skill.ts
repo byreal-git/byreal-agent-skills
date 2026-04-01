@@ -64,7 +64,7 @@ byreal-cli catalog show dex.pool.list
 | dex.token.list | Query tokens with search |
 | dex.overview.global | Global statistics |
 | dex.swap.execute | Preview or execute a token swap |
-| dex.position.list | List user's CLMM positions |
+| dex.position.list | List positions for your wallet or any wallet via --user |
 | dex.position.analyze | Analyze existing position |
 | dex.position.open | Open a new CLMM position |
 | dex.position.increase | Add liquidity to an existing position |
@@ -346,18 +346,31 @@ byreal-cli swap execute --input-mint So11111111111111111111111111111111111111112
 \`\`\`
 
 ### positions list
-List user's CLMM positions.
+List CLMM positions for your wallet or any wallet address. Use \`--user\` to query another wallet's positions (read-only, no \`--wallet-address\` needed).
 
 \`\`\`bash
 byreal-cli positions list [options]
 
 Options:
+  --user <address>       Query positions for a specific wallet address (read-only)
   --page <n>             Page number (default: 1)
   --page-size <n>        Page size (default: 20)
   --sort-field <field>   Sort field
   --sort-type <type>     Sort direction: asc or desc
   --pool <address>       Filter by pool address
   --status <status>      Filter by status: 0=closed, 1=active
+\`\`\`
+
+Examples:
+\`\`\`bash
+# List your own positions
+byreal-cli positions list --wallet-address <your-addr> -o json
+
+# Query another user's positions (for LP copy trading research)
+byreal-cli positions list --user <target-wallet> -o json
+
+# Query another user's positions in a specific pool
+byreal-cli positions list --user <target-wallet> --pool <pool-address> -o json
 \`\`\`
 
 ### positions open
@@ -706,6 +719,7 @@ When user asks vague questions like "有什么仓位可以 copy？", "最近有�
 - Always explain WHY you recommend a position (e.g., "高手续费收益 + 低无常损失 + 在区间内")
 - If user's balance is low (<$20), suggest starting with a single position to minimize gas cost
 - If all positions in a pool are out-of-range, skip that pool and explain why
+- To inspect a specific LP's full portfolio: \`byreal-cli positions list --user <wallet-address> -o json\`
 
 ## Workflow: Claim Rewards / Bonus (Multi-Step)
 

@@ -66,7 +66,7 @@ All commands support `-o json` for structured output.
 | `pools analyze`           | Comprehensive pool analysis (APR, risk, range) |
 | `tokens list`             | List available tokens                          |
 | `swap execute`            | Preview or execute a token swap                |
-| `positions list`          | List your CLMM positions                       |
+| `positions list`          | List positions (own wallet or any via --user)   |
 | `positions open`          | Open a new CLMM position                       |
 | `positions increase`      | Add liquidity to an existing position           |
 | `positions decrease`      | Partially remove liquidity from a position      |
