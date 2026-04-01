@@ -194,7 +194,7 @@ Byreal CLI provides on-chain data only. For complete analysis, **you (the AI age
 ## Commands
 
 ### pools list
-Query available liquidity pools with sorting and filtering.
+Query available liquidity pools with Est. APR (fee + reward incentive breakdown), sorting and filtering.
 
 \`\`\`bash
 byreal-cli pools list [options]
@@ -221,7 +221,7 @@ byreal-cli pools list --category 1 -o json
 \`\`\`
 
 ### pools info
-Get detailed information about a specific pool.
+Get detailed information about a specific pool, including Fee APR, Reward APR, Total APR breakdown and active reward incentives (token, APR, daily amount, daily USD, end date).
 
 \`\`\`bash
 byreal-cli pools info <pool-id> -o json
@@ -643,7 +643,7 @@ Response includes:
 - **pool**: Basic info (address, pair, category, currentPrice, feeRate, tickSpacing)
 - **metrics**: TVL, volume (24h/7d), fees (24h/7d), feeApr24h, volumeToTvl ratio
 - **volatility**: 24h price range (low/high) and dayPriceRangePercent
-- **rewards**: Active reward programs (token, endTime)
+- **rewards**: Active reward programs (token, APR, daily amount, daily USD value, end date)
 - **rangeAnalysis**: For each range %, shows priceLower/Upper, estimated fee APR, in-range likelihood, rebalance frequency
 - **riskFactors**: TVL risk, volatility risk, and human-readable summary
 - **wallet**: Wallet address, balanceUsd, and optional low-balance warning (omitted if wallet not configured)

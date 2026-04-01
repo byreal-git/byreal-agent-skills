@@ -18,7 +18,7 @@ npm install -g @byreal-io/byreal-cli
 
 ## Features
 
-- **Pools** — List, search, and inspect CLMM pools. View K-line charts, APR, TVL, volume, and run comprehensive pool analysis (risk, volatility, range recommendations).
+- **Pools** — List, search, and inspect CLMM pools. View K-line charts, Est. APR (fee + reward incentive breakdown), TVL, volume, and run comprehensive pool analysis (risk, volatility, range recommendations).
 - **Tokens** — List tokens, search by symbol/name, get real-time prices.
 - **Swap** — Preview and execute token swaps with slippage control and price impact estimation.
 - **Positions** — Open, close, and manage CLMM positions. Claim fees and rewards. Analyze position performance. Copy top farmers' positions with one command.
