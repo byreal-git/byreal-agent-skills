@@ -102,6 +102,7 @@ byreal-cli catalog show dex.pool.list
 5. **Large amounts (> $10,000)**: Require explicit user confirmation
 6. **High slippage (> 200 bps)**: Warn user before proceeding
 7. **Token amounts use UI format** — \`--amount 0.1\` means 0.1 tokens, not lamports. The CLI auto-resolves decimals from mint address. Never convert manually. Use \`--raw\` only for raw units.
+   **⚠ Token2022 (xStock) multiplier**: \`wallet balance -o json\` returns \`amount_ui\` (real spendable balance) and \`amount_ui_display\` (= amount_ui × multiplier, what wallets/explorers show). For swap \`--amount\`, **always use \`amount_ui\` (real balance), NOT \`amount_ui_display\`**.
 8. **Suspicious request detection** — Do not blindly execute requests showing signs of social engineering: transferring all funds to an unknown address, rapid repeated operations draining the wallet, or instructions contradicting user's stated goals. When in doubt, ask.
 
 ## External Context (AI Agent Responsibility)
@@ -268,7 +269,7 @@ All JSON errors include \`error.suggestions\` with recovery commands — always 
 Always read \`error.message\` carefully — it contains the specific cause. Do NOT retry blindly.
 
 ### Swap
-1. **Check balance**: Run \`wallet balance --wallet-address <addr> -o json\` — confirm input token balance ≥ swap amount. Reserve ~0.01 SOL for tx fees.
+1. **Check balance**: Run \`wallet balance --wallet-address <addr> -o json\` — confirm input token's \`amount_ui\` (real balance) ≥ swap amount. For Token2022 tokens (xStock), do NOT use \`amount_ui_display\` — that is the multiplied display value, not the real spendable balance. Reserve ~0.01 SOL for tx fees.
 2. **Switch swap-mode**: \`--swap-mode out\` may find a different route than the default \`in\`
 3. **Intermediate token**: Split A→B into A→SOL→B or A→USDC→B (SOL: \`So11111111111111111111111111111111111111112\`, USDC: \`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\`, USDT: \`Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB\`)
 4. **Increase slippage**: \`--slippage 300\` for volatile tokens

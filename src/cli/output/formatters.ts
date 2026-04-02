@@ -351,14 +351,25 @@ export function outputWalletBalance(balance: WalletBalance, address: string): vo
 
   // SPL token balances
   for (const token of balance.tokens) {
+    let balanceDisplay = token.amount_ui;
+    if (token.multiplier && token.amount_ui_display) {
+      balanceDisplay = `${token.amount_ui} ${chalk.gray(`(display: ${token.amount_ui_display}, x${token.multiplier})`)}`;
+    }
+
     table.push([
       chalk.gray(token.mint),
-      token.amount_ui,
+      balanceDisplay,
       token.is_token_2022 ? 'token-2022' : 'spl-token',
     ]);
   }
 
   console.log(table.toString());
+
+  const hasMultiplier = balance.tokens.some(t => t.multiplier);
+  if (hasMultiplier) {
+    console.log(chalk.yellow('\n  Note: "display" amounts include Token2022 multiplier (shown in wallets/explorers). Use the real balance for swaps.'));
+  }
+
   console.log(chalk.gray(`\n  ${balance.tokens.length} SPL token(s)`));
 }
 

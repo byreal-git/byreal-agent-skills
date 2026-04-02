@@ -113,6 +113,7 @@ export interface Token extends TokenInfo {
   price_change_24h: number;
   volume_24h_usd: number;
   market_cap_usd?: number;
+  multiplier?: string;
 }
 
 // ============================================
@@ -264,6 +265,8 @@ export interface TokenBalance {
   name?: string;
   amount_raw: string;
   amount_ui: string;
+  amount_ui_display?: string;
+  multiplier?: string;
   decimals: number;
   is_native: boolean;
   is_token_2022: boolean;

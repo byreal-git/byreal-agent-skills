@@ -15,6 +15,32 @@ import {
   outputError,
   outputWalletBalance,
 } from '../output/formatters.js';
+import { api } from '../../api/endpoints.js';
+
+// ============================================
+// Token2022 multiplier enrichment
+// ============================================
+
+async function fetchToken2022Multipliers(
+  mints: string[],
+): Promise<Map<string, { multiplier?: string; symbol?: string; name?: string }>> {
+  const result = new Map<string, { multiplier?: string; symbol?: string; name?: string }>();
+  if (mints.length === 0) return result;
+
+  const settled = await Promise.allSettled(
+    mints.map(mint => api.listTokens({ searchKey: mint, pageSize: 1 })),
+  );
+
+  for (let i = 0; i < mints.length; i++) {
+    const s = settled[i];
+    if (s.status === 'fulfilled' && s.value.ok && s.value.value.tokens.length > 0) {
+      const t = s.value.value.tokens[0];
+      result.set(mints[i], { multiplier: t.multiplier, symbol: t.symbol, name: t.name });
+    }
+  }
+
+  return result;
+}
 
 // ============================================
 // Create Wallet Command
@@ -120,6 +146,22 @@ export function createWalletCommand(): Command {
             is_token_2022: raw.isToken2022,
           });
         }
+
+        // Enrich Token2022 tokens with multiplier from API (graceful on failure)
+        const t22Mints = tokens.filter(t => t.is_token_2022).map(t => t.mint);
+        try {
+          const t22Info = await fetchToken2022Multipliers(t22Mints);
+          for (const token of tokens) {
+            const info = t22Info.get(token.mint);
+            if (!info) continue;
+            if (info.symbol) token.symbol = info.symbol;
+            if (info.name) token.name = info.name;
+            if (info.multiplier && parseFloat(info.multiplier) !== 1) {
+              token.multiplier = info.multiplier;
+              token.amount_ui_display = (parseFloat(token.amount_ui) * parseFloat(info.multiplier)).toString();
+            }
+          }
+        } catch { /* API failure: skip multiplier enrichment */ }
 
         const balance: WalletBalance = {
           sol: {
