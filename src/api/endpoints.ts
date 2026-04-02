@@ -476,6 +476,7 @@ function transformToken(apiToken: ApiMintItem): Token {
     price_change_24h: parseFloat(apiToken.priceChange24h || '0'),
     volume_24h_usd: parseFloat(apiToken.volumeUsd24h || '0'),
     market_cap_usd: undefined,
+    multiplier: apiToken.multiplier,
   };
 }
 
