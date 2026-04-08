@@ -82,7 +82,7 @@ function createTable(headers: string[]): Table.Table {
   });
 }
 
-function formatUsd(value: number): string {
+export function formatUsd(value: number): string {
   if (value >= 1_000_000) {
     return `$${(value / 1_000_000).toFixed(2)}M`;
   }
@@ -950,13 +950,13 @@ export function outputPositionAnalysisTable(data: any): void {
   // Performance
   console.log(chalk.cyan.bold('Performance'));
   const perfTable = createTable(['Metric', 'Value']);
-  const pnlColor = parseFloat(data.performance.pnlUsd) >= 0 ? chalk.green : chalk.red;
-  const netColor = parseFloat(data.performance.netReturnUsd) >= 0 ? chalk.green : chalk.red;
+  const pnlColor = data.performance.pnlUsd.startsWith('-') ? chalk.red : chalk.green;
+  const netColor = data.performance.netReturnUsd.startsWith('-') ? chalk.red : chalk.green;
   perfTable.push(
-    ['Liquidity', `$${data.performance.liquidityUsd}`],
-    ['Earned Fees', `$${data.performance.earnedUsd} (${data.performance.earnedPercent})`],
-    ['PnL (IL)', pnlColor(`$${data.performance.pnlUsd} (${data.performance.pnlPercent})`)],
-    ['Net Return', netColor(`$${data.performance.netReturnUsd} (${data.performance.netReturnPercent})`)],
+    ['Liquidity', data.performance.liquidityUsd],
+    ['Earned Fees', `${data.performance.earnedUsd} (${data.performance.earnedPercent})`],
+    ['PnL (IL)', pnlColor(`${data.performance.pnlUsd} (${data.performance.pnlPercent})`)],
+    ['Net Return', netColor(`${data.performance.netReturnUsd} (${data.performance.netReturnPercent})`)],
   );
   console.log(perfTable.toString());
 
@@ -981,18 +981,19 @@ export function outputPositionAnalysisTable(data: any): void {
   const poolTable = createTable(['Metric', 'Value']);
   poolTable.push(
     ['Fee APR (24h)', data.poolContext.feeApr24h],
-    ['Volume (24h)', `$${data.poolContext.volume24h}`],
-    ['TVL', `$${data.poolContext.tvl}`],
+    ['Volume (24h)', data.poolContext.volume24h],
+    ['TVL', data.poolContext.tvl],
     ['Price Change (24h)', data.poolContext.priceChange24h],
   );
   console.log(poolTable.toString());
 
   // Unclaimed Fees
   console.log(chalk.cyan.bold('\nUnclaimed Fees'));
-  const feeTable = createTable(['Token', 'Amount']);
+  const feeTable = createTable(['Token', 'Amount', 'USD Value']);
   feeTable.push(
-    [data.unclaimedFees.tokenA.symbol, data.unclaimedFees.tokenA.amount],
-    [data.unclaimedFees.tokenB.symbol, data.unclaimedFees.tokenB.amount],
+    [data.unclaimedFees.tokenA.symbol, data.unclaimedFees.tokenA.amount, data.unclaimedFees.tokenA.amountUsd],
+    [data.unclaimedFees.tokenB.symbol, data.unclaimedFees.tokenB.amount, data.unclaimedFees.tokenB.amountUsd],
+    [chalk.bold('Total'), '', chalk.bold(data.unclaimedFees.totalUsd)],
   );
   console.log(feeTable.toString());
 }

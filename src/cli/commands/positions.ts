@@ -43,6 +43,7 @@ import {
   outputTopPositionsTable,
   outputCopyPositionPreview,
   outputRewardOrderResult,
+  formatUsd,
 } from "../output/formatters.js";
 
 // ============================================
@@ -103,7 +104,21 @@ function createPositionsListCommand(): Command {
       }
 
       if (format === "json") {
-        outputJson(result.value, startTime);
+        const enriched = {
+          ...result.value,
+          positions: result.value.positions.map((p) => ({
+            ...p,
+            liquidityUsdDisplay: p.liquidityUsd ? formatUsd(parseFloat(p.liquidityUsd)) : "$0.00",
+            earnedUsdDisplay: p.earnedUsd ? formatUsd(parseFloat(p.earnedUsd)) : "$0.00",
+            pnlUsdDisplay: p.pnlUsd
+              ? (parseFloat(p.pnlUsd) < 0
+                ? `-${formatUsd(Math.abs(parseFloat(p.pnlUsd)))}`
+                : formatUsd(parseFloat(p.pnlUsd)))
+              : "$0.00",
+            bonusUsdDisplay: p.bonusUsd ? formatUsd(parseFloat(p.bonusUsd)) : "$0.00",
+          })),
+        };
+        outputJson(enriched, startTime);
       } else {
         outputPositionsTable(result.value.positions, result.value.total);
       }
@@ -2021,12 +2036,12 @@ function createPositionsAnalyzeCommand(): Command {
             inRange,
           },
           performance: {
-            liquidityUsd: liquidityUsd.toFixed(2),
-            earnedUsd: earnedUsd.toFixed(2),
+            liquidityUsd: formatUsd(liquidityUsd),
+            earnedUsd: formatUsd(earnedUsd),
             earnedPercent: `${parseFloat(String(earnedPercent)).toFixed(2)}%`,
-            pnlUsd: pnlUsd.toFixed(2),
+            pnlUsd: pnlUsd < 0 ? `-${formatUsd(Math.abs(pnlUsd))}` : formatUsd(pnlUsd),
             pnlPercent: `${parseFloat(String(pnlPercent)).toFixed(2)}%`,
-            netReturnUsd: netReturnUsd.toFixed(2),
+            netReturnUsd: netReturnUsd < 0 ? `-${formatUsd(Math.abs(netReturnUsd))}` : formatUsd(netReturnUsd),
             netReturnPercent: `${parseFloat(netReturnPercent).toFixed(2)}%`,
           },
           rangeHealth: {
@@ -2041,20 +2056,29 @@ function createPositionsAnalyzeCommand(): Command {
           },
           poolContext: {
             feeApr24h: `${pool.apr.toFixed(2)}%`,
-            volume24h: pool.volume_24h_usd.toFixed(2),
-            tvl: pool.tvl_usd.toFixed(2),
+            volume24h: formatUsd(pool.volume_24h_usd),
+            tvl: formatUsd(pool.tvl_usd),
             priceChange24h: `${(pool.price_change_24h || 0).toFixed(2)}%`,
           },
-          unclaimedFees: {
-            tokenA: {
-              symbol: symbolA,
-              amount: positionInfo.tokenA.uiFeeAmount,
-            },
-            tokenB: {
-              symbol: symbolB,
-              amount: positionInfo.tokenB.uiFeeAmount,
-            },
-          },
+          unclaimedFees: (() => {
+            const feeAmountA = parseFloat(positionInfo.tokenA.uiFeeAmount || "0");
+            const feeAmountB = parseFloat(positionInfo.tokenB.uiFeeAmount || "0");
+            const feeAUsd = feeAmountA * (pool.token_a.price_usd ?? 0);
+            const feeBUsd = feeAmountB * (pool.token_b.price_usd ?? 0);
+            return {
+              tokenA: {
+                symbol: symbolA,
+                amount: positionInfo.tokenA.uiFeeAmount,
+                amountUsd: formatUsd(feeAUsd),
+              },
+              tokenB: {
+                symbol: symbolB,
+                amount: positionInfo.tokenB.uiFeeAmount,
+                amountUsd: formatUsd(feeBUsd),
+              },
+              totalUsd: formatUsd(feeAUsd + feeBUsd),
+            };
+          })(),
         };
 
         if (format === "json") {
