@@ -408,6 +408,7 @@ export function outputConfigList(config: ByrealConfig): void {
 
   const table = createTable(['Key', 'Value']);
   table.push(
+    ['auto_update', String(config.auto_update ?? true)],
     ['keypair_path', config.keypair_path || chalk.gray('(not set)')],
     ['rpc_url', config.rpc_url],
     ['cluster', config.cluster],

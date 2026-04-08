@@ -7,6 +7,7 @@ import chalk from 'chalk';
 import { execSync } from 'child_process';
 import { VERSION } from '../../core/constants.js';
 import { checkForUpdate, getInstallCommand } from '../../core/update-check.js';
+import { isAutoUpdateEnabled, suppressAutoUpdate } from '../../core/auto-updater.js';
 
 const SCOPED_PACKAGE = '@byreal-io/byreal-cli';
 const LEGACY_PACKAGE = 'byreal-cli';
@@ -71,6 +72,8 @@ export function createUpdateCommand(): Command {
       const result = checkForUpdate(true);
       const installCommand = getInstallCommand(result?.latestVersion);
 
+      const autoUpdateEnabled = isAutoUpdateEnabled();
+
       if (globalOptions.output === 'json') {
         console.log(JSON.stringify({
           success: true,
@@ -79,6 +82,7 @@ export function createUpdateCommand(): Command {
             currentVersion: VERSION,
             latestVersion: result?.latestVersion ?? VERSION,
             updateAvailable: result?.updateAvailable ?? false,
+            autoUpdateEnabled,
             installCommand,
           },
         }, null, 2));
@@ -93,7 +97,11 @@ export function createUpdateCommand(): Command {
 
       if (result.updateAvailable) {
         console.log(chalk.green(`Update available: ${result.currentVersion} → ${result.latestVersion}`));
-        console.log(chalk.gray(`Run: ${installCommand}`));
+        if (autoUpdateEnabled) {
+          console.log(chalk.gray('Auto-update is enabled. The update will install automatically.'));
+        } else {
+          console.log(chalk.gray(`Run: ${installCommand}`));
+        }
       } else {
         console.log(chalk.green(`Already up to date (v${VERSION})`));
       }
@@ -104,6 +112,7 @@ export function createUpdateCommand(): Command {
     .command('install')
     .description('Install the latest version')
     .action(() => {
+      suppressAutoUpdate();
       const result = checkForUpdate(true);
       const installCommand = getInstallCommand(result?.latestVersion);
 

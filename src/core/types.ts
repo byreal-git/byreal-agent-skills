@@ -266,6 +266,7 @@ export interface ByrealDefaults {
 }
 
 export interface ByrealConfig {
+  auto_update?: boolean;
   keypair_path?: string;
   rpc_url: string;
   cluster: string;

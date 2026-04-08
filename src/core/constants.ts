@@ -157,6 +157,7 @@ export const KEY_SOURCE_LABELS: Record<KeySource, string> = {
 // ============================================
 
 export const DEFAULT_CONFIG: ByrealConfig = {
+  auto_update: true,
   rpc_url: 'https://jenelle-p85r4h-fast-mainnet.helius-rpc.com',
   cluster: 'mainnet-beta',
   defaults: {

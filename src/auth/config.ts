@@ -53,6 +53,7 @@ export function loadConfig(): Result<ByrealConfig, ByrealError> {
 
     // Merge with defaults to fill missing fields
     const config: ByrealConfig = {
+      auto_update: parsed.auto_update ?? DEFAULT_CONFIG.auto_update,
       keypair_path: parsed.keypair_path,
       rpc_url: parsed.rpc_url || DEFAULT_CONFIG.rpc_url,
       cluster: parsed.cluster || DEFAULT_CONFIG.cluster,
@@ -88,6 +89,7 @@ export function saveConfig(config: ByrealConfig): Result<void, ByrealError> {
 // ============================================
 
 const VALID_KEYS = new Set([
+  'auto_update',
   'keypair_path',
   'rpc_url',
   'cluster',
@@ -186,6 +188,12 @@ function validateConfigValue(key: string, value: string): Result<unknown, Byreal
     case 'defaults.require_confirmation': {
       if (value !== 'true' && value !== 'false') {
         return err(validationError('require_confirmation must be "true" or "false"', 'require_confirmation'));
+      }
+      return ok(value === 'true');
+    }
+    case 'auto_update': {
+      if (value !== 'true' && value !== 'false') {
+        return err(validationError('auto_update must be "true" or "false"', 'auto_update'));
       }
       return ok(value === 'true');
     }

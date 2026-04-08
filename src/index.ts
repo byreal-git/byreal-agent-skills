@@ -17,7 +17,8 @@ import { createSwapCommand } from './cli/commands/swap.js';
 import { createPositionsCommand } from './cli/commands/positions.js';
 import { createUpdateCommand } from './cli/commands/update.js';
 import { createStatsCommand } from './cli/commands/stats.js';
-import { printUpdateNotice } from './core/update-check.js';
+import { checkForUpdate, printUpdateNotice } from './core/update-check.js';
+import { showPreviousUpdateResult, triggerBackgroundUpdate, isAutoUpdateEnabled, isAutoUpdateSuppressed } from './core/auto-updater.js';
 
 // ============================================
 // Main Program
@@ -77,10 +78,18 @@ program.on('command:*', () => {
 
 async function main() {
   try {
+    showPreviousUpdateResult();
     await program.parseAsync(process.argv);
     const opts = program.opts();
-    if (opts.output !== 'json') {
-      printUpdateNotice();
+    if (opts.output !== 'json' && !isAutoUpdateSuppressed()) {
+      const updateResult = checkForUpdate();
+      if (updateResult?.updateAvailable) {
+        if (isAutoUpdateEnabled()) {
+          triggerBackgroundUpdate(updateResult.latestVersion);
+        } else {
+          printUpdateNotice();
+        }
+      }
     }
   } catch (error) {
     if (error instanceof Error) {
