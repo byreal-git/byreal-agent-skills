@@ -87,7 +87,7 @@ export const BYREAL_KEYS_DIR = '~/.config/byreal/keys';
 
 export const DEFAULTS = {
   OUTPUT_FORMAT: 'table' as const,
-  LIST_LIMIT: 20,
+  LIST_LIMIT: 100,
   MAX_LIST_LIMIT: 100,
   SLIPPAGE_BPS: 200,
   MAX_SLIPPAGE_BPS: 500,

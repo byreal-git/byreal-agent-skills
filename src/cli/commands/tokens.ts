@@ -71,7 +71,7 @@ export function createTokensCommand(): Command {
     .option('--sort-field <field>', 'Sort by field: tvl, volumeUsd24h, price, priceChange24h, apr24h', 'volumeUsd24h')
     .option('--sort <order>', 'Sort order: asc, desc', 'desc')
     .option('--page <n>', 'Page number', '1')
-    .option('--page-size <n>', 'Results per page', '50')
+    .option('--page-size <n>', 'Results per page', String(DEFAULTS.LIST_LIMIT))
     .option('--category <cat>', 'Token category filter')
     .action(async (options: ListTokensOptions, cmd: Command) => {
       const globalOptions = cmd.optsWithGlobals();

@@ -42,7 +42,7 @@ const CAPABILITIES: Capability[] = [
       { name: 'sort-field', type: 'string', required: false, description: 'Sort field', default: 'tvl', enum: ['tvl', 'volumeUsd24h', 'feeUsd24h', 'apr24h'] },
       { name: 'sort-type', type: 'string', required: false, description: 'Sort order', default: 'desc', enum: ['asc', 'desc'] },
       { name: 'page', type: 'integer', required: false, description: 'Page number', default: '1' },
-      { name: 'page-size', type: 'integer', required: false, description: 'Results per page', default: '20' },
+      { name: 'page-size', type: 'integer', required: false, description: 'Results per page', default: '100' },
       { name: 'category', type: 'string', required: false, description: 'Pool category: 1=stable, 2=xStocks, 4=launchpad, 16=normal' },
     ],
   },
@@ -97,7 +97,7 @@ const CAPABILITIES: Capability[] = [
       { name: 'sort-field', type: 'string', required: false, description: 'Sort field', default: 'volumeUsd24h', enum: ['tvl', 'volumeUsd24h', 'price', 'priceChange24h', 'apr24h'] },
       { name: 'sort', type: 'string', required: false, description: 'Sort order', default: 'desc', enum: ['asc', 'desc'] },
       { name: 'page', type: 'integer', required: false, description: 'Page number', default: '1' },
-      { name: 'page-size', type: 'integer', required: false, description: 'Results per page', default: '50' },
+      { name: 'page-size', type: 'integer', required: false, description: 'Results per page', default: '100' },
     ],
   },
   {
