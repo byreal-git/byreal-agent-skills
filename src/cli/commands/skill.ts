@@ -163,7 +163,8 @@ For detailed parameter info on any command, run: \`byreal-cli catalog show <capa
 \`pools analyze\` returns: pool info, metrics (TVL/volume/fees/feeApr), volatility, active rewards (token, APR, daily amount, end date), rangeAnalysis (per range: price bounds, estimated fee APR, in-range likelihood), riskFactors, wallet info, investmentProjection.
 
 ### Position Analysis Response
-\`positions analyze\` returns: position info (NFT, pool, pair, range, status, inRange), performance (liquidityUsd, earnedUsd/%, pnlUsd/%, netReturnUsd/%), rangeHealth (distance to bounds, outOfRangeRisk), poolContext, unclaimedFees.
+\`positions analyze\` returns: position info (NFT, pool, pair, range, status, inRange), performance (liquidityUsd, earnedUsd/%, pnlUsd/%, netReturnUsd/% — all USD values pre-formatted with $ prefix like "$0.0065"), rangeHealth (distance to bounds, outOfRangeRisk), poolContext, unclaimedFees (each token has symbol, amount, amountUsd; plus totalUsd).
+\`positions list\` JSON includes *UsdDisplay fields (e.g. earnedUsdDisplay: "$0.0065") for LLM-friendly reading.
 
 ### Position Lifecycle: decrease vs close
 - \`decrease --percentage 100\`: Removes all liquidity but **keeps the position NFT**. Can add liquidity again later with \`increase\`.

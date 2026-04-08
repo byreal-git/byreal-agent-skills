@@ -83,7 +83,7 @@ function createTable(headers: string[]): Table.Table {
   });
 }
 
-function formatUsd(value: number): string {
+export function formatUsd(value: number): string {
   if (value >= 1_000_000) {
     return `$${(value / 1_000_000).toFixed(2)}M`;
   }
@@ -367,8 +367,9 @@ export function outputWalletBalance(balance: WalletBalance, address: string): vo
   console.log(chalk.cyan.bold(`\nBalance: ${address}\n`));
 
   // SOL balance
-  const table = createTable(['Mint', 'Balance', 'Program']);
+  const table = createTable(['Symbol', 'Mint', 'Balance', 'Program']);
   table.push([
+    chalk.white.bold('SOL'),
     chalk.gray('native'),
     `${balance.sol.amount_sol.toFixed(9)} SOL${balance.sol.amount_usd ? ` (${formatUsd(balance.sol.amount_usd)})` : ''}`,
     'spl-token',
@@ -380,8 +381,12 @@ export function outputWalletBalance(balance: WalletBalance, address: string): vo
     if (token.multiplier && token.amount_ui_display) {
       balanceDisplay = `${token.amount_ui} ${chalk.gray(`(display: ${token.amount_ui_display}, x${token.multiplier})`)}`;
     }
+    if (token.amount_usd) {
+      balanceDisplay += ` ${chalk.green(token.amount_usd)}`;
+    }
 
     table.push([
+      token.symbol ? chalk.white.bold(token.symbol) : '',
       chalk.gray(token.mint),
       balanceDisplay,
       token.is_token_2022 ? 'token-2022' : 'spl-token',
@@ -592,24 +597,33 @@ export function outputPositionClosePreview(data: {
   priceLower: string;
   priceUpper: string;
   tokenAmountA: string;
+  tokenAmountAUsd?: string;
   tokenAmountB: string;
+  tokenAmountBUsd?: string;
   feeAmountA: string;
+  feeAmountAUsd?: string;
   feeAmountB: string;
+  feeAmountBUsd?: string;
   symbolA: string;
   symbolB: string;
+  totalUsd?: string;
 }): void {
   console.log(chalk.cyan.bold('\nClose Position Preview\n'));
 
+  const usdSuffix = (usd?: string) => usd ? ` (${usd})` : '';
   const table = createTable(['Field', 'Value']);
   table.push(
     ['NFT Mint', chalk.gray(data.nftMint)],
     ['Pool', chalk.gray(data.poolAddress)],
     ['Price Range', `${data.priceLower} → ${data.priceUpper}`],
-    ['Token A to Receive', `${data.tokenAmountA} ${data.symbolA}`],
-    ['Token B to Receive', `${data.tokenAmountB} ${data.symbolB}`],
-    ['Fee A to Claim', `${data.feeAmountA} ${data.symbolA}`],
-    ['Fee B to Claim', `${data.feeAmountB} ${data.symbolB}`],
+    ['Token A to Receive', `${data.tokenAmountA} ${data.symbolA}${usdSuffix(data.tokenAmountAUsd)}`],
+    ['Token B to Receive', `${data.tokenAmountB} ${data.symbolB}${usdSuffix(data.tokenAmountBUsd)}`],
+    ['Fee A to Claim', `${data.feeAmountA} ${data.symbolA}${usdSuffix(data.feeAmountAUsd)}`],
+    ['Fee B to Claim', `${data.feeAmountB} ${data.symbolB}${usdSuffix(data.feeAmountBUsd)}`],
   );
+  if (data.totalUsd) {
+    table.push(['Total Value', chalk.bold(data.totalUsd)]);
+  }
 
   console.log(table.toString());
 }
@@ -637,15 +651,21 @@ export function outputPositionIncreasePreview(data: {
     ['Price Range', `${data.priceLower} → ${data.priceUpper}`],
   );
   if (data.currentTokenA && data.symbolA) {
-    table.push(['Current Token A', `${data.currentTokenA} ${data.symbolA}`]);
+    const usd = (data as { currentTokenAUsd?: string }).currentTokenAUsd;
+    table.push(['Current Token A', `${data.currentTokenA} ${data.symbolA}${usd ? ` (${usd})` : ''}`]);
   }
   if (data.currentTokenB && data.symbolB) {
-    table.push(['Current Token B', `${data.currentTokenB} ${data.symbolB}`]);
+    const usd = (data as { currentTokenBUsd?: string }).currentTokenBUsd;
+    table.push(['Current Token B', `${data.currentTokenB} ${data.symbolB}${usd ? ` (${usd})` : ''}`]);
   }
   table.push(
     ['Base Amount to Add', `${data.baseAmount} ${data.baseToken}`],
     ['Other Amount to Add', `${data.otherAmount} ${data.otherToken}`],
   );
+  const totalUsd = (data as { totalUsd?: string }).totalUsd;
+  if (totalUsd) {
+    table.push(['Total to Add', chalk.bold(totalUsd)]);
+  }
 
   console.log(table.toString());
 }
@@ -657,9 +677,14 @@ export function outputPositionDecreasePreview(data: {
   priceUpper: string;
   percentage: number;
   tokenAmountA: string;
+  tokenAmountAUsd?: string;
   tokenAmountB: string;
+  tokenAmountBUsd?: string;
   receiveAmountA: string;
+  receiveAmountAUsd?: string;
   receiveAmountB: string;
+  receiveAmountBUsd?: string;
+  receiveUsdTotal?: string;
   symbolA: string;
   symbolB: string;
   totalPositionUsd?: string;
@@ -667,25 +692,29 @@ export function outputPositionDecreasePreview(data: {
 }): void {
   console.log(chalk.cyan.bold('\nDecrease Liquidity Preview\n'));
 
+  const usdSuffix = (usd?: string) => usd ? ` (${usd})` : '';
   const table = createTable(['Field', 'Value']);
   table.push(
     ['NFT Mint', chalk.gray(data.nftMint)],
     ['Pool', chalk.gray(data.poolAddress)],
     ['Price Range', `${data.priceLower} → ${data.priceUpper}`],
-    ['Current Token A', `${data.tokenAmountA} ${data.symbolA}`],
-    ['Current Token B', `${data.tokenAmountB} ${data.symbolB}`],
+    ['Current Token A', `${data.tokenAmountA} ${data.symbolA}${usdSuffix(data.tokenAmountAUsd)}`],
+    ['Current Token B', `${data.tokenAmountB} ${data.symbolB}${usdSuffix(data.tokenAmountBUsd)}`],
   );
   if (data.totalPositionUsd) {
-    table.push(['Total Position Value', `$${data.totalPositionUsd}`]);
+    table.push(['Total Position Value', data.totalPositionUsd]);
   }
   if (data.requestedUsd) {
     table.push(['Remove Amount', `$${data.requestedUsd}`]);
   }
   table.push(
     ['Remove Percentage', `${data.percentage}%`],
-    ['Token A to Receive', `${data.receiveAmountA} ${data.symbolA}`],
-    ['Token B to Receive', `${data.receiveAmountB} ${data.symbolB}`],
+    ['Token A to Receive', `${data.receiveAmountA} ${data.symbolA}${usdSuffix(data.receiveAmountAUsd)}`],
+    ['Token B to Receive', `${data.receiveAmountB} ${data.symbolB}${usdSuffix(data.receiveAmountBUsd)}`],
   );
+  if (data.receiveUsdTotal) {
+    table.push(['Receive Total', chalk.bold(data.receiveUsdTotal)]);
+  }
 
   console.log(table.toString());
 }
@@ -697,7 +726,12 @@ export function outputPositionClaimPreview(entries: FeeEncodeEntry[]): void {
     console.log(chalk.white.bold(`  Position: ${entry.positionAddress}`));
     for (const token of entry.tokens) {
       const uiAmount = rawToUi(String(token.tokenAmount), token.tokenDecimals);
-      console.log(chalk.gray(`    ${uiAmount} ${token.tokenSymbol} (${token.tokenAddress})`));
+      const usdPart = (token as { amountUsd?: string }).amountUsd ? ` (${(token as { amountUsd?: string }).amountUsd})` : '';
+      console.log(chalk.gray(`    ${uiAmount} ${token.tokenSymbol}${usdPart} (${token.tokenAddress})`));
+    }
+    const totalUsd = (entry as { totalUsd?: string }).totalUsd;
+    if (totalUsd) {
+      console.log(chalk.gray(`    Total: ${totalUsd}`));
     }
     console.log();
   }
@@ -732,7 +766,7 @@ export function outputRewardsPreview(
       const claimed = parseFloat(r.claimedTokenAmount);
       const unclaimed = synced - locked - claimed;
       if (unclaimed <= 0) continue;
-      const usdValue = parseFloat(r.price) > 0 ? ` (~$${(unclaimed * parseFloat(r.price)).toFixed(2)})` : '';
+      const usdValue = parseFloat(r.price) > 0 ? ` (${formatUsd(unclaimed * parseFloat(r.price))})` : '';
       console.log(chalk.gray(`    ${unclaimed.toFixed(r.tokenDecimals > 6 ? 6 : r.tokenDecimals)} ${r.tokenSymbol}${usdValue} (${r.tokenAddress})`));
     }
     console.log();
@@ -1063,13 +1097,13 @@ export function outputPositionAnalysisTable(data: any): void {
   // Performance
   console.log(chalk.cyan.bold('Performance'));
   const perfTable = createTable(['Metric', 'Value']);
-  const pnlColor = parseFloat(data.performance.pnlUsd) >= 0 ? chalk.green : chalk.red;
-  const netColor = parseFloat(data.performance.netReturnUsd) >= 0 ? chalk.green : chalk.red;
+  const pnlColor = data.performance.pnlUsd.startsWith('-') ? chalk.red : chalk.green;
+  const netColor = data.performance.netReturnUsd.startsWith('-') ? chalk.red : chalk.green;
   perfTable.push(
-    ['Liquidity', `$${data.performance.liquidityUsd}`],
-    ['Earned Fees', `$${data.performance.earnedUsd} (${data.performance.earnedPercent})`],
-    ['PnL (IL)', pnlColor(`$${data.performance.pnlUsd} (${data.performance.pnlPercent})`)],
-    ['Net Return', netColor(`$${data.performance.netReturnUsd} (${data.performance.netReturnPercent})`)],
+    ['Liquidity', data.performance.liquidityUsd],
+    ['Earned Fees', `${data.performance.earnedUsd} (${data.performance.earnedPercent})`],
+    ['PnL (IL)', pnlColor(`${data.performance.pnlUsd} (${data.performance.pnlPercent})`)],
+    ['Net Return', netColor(`${data.performance.netReturnUsd} (${data.performance.netReturnPercent})`)],
   );
   console.log(perfTable.toString());
 
@@ -1094,18 +1128,19 @@ export function outputPositionAnalysisTable(data: any): void {
   const poolTable = createTable(['Metric', 'Value']);
   poolTable.push(
     ['Fee APR (24h)', data.poolContext.feeApr24h],
-    ['Volume (24h)', `$${data.poolContext.volume24h}`],
-    ['TVL', `$${data.poolContext.tvl}`],
+    ['Volume (24h)', data.poolContext.volume24h],
+    ['TVL', data.poolContext.tvl],
     ['Price Change (24h)', data.poolContext.priceChange24h],
   );
   console.log(poolTable.toString());
 
   // Unclaimed Fees
   console.log(chalk.cyan.bold('\nUnclaimed Fees'));
-  const feeTable = createTable(['Token', 'Amount']);
+  const feeTable = createTable(['Token', 'Amount', 'USD Value']);
   feeTable.push(
-    [data.unclaimedFees.tokenA.symbol, data.unclaimedFees.tokenA.amount],
-    [data.unclaimedFees.tokenB.symbol, data.unclaimedFees.tokenB.amount],
+    [data.unclaimedFees.tokenA.symbol, data.unclaimedFees.tokenA.amount, data.unclaimedFees.tokenA.amountUsd],
+    [data.unclaimedFees.tokenB.symbol, data.unclaimedFees.tokenB.amount, data.unclaimedFees.tokenB.amountUsd],
+    [chalk.bold('Total'), '', chalk.bold(data.unclaimedFees.totalUsd)],
   );
   console.log(feeTable.toString());
 }

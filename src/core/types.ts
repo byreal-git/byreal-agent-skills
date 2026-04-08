@@ -300,6 +300,8 @@ export interface TokenBalance {
   decimals: number;
   is_native: boolean;
   is_token_2022: boolean;
+  price_usd?: number;
+  amount_usd?: string;
 }
 
 // ============================================

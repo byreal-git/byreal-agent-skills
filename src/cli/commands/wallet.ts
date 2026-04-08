@@ -29,6 +29,7 @@ import {
   outputWalletAddress,
   outputWalletInfo,
   outputWalletBalance,
+  formatUsd,
 } from '../output/formatters.js';
 import { api } from '../../api/endpoints.js';
 
@@ -177,32 +178,58 @@ export function createWalletCommand(): Command {
           });
         }
 
-        // Enrich Token2022 tokens with multiplier from API (graceful on failure)
-        const t22Mints = tokens.filter(t => t.is_token_2022).map(t => t.mint);
+        // Enrich all tokens with symbol/name from API, and Token2022 with multiplier
         try {
-          const t22Info = await fetchToken2022Multipliers(t22Mints);
+          const tokenInfo = await fetchToken2022Multipliers(tokens.map(t => t.mint));
           for (const token of tokens) {
-            const info = t22Info.get(token.mint);
+            const info = tokenInfo.get(token.mint);
             if (!info) continue;
             if (info.symbol) token.symbol = info.symbol;
             if (info.name) token.name = info.name;
-            if (info.multiplier && parseFloat(info.multiplier) !== 1) {
+            if (token.is_token_2022 && info.multiplier && parseFloat(info.multiplier) !== 1) {
               token.multiplier = info.multiplier;
               token.amount_ui_display = (parseFloat(token.amount_ui) * parseFloat(info.multiplier)).toString();
             }
           }
-        } catch { /* API failure: skip multiplier enrichment */ }
+        } catch { /* API failure: skip enrichment */ }
 
+        // Fetch USD prices for all tokens + SOL
+        const SOL_MINT = "So11111111111111111111111111111111111111112";
+        const allMints = [SOL_MINT, ...tokens.map(t => t.mint)];
+        let prices: Record<string, number> = {};
+        try {
+          const pricesResult = await api.getTokenPrices(allMints);
+          if (pricesResult.ok) prices = pricesResult.value;
+        } catch { /* price fetch failure: skip USD enrichment */ }
+
+        const solPriceUsd = prices[SOL_MINT] ?? 0;
         const balance: WalletBalance = {
           sol: {
             amount_lamports: lamports.toString(),
             amount_sol: solBalance,
+            amount_usd: solPriceUsd > 0 ? solBalance * solPriceUsd : undefined,
           },
-          tokens,
+          tokens: tokens.map(t => {
+            const price = prices[t.mint] ?? 0;
+            const uiAmount = parseFloat(t.amount_ui_display || t.amount_ui);
+            return {
+              ...t,
+              price_usd: price > 0 ? price : undefined,
+              amount_usd: price > 0 ? formatUsd(uiAmount * price) : undefined,
+            };
+          }),
         };
 
+        // Calculate total portfolio USD
+        const totalUsd = (balance.sol.amount_usd ?? 0) +
+          balance.tokens.reduce((sum, t) => {
+            const price = prices[t.mint] ?? 0;
+            const uiAmount = parseFloat(t.amount_ui_display || t.amount_ui);
+            return sum + uiAmount * price;
+          }, 0);
+
         if (globalOptions.output === 'json') {
-          outputJson({ address, balance }, startTime);
+          outputJson({ address, balance, totalUsd: formatUsd(totalUsd) }, startTime);
         } else {
           outputWalletBalance(balance, address);
         }

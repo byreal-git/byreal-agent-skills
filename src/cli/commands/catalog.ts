@@ -222,7 +222,7 @@ const CAPABILITIES: Capability[] = [
   {
     id: 'dex.position.list',
     name: 'List Positions',
-    description: 'List CLMM positions for your wallet or any wallet address. Use --user to query another wallet (read-only, no --wallet-address needed).',
+    description: 'List CLMM positions for your wallet or any wallet address. JSON output includes pre-formatted USD display fields (*UsdDisplay). Use --user to query another wallet (read-only, no --wallet-address needed).',
     category: 'query',
     auth_required: false,
     command: 'byreal-cli positions list',
@@ -239,7 +239,7 @@ const CAPABILITIES: Capability[] = [
   {
     id: 'dex.position.analyze',
     name: 'Position Analysis',
-    description: 'Analyze existing position: performance (earned, PnL, net return), range health, pool context, and unclaimed fees',
+    description: 'Analyze existing position: performance (earned, PnL, net return with formatted USD values), range health, pool context, and unclaimed fees with USD values.',
     category: 'analyze',
     auth_required: true,
     command: 'byreal-cli positions analyze <nft-mint>',

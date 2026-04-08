@@ -29,6 +29,7 @@ import {
   outputErrorTable,
   outputSwapQuoteTable,
   outputSwapResultTable,
+  formatUsd,
 } from '../output/formatters.js';
 
 // ============================================
@@ -174,7 +175,20 @@ function createSwapExecuteCommand(): Command {
         if (mode === 'dry-run') {
           printDryRunBanner();
           if (format === 'json') {
-            outputJson({ mode: 'dry-run', ...quote, uiInAmount, uiOutAmount }, startTime);
+            // Fetch token prices for USD values
+            let inAmountUsd: string | undefined;
+            let outAmountUsd: string | undefined;
+            try {
+              const pricesResult = await api.getTokenPrices([quote.inputMint, quote.outputMint]);
+              if (pricesResult.ok) {
+                const prices = pricesResult.value;
+                const inPrice = prices[quote.inputMint] ?? 0;
+                const outPrice = prices[quote.outputMint] ?? 0;
+                if (inPrice > 0) inAmountUsd = formatUsd(parseFloat(uiInAmount) * inPrice);
+                if (outPrice > 0) outAmountUsd = formatUsd(parseFloat(uiOutAmount) * outPrice);
+              }
+            } catch { /* price fetch failure: skip USD */ }
+            outputJson({ mode: 'dry-run', ...quote, uiInAmount, uiOutAmount, inAmountUsd, outAmountUsd }, startTime);
           } else {
             outputSwapQuoteTable(quote, uiInAmount, uiOutAmount);
             console.log(chalk.yellow('\n  Use --confirm to execute this swap'));
