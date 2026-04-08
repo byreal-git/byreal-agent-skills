@@ -570,21 +570,20 @@ function createPositionsOpenCommand(): Command {
             otherAmount: rawToUi(otherAmountMax.toString(), otherDecimals),
             otherToken: otherSymbol,
             ...(investmentUsd ? { investmentUsd } : {}),
-            ...(totalUsd
-              ? {
-                  tokenA: {
-                    symbol: symbolA,
-                    amount: amountAUi,
-                    usd: amountAUsd,
-                  },
-                  tokenB: {
-                    symbol: symbolB,
-                    amount: amountBUi,
-                    usd: amountBUsd,
-                  },
-                  totalUsd,
-                }
-              : {}),
+            tokenA: {
+              symbol: symbolA,
+              amount: amountAUi,
+              usd: amountAUsd ?? formatUsd(parseFloat(amountAUi) * tokenAPriceUsd),
+            },
+            tokenB: {
+              symbol: symbolB,
+              amount: amountBUi,
+              usd: amountBUsd ?? formatUsd(parseFloat(amountBUi) * tokenBPriceUsd),
+            },
+            totalUsd: totalUsd ?? formatUsd(
+              parseFloat(amountAUi) * tokenAPriceUsd +
+              parseFloat(amountBUi) * tokenBPriceUsd
+            ),
           };
 
           // Check wallet balance
@@ -927,6 +926,22 @@ function createPositionsIncreaseCommand(): Command {
             symbolA,
             symbolB,
             ...(investmentUsd ? { investmentUsd } : {}),
+            tokenA: {
+              symbol: symbolA,
+              amount: rawToUi((base === "MintA" ? baseAmount : otherAmountMax).toString(), poolInfo.mintDecimalsA),
+              usd: formatUsd(parseFloat(rawToUi((base === "MintA" ? baseAmount : otherAmountMax).toString(), poolInfo.mintDecimalsA)) * tokenAPriceUsd),
+            },
+            tokenB: {
+              symbol: symbolB,
+              amount: rawToUi((base === "MintA" ? otherAmountMax : baseAmount).toString(), poolInfo.mintDecimalsB),
+              usd: formatUsd(parseFloat(rawToUi((base === "MintA" ? otherAmountMax : baseAmount).toString(), poolInfo.mintDecimalsB)) * tokenBPriceUsd),
+            },
+            currentTokenAUsd: formatUsd(parseFloat(positionInfo.tokenA.uiAmount) * tokenAPriceUsd),
+            currentTokenBUsd: formatUsd(parseFloat(positionInfo.tokenB.uiAmount) * tokenBPriceUsd),
+            totalUsd: formatUsd(
+              parseFloat(rawToUi((base === "MintA" ? baseAmount : otherAmountMax).toString(), poolInfo.mintDecimalsA)) * tokenAPriceUsd +
+              parseFloat(rawToUi((base === "MintA" ? otherAmountMax : baseAmount).toString(), poolInfo.mintDecimalsB)) * tokenBPriceUsd
+            ),
           };
 
           // Check wallet balance
@@ -1241,6 +1256,8 @@ function createPositionsDecreaseCommand(): Command {
         // Dry-run: show preview
         if (mode === "dry-run") {
           printDryRunBanner();
+          const receiveAUsd = parseFloat(receiveAmountAUi) * tokenAPriceUsd;
+          const receiveBUsd = parseFloat(receiveAmountBUi) * tokenBPriceUsd;
           const previewData = {
             nftMint: options.nftMint,
             poolAddress,
@@ -1248,12 +1265,17 @@ function createPositionsDecreaseCommand(): Command {
             priceUpper: positionInfo.uiPriceUpper,
             percentage: Math.round(percentage * 100) / 100,
             tokenAmountA: positionInfo.tokenA.uiAmount,
+            tokenAmountAUsd: formatUsd(tokenAUiAmount * tokenAPriceUsd),
             tokenAmountB: positionInfo.tokenB.uiAmount,
+            tokenAmountBUsd: formatUsd(tokenBUiAmount * tokenBPriceUsd),
             receiveAmountA: receiveAmountAUi,
+            receiveAmountAUsd: formatUsd(receiveAUsd),
             receiveAmountB: receiveAmountBUi,
+            receiveAmountBUsd: formatUsd(receiveBUsd),
+            receiveUsdTotal: formatUsd(receiveAUsd + receiveBUsd),
             symbolA,
             symbolB,
-            ...(totalPositionUsd > 0 ? { totalPositionUsd: totalPositionUsd.toFixed(2) } : {}),
+            ...(totalPositionUsd > 0 ? { totalPositionUsd: formatUsd(totalPositionUsd) } : {}),
             ...(requestedUsd ? { requestedUsd } : {}),
           };
 
@@ -1364,30 +1386,46 @@ function createPositionsCloseCommand(): Command {
           process.exit(1);
         }
 
-        // Try to resolve token symbols from API pool info
+        // Try to resolve token symbols and prices from API pool info
         const poolAddress = positionInfo.rawPoolInfo.poolId.toBase58();
         let symbolA = positionInfo.tokenA.address.toBase58();
         let symbolB = positionInfo.tokenB.address.toBase58();
+        let tokenAPriceUsd = 0;
+        let tokenBPriceUsd = 0;
         const poolResult = await api.getPoolInfo(poolAddress);
         if (poolResult.ok) {
           symbolA = poolResult.value.token_a.symbol || symbolA;
           symbolB = poolResult.value.token_b.symbol || symbolB;
+          tokenAPriceUsd = poolResult.value.token_a.price_usd ?? 0;
+          tokenBPriceUsd = poolResult.value.token_b.price_usd ?? 0;
         }
 
         // Dry-run: show preview
         if (mode === "dry-run") {
           printDryRunBanner();
+          const tokenAmountAVal = parseFloat(positionInfo.tokenA.uiAmount || "0");
+          const tokenAmountBVal = parseFloat(positionInfo.tokenB.uiAmount || "0");
+          const feeAmountAVal = parseFloat(positionInfo.tokenA.uiFeeAmount || "0");
+          const feeAmountBVal = parseFloat(positionInfo.tokenB.uiFeeAmount || "0");
           const previewData = {
             nftMint: options.nftMint,
             poolAddress,
             priceLower: positionInfo.uiPriceLower,
             priceUpper: positionInfo.uiPriceUpper,
             tokenAmountA: positionInfo.tokenA.uiAmount,
+            tokenAmountAUsd: formatUsd(tokenAmountAVal * tokenAPriceUsd),
             tokenAmountB: positionInfo.tokenB.uiAmount,
+            tokenAmountBUsd: formatUsd(tokenAmountBVal * tokenBPriceUsd),
             feeAmountA: positionInfo.tokenA.uiFeeAmount,
+            feeAmountAUsd: formatUsd(feeAmountAVal * tokenAPriceUsd),
             feeAmountB: positionInfo.tokenB.uiFeeAmount,
+            feeAmountBUsd: formatUsd(feeAmountBVal * tokenBPriceUsd),
             symbolA,
             symbolB,
+            totalUsd: formatUsd(
+              (tokenAmountAVal + feeAmountAVal) * tokenAPriceUsd +
+              (tokenAmountBVal + feeAmountBVal) * tokenBPriceUsd
+            ),
           };
 
           if (format === "json") {
@@ -1551,10 +1589,27 @@ function createPositionsClaimCommand(): Command {
       // Dry-run: show preview
       if (mode === "dry-run") {
         printDryRunBanner();
+        // Enrich entries with USD values
+        const allMints = [...new Set(entries.flatMap((e: { tokens: { tokenAddress: string }[] }) => e.tokens.map((t: { tokenAddress: string }) => t.tokenAddress)))];
+        const pricesResult = await api.getTokenPrices(allMints as string[]);
+        const prices: Record<string, number> = pricesResult.ok ? pricesResult.value : {};
+        const enrichedEntries = entries.map((entry: { positionAddress: string; txPayload: string; tokens: { tokenAddress: string; tokenAmount: string; tokenDecimals: number; tokenSymbol: string }[] }) => {
+          const enrichedTokens = entry.tokens.map((t) => {
+            const uiAmount = parseFloat(t.tokenAmount) / Math.pow(10, t.tokenDecimals);
+            const price = prices[t.tokenAddress] ?? 0;
+            return { ...t, amountUsd: formatUsd(uiAmount * price) };
+          });
+          const totalUsd = enrichedTokens.reduce((sum, t) => {
+            const uiAmount = parseFloat(t.tokenAmount) / Math.pow(10, t.tokenDecimals);
+            const price = prices[t.tokenAddress] ?? 0;
+            return sum + uiAmount * price;
+          }, 0);
+          return { ...entry, tokens: enrichedTokens, totalUsd: formatUsd(totalUsd) };
+        });
         if (format === "json") {
-          outputJson({ mode: "dry-run", entries }, startTime);
+          outputJson({ mode: "dry-run", entries: enrichedEntries }, startTime);
         } else {
-          outputPositionClaimPreview(entries);
+          outputPositionClaimPreview(enrichedEntries);
           console.log(chalk.yellow("\n  Remove --dry-run to generate the unsigned transaction(s)"));
         }
         return;
@@ -1618,15 +1673,28 @@ function createPositionsClaimRewardsCommand(): Command {
         const closedRewards = filterUnclaimed(unclaimedClosedIncentives);
         const allRewards = [...openRewards, ...closedRewards];
 
+        // Enrich reward items with USD values
+        const enrichRewardItem = (item: typeof allRewards[number]) => {
+          const unclaimed = parseFloat(item.syncedTokenAmount) - parseFloat(item.lockedTokenAmount) - parseFloat(item.claimedTokenAmount);
+          const price = parseFloat(item.price || "0");
+          return {
+            ...item,
+            unclaimedAmount: unclaimed.toString(),
+            unclaimedAmountUsd: formatUsd(unclaimed * price),
+          };
+        };
+
         // Dry-run: show preview
         if (mode === "dry-run") {
           printDryRunBanner();
 
           if (format === "json") {
+            const enrichedOpen = openRewards.map(enrichRewardItem);
+            const enrichedClosed = closedRewards.map(enrichRewardItem);
             outputJson({
               mode: "dry-run",
-              openPositionRewards: openRewards,
-              closedPositionRewards: closedRewards,
+              openPositionRewards: enrichedOpen,
+              closedPositionRewards: enrichedClosed,
               totalPositions: new Set(allRewards.map((r) => r.positionAddress)).size,
             }, startTime);
           } else {
