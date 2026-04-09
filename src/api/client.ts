@@ -3,7 +3,7 @@
  */
 
 import ky, { HTTPError, TimeoutError } from "ky";
-import { API_BASE_URL, DEFAULTS } from "../core/constants.js";
+import { API_BASE_URL, DEFAULTS, VERSION } from "../core/constants.js";
 import { networkError, apiError } from "../core/errors.js";
 import type { Result } from "../core/types.js";
 import { ok, err } from "../core/types.js";
@@ -18,7 +18,7 @@ const client = ky.create({
   timeout: DEFAULTS.REQUEST_TIMEOUT_MS,
   headers: {
     "Content-Type": "application/json",
-    "User-Agent": "byreal-cli",
+    "User-Agent": `byreal-cli/${VERSION}`,
   },
   hooks: {
     beforeRequest: [

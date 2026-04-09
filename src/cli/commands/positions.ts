@@ -46,6 +46,7 @@ import {
   outputTopPositionsTable,
   outputCopyPositionPreview,
 } from "../output/formatters.js";
+import { trackEvent } from "../../core/telemetry.js";
 
 // ============================================
 // positions list
@@ -729,6 +730,20 @@ function createPositionsOpenCommand(): Command {
           nftAddress: result.nftAddress,
         };
 
+        // Telemetry: report position open (fire-and-forget)
+        trackEvent(publicKey.toBase58(), 'CliPositionOpened', {
+          tx_signature: sendResult.value.signature,
+          pool_address: options.pool,
+          tick_lower: tickLower,
+          tick_upper: tickUpper,
+          base_token: base,
+          base_amount: baseAmount.toString(),
+          other_amount: otherAmountMax.toString(),
+          nft_address: result.nftAddress,
+          confirmed: sendResult.value.confirmed,
+          ...(investmentUsd ? { investment_usd: investmentUsd } : {}),
+        });
+
         if (format === "json") {
           outputJson(txData, startTime);
         } else {
@@ -1136,6 +1151,17 @@ function createPositionsIncreaseCommand(): Command {
           confirmed: sendResult.value.confirmed,
         };
 
+        // Telemetry: report position increase (fire-and-forget)
+        trackEvent(publicKey.toBase58(), 'CliPositionIncreased', {
+          tx_signature: sendResult.value.signature,
+          pool_address: poolAddress,
+          nft_mint: options.nftMint,
+          base_amount: baseAmount.toString(),
+          other_amount: otherAmountMax.toString(),
+          confirmed: sendResult.value.confirmed,
+          ...(investmentUsd ? { investment_usd: investmentUsd } : {}),
+        });
+
         if (format === "json") {
           outputJson(txData, startTime);
         } else {
@@ -1479,6 +1505,15 @@ function createPositionsDecreaseCommand(): Command {
           confirmed: sendResult.value.confirmed,
         };
 
+        // Telemetry: report position decrease (fire-and-forget)
+        trackEvent(publicKey.toBase58(), 'CliPositionDecreased', {
+          tx_signature: sendResult.value.signature,
+          pool_address: poolAddress,
+          nft_mint: options.nftMint,
+          percentage: Math.round(percentage * 100) / 100,
+          confirmed: sendResult.value.confirmed,
+        });
+
         if (format === "json") {
           outputJson(txData, startTime);
         } else {
@@ -1675,6 +1710,14 @@ function createPositionsCloseCommand(): Command {
           signature: sendResult.value.signature,
           confirmed: sendResult.value.confirmed,
         };
+
+        // Telemetry: report position close (fire-and-forget)
+        trackEvent(publicKey.toBase58(), 'CliPositionClosed', {
+          tx_signature: sendResult.value.signature,
+          pool_address: poolAddress,
+          nft_mint: options.nftMint,
+          confirmed: sendResult.value.confirmed,
+        });
 
         if (format === "json") {
           outputJson(txData, startTime);
@@ -1898,6 +1941,16 @@ function createPositionsClaimCommand(): Command {
         }
       }
 
+      // Telemetry: report fee claim (fire-and-forget)
+      const succeeded = results.filter((r) => r.signature).length;
+      const failed = results.filter((r) => r.error).length;
+      trackEvent(address, 'CliFeeClaimed', {
+        tx_signatures: results.filter((r) => r.signature).map((r) => r.signature).join(','),
+        position_count: results.length,
+        succeeded,
+        failed,
+      });
+
       if (format === "json") {
         outputJson({ results }, startTime);
       } else {
@@ -1916,8 +1969,6 @@ function createPositionsClaimCommand(): Command {
           console.log();
         }
 
-        const succeeded = results.filter((r) => r.signature).length;
-        const failed = results.filter((r) => r.error).length;
         console.log(chalk.gray(`  ${succeeded} succeeded, ${failed} failed`));
       }
     });
@@ -3044,6 +3095,15 @@ function createCopyPositionCommand(): Command {
           poolAddress,
           pair,
         };
+
+        // Telemetry: report position copy (fire-and-forget)
+        trackEvent(publicKey.toBase58(), 'CliPositionCopied', {
+          tx_signature: sendResult.value.signature,
+          pool_address: poolAddress,
+          nft_address: result.nftAddress,
+          parent_position: options.position,
+          confirmed: sendResult.value.confirmed,
+        });
 
         if (format === "json") {
           outputJson(txData, startTime);
