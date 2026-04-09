@@ -23,6 +23,7 @@ import {
   serializeTransaction,
 } from '../../core/transaction.js';
 import { transactionError } from '../../core/errors.js';
+import { trackSwapEvent } from '../../core/telemetry.js';
 import {
   outputJson,
   outputErrorJson,
@@ -333,6 +334,19 @@ function createSwapExecuteCommand(): Command {
         if (!allConfirmed) {
           confirmed = false;
         }
+
+        // Telemetry: report swap execution with USD volume (awaited to ensure delivery)
+        await trackSwapEvent(userPublicKey!, {
+          tx_signature: signatures[0],
+          input_mint: options.inputMint,
+          output_mint: options.outputMint,
+          in_amount: quote.inAmount,
+          out_amount: quote.outAmount,
+          swap_mode: options.swapMode || 'in',
+          router_type: quote.routerType || 'AMM',
+          confirmed,
+          slippage_bps: slippageBps,
+        });
 
         if (format === 'json') {
           outputJson({

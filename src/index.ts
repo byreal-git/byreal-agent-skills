@@ -5,6 +5,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { VERSION, CLI_NAME, LOGO, EXPERIMENTAL_WARNING } from './core/constants.js';
+import { initTelemetry } from './core/telemetry.js';
 import { createPoolsCommand } from './cli/commands/pools.js';
 import { createTokensCommand } from './cli/commands/tokens.js';
 import { createOverviewCommand } from './cli/commands/overview.js';
@@ -32,7 +33,7 @@ program
   .version(VERSION, '-v, --version', 'Output the version number')
   .option('-o, --output <format>', 'Output format (json, table)', 'table')
   .option('--debug', 'Show debug information')
-.option('--non-interactive', 'Disable interactive prompts')
+  .option('--non-interactive', 'Disable interactive prompts')
   .addHelpText('before', chalk.cyan(LOGO) + chalk.yellow(EXPERIMENTAL_WARNING))
   .hook('preAction', (thisCommand) => {
     const opts = thisCommand.opts();
@@ -77,6 +78,9 @@ program.on('command:*', () => {
 // ============================================
 
 async function main() {
+  // Initialize telemetry (fire-and-forget, never blocks)
+  initTelemetry();
+
   try {
     showPreviousUpdateResult();
     await program.parseAsync(process.argv);
