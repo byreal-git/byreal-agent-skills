@@ -182,6 +182,112 @@ export function createKaminoWithdrawCommand(): Command {
 }
 
 // ============================================
+// kamino reserves
+// ============================================
+
+// Default token set: the three assets we want to surface by default. Keep this
+// small and curated — this command is an aid to the deposit flow, not a
+// "browse all of Kamino" tool.
+const DEFAULT_RESERVE_SYMBOLS = ['SOL', 'USDC', 'USDT'] as const;
+
+function formatUsdThousands(value: number): string {
+  return `$${value.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+}
+
+export function createKaminoReservesCommand(): Command {
+  return new Command('reserves')
+    .description('Show Kamino Lend supply/borrow APY for SOL, USDC, USDT (or a specific --token)')
+    .option('--market <address>', 'Market address', kaminoApi.KAMINO_MAIN_MARKET)
+    .option('--token <symbolOrMint>', 'Query a single token by symbol (e.g. JitoSOL) or mint address instead of the default set')
+    .action(async (options, cmdObj: Command) => {
+      const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
+      const format = globalOptions.output;
+      const startTime = Date.now();
+
+      try {
+        const result = await kaminoApi.getReservesMetrics(options.market);
+        if (!result.ok) {
+          format === 'json' ? outputErrorJson(result.error) : outputErrorTable(result.error);
+          process.exit(1);
+        }
+
+        const all = result.value;
+        let reserves;
+
+        if (options.token) {
+          const needle = String(options.token).trim();
+          const bySymbol = all.filter(r => r.symbol.toLowerCase() === needle.toLowerCase());
+          const byMint = all.filter(r => r.mintAddress === needle);
+          reserves = bySymbol.length > 0 ? bySymbol : byMint;
+          if (reserves.length === 0) {
+            const msg = `Token "${needle}" not found in Kamino market ${options.market}. Pass a valid symbol (e.g. JitoSOL) or mint address.`;
+            format === 'json'
+              ? outputErrorJson({ code: 'NOT_FOUND', type: 'VALIDATION', message: msg, retryable: false })
+              : console.error(chalk.red(`\nError: ${msg}`));
+            process.exit(1);
+          }
+        } else {
+          const order = new Map(DEFAULT_RESERVE_SYMBOLS.map((s, i) => [s, i]));
+          reserves = all
+            .filter(r => order.has(r.symbol as typeof DEFAULT_RESERVE_SYMBOLS[number]))
+            .sort((a, b) => (order.get(a.symbol as typeof DEFAULT_RESERVE_SYMBOLS[number]) ?? 0)
+                           - (order.get(b.symbol as typeof DEFAULT_RESERVE_SYMBOLS[number]) ?? 0));
+        }
+
+        if (format === 'json') {
+          outputJson({
+            market: options.market,
+            query: options.token ?? 'default',
+            total: reserves.length,
+            reserves,
+          }, startTime);
+          return;
+        }
+
+        const table = new Table({
+          head: [
+            chalk.cyan.bold('Token'),
+            chalk.cyan.bold('Supply APY'),
+            chalk.cyan.bold('Borrow APY'),
+            chalk.cyan.bold('TVL (USD)'),
+            chalk.cyan.bold('Borrowed (USD)'),
+            chalk.cyan.bold('Utilization'),
+            chalk.cyan.bold('Max LTV'),
+            chalk.cyan.bold('Mint'),
+            chalk.cyan.bold('Reserve'),
+          ],
+          chars: TABLE_CHARS,
+        });
+        for (const r of reserves) {
+          table.push([
+            r.symbol,
+            `${(r.supplyApy * 100).toFixed(2)}%`,
+            `${(r.borrowApy * 100).toFixed(2)}%`,
+            formatUsdThousands(r.totalSupplyUsd),
+            formatUsdThousands(r.totalBorrowUsd),
+            `${(r.utilization * 100).toFixed(2)}%`,
+            `${(r.maxLtv * 100).toFixed(0)}%`,
+            r.mintAddress,
+            r.reserveAddress,
+          ]);
+        }
+        console.log(chalk.cyan.bold('\n  Kamino Lend Reserves'));
+        console.log(chalk.gray(`  Market: ${options.market}`));
+        if (!options.token) {
+          console.log(chalk.gray(`  Showing default set: ${DEFAULT_RESERVE_SYMBOLS.join(', ')}  (use --token <symbol|mint> for others)`));
+        }
+        console.log(table.toString());
+      } catch (e) {
+        const message = (e as Error).message || 'Kamino reserves failed';
+        format === 'json'
+          ? outputErrorJson({ code: 'API_ERROR', type: 'NETWORK', message, retryable: true })
+          : console.error(chalk.red(`\nError: ${message}`));
+        process.exit(1);
+      }
+    });
+}
+
+// ============================================
 // kamino status
 // ============================================
 

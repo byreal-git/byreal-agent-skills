@@ -12,17 +12,16 @@ export interface KaminoMarket {
   isMain: boolean;
 }
 
-export interface KaminoReserve {
-  address: string;
+export interface KaminoReserveMetrics {
+  reserveAddress: string;
   mintAddress: string;
   symbol: string;
-  decimals: number;
-  supplyApy: number;
+  supplyApy: number;        // decimal fraction, 0.05 = 5%
   borrowApy: number;
-  totalSupply: string;
-  totalBorrow: string;
-  availableLiquidity: string;
-  ltv: number;
+  totalSupplyUsd: number;
+  totalBorrowUsd: number;
+  utilization: number;      // 0..1
+  maxLtv: number;
 }
 
 // ============================================

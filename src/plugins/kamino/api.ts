@@ -14,6 +14,7 @@ import type {
   KaminoObligation,
   KaminoObligationDeposit,
   KaminoObligationBorrow,
+  KaminoReserveMetrics,
   RawKaminoObligationResponse,
 } from './types.js';
 
@@ -133,29 +134,65 @@ function sfToRaw(valueSf: string): string {
   }
 }
 
+interface RawReserveMetrics {
+  reserve: string;
+  liquidityToken: string;
+  liquidityTokenMint: string;
+  maxLtv: string;
+  supplyApy: string;
+  borrowApy: string;
+  totalSupply: string;
+  totalBorrow: string;
+  totalSupplyUsd: string;
+  totalBorrowUsd: string;
+}
+
+function toReserveMetrics(r: RawReserveMetrics): KaminoReserveMetrics {
+  const totalSupplyUsd = parseFloat(r.totalSupplyUsd) || 0;
+  const totalBorrowUsd = parseFloat(r.totalBorrowUsd) || 0;
+  return {
+    reserveAddress: r.reserve,
+    mintAddress: r.liquidityTokenMint,
+    symbol: r.liquidityToken,
+    supplyApy: parseFloat(r.supplyApy) || 0,
+    borrowApy: parseFloat(r.borrowApy) || 0,
+    totalSupplyUsd,
+    totalBorrowUsd,
+    utilization: totalSupplyUsd > 0 ? totalBorrowUsd / totalSupplyUsd : 0,
+    maxLtv: parseFloat(r.maxLtv) || 0,
+  };
+}
+
 /**
- * Fetch current reserve metrics (APY) for all reserves in a market.
+ * Fetch all reserves in a market with supply/borrow APY, USD totals, utilization, and LTV.
+ * Public: used by `kamino reserves` command. Surfaces errors instead of swallowing them.
  */
-async function getReserveMetrics(market: string): Promise<Record<string, { supplyApy: number; borrowApy: number }>> {
+export async function getReservesMetrics(market: string): Promise<Result<KaminoReserveMetrics[], ByrealError>> {
   try {
     const response = await fetch(`${KAMINO_API}/kamino-market/${market}/reserves/metrics`);
-    if (!response.ok) return {};
-    const data = await response.json() as Array<{
-      reserve: string;
-      supplyApy: string;
-      borrowApy: string;
-    }>;
-    const result: Record<string, { supplyApy: number; borrowApy: number }> = {};
-    for (const r of data) {
-      result[r.reserve] = {
-        supplyApy: parseFloat(r.supplyApy) || 0,
-        borrowApy: parseFloat(r.borrowApy) || 0,
-      };
+    if (!response.ok) {
+      const text = await response.text();
+      return err(apiError(`Kamino reserves metrics failed: ${text}`, response.status));
     }
-    return result;
-  } catch {
-    return {};
+    const data = await response.json() as RawReserveMetrics[];
+    return ok(data.map(toReserveMetrics));
+  } catch (error) {
+    return err(networkError(`Kamino reserves metrics: ${(error as Error).message}`));
   }
+}
+
+/**
+ * Legacy lookup used by enrichObligations — must not throw or fail the status command
+ * when the metrics endpoint is unavailable. Returns an empty map as a silent fallback.
+ */
+async function getReserveApyMap(market: string): Promise<Record<string, { supplyApy: number; borrowApy: number }>> {
+  const result = await getReservesMetrics(market);
+  if (!result.ok) return {};
+  const map: Record<string, { supplyApy: number; borrowApy: number }> = {};
+  for (const r of result.value) {
+    map[r.reserveAddress] = { supplyApy: r.supplyApy, borrowApy: r.borrowApy };
+  }
+  return map;
 }
 
 /**
@@ -210,7 +247,7 @@ async function enrichObligations(rawObligations: RawKaminoObligationResponse[], 
   // Fetch prices, reserve metrics, and exchange rates in parallel
   const [priceResult, reserveMetrics, ...exchangeRateResults] = await Promise.all([
     mintsToPrice.size > 0 ? jupiterApi.getPrice([...mintsToPrice]) : Promise.resolve({ ok: false as const, error: null }),
-    getReserveMetrics(market),
+    getReserveApyMap(market),
     ...[...activeReserves].map(r => getExchangeRate(market, r).then(rate => ({ reserve: r, rate }))),
   ]);
 

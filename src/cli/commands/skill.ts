@@ -84,6 +84,7 @@ byreal-cli catalog show dex.pool.list
 | update.install | Install latest CLI version |
 | defi.jup.swap | Swap tokens via Jupiter aggregator |
 | defi.jup.price | Get token prices from Jupiter |
+| defi.kamino.reserves | Show Kamino Lend APY for SOL/USDC/USDT (or a specific --token) |
 | defi.kamino.deposit | Deposit to Kamino Lend |
 | defi.kamino.withdraw | Withdraw from Kamino Lend |
 | defi.kamino.status | View Kamino positions and APY |
@@ -158,6 +159,8 @@ Present on-chain data first, then external context, then synthesize how external
 | Jupiter swap preview | \`byreal-cli jup swap --input-mint <mint> --output-mint <mint> --amount <amt> --dry-run --wallet-address <addr>\` |
 | Jupiter swap execute | \`byreal-cli jup swap --input-mint <mint> --output-mint <mint> --amount <amt> --wallet-address <addr>\` |
 | Jupiter token price | \`byreal-cli jup price --mint <mint>\` |
+| Kamino APY (SOL/USDC/USDT) | \`byreal-cli kamino reserves\` |
+| Kamino APY (specific token) | \`byreal-cli kamino reserves --token <symbol|mint>\` |
 | Kamino deposit | \`byreal-cli kamino deposit --amount <amt> --wallet-address <addr>\` |
 | Kamino withdraw | \`byreal-cli kamino withdraw --amount <amt> --wallet-address <addr>\` |
 | Kamino status | \`byreal-cli kamino status --wallet-address <addr>\` |
@@ -290,9 +293,10 @@ When user wants to swap tokens via Jupiter (not the built-in Byreal swap):
 ## Workflow: Idle Yield with Kamino
 
 When user wants to earn yield on idle tokens (e.g. USDC):
-1. **Check status**: \`byreal-cli kamino status --wallet-address <addr>\` — view current positions and APY
-2. **Deposit**: \`byreal-cli kamino deposit --amount <amt> --wallet-address <addr>\` — deposit USDC (default) or specify \`--mint <mint>\` for other tokens
-3. **Withdraw**: \`byreal-cli kamino withdraw --amount <amt> --wallet-address <addr>\` — withdraw back to wallet
+1. **Check APY**: \`byreal-cli kamino reserves\` — shows the supply/borrow APY for SOL, USDC, USDT. For any other token, pass \`--token <symbol|mint>\` (e.g. \`--token JitoSOL\`). This is an aid, not a browser — do not attempt to list every reserve.
+2. **Check status**: \`byreal-cli kamino status --wallet-address <addr>\` — view current positions and APY
+3. **Deposit**: \`byreal-cli kamino deposit --amount <amt> --wallet-address <addr>\` — deposit USDC (default) or specify \`--mint <mint>\` for other tokens
+4. **Withdraw**: \`byreal-cli kamino withdraw --amount <amt> --wallet-address <addr>\` — withdraw back to wallet
 
 Default market: Kamino Main Market. Use \`--market <address>\` for a different market.
 

@@ -8,6 +8,7 @@ import {
   createKaminoDepositCommand,
   createKaminoWithdrawCommand,
   createKaminoStatusCommand,
+  createKaminoReservesCommand,
 } from './commands.js';
 
 const capabilities: Capability[] = [
@@ -52,6 +53,18 @@ const capabilities: Capability[] = [
       { name: 'market', type: 'string', required: false, description: 'Kamino market address', default: 'main market' },
     ],
   },
+  {
+    id: 'defi.kamino.reserves',
+    name: 'Kamino Reserves',
+    description: 'Show Kamino Lend supply/borrow APY for SOL, USDC, USDT by default. Use --token <symbol|mint> to query a specific other token.',
+    category: 'query',
+    auth_required: false,
+    command: 'byreal-cli kamino reserves',
+    params: [
+      { name: 'market', type: 'string', required: false, description: 'Kamino market address', default: 'main market' },
+      { name: 'token', type: 'string', required: false, description: 'Query a single token by symbol or mint address instead of the default SOL/USDC/USDT set' },
+    ],
+  },
 ];
 
 export const kaminoPlugin: DefiPlugin = {
@@ -61,6 +74,7 @@ export const kaminoPlugin: DefiPlugin = {
     const cmd = new Command('kamino')
       .description('Kamino Lend — deposit, withdraw, yield status');
 
+    cmd.addCommand(createKaminoReservesCommand());
     cmd.addCommand(createKaminoDepositCommand());
     cmd.addCommand(createKaminoWithdrawCommand());
     cmd.addCommand(createKaminoStatusCommand());

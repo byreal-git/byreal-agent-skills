@@ -85,6 +85,7 @@ All commands support `-o json` for structured output.
 | `wallet balance`          | Query wallet balance                           |
 | `jup swap`                | Swap tokens via Jupiter aggregator              |
 | `jup price`               | Get token price from Jupiter                    |
+| `kamino reserves`         | Show Kamino Lend APY for SOL/USDC/USDT (or a specific token) |
 | `kamino deposit`          | Deposit tokens into Kamino Lend                 |
 | `kamino withdraw`         | Withdraw tokens from Kamino Lend                |
 | `kamino status`           | View Kamino lending positions and yield          |
