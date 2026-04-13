@@ -6,29 +6,8 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import { TABLE_CHARS, VERSION } from '../../core/constants.js';
-
-// ============================================
-// Capability Registry
-// ============================================
-
-interface Capability {
-  id: string;
-  name: string;
-  description: string;
-  category: 'query' | 'analyze' | 'execute';
-  auth_required: boolean;
-  command: string;
-  params: CapabilityParam[];
-}
-
-interface CapabilityParam {
-  name: string;
-  type: string;
-  required: boolean;
-  description: string;
-  default?: string;
-  enum?: string[];
-}
+import { plugins } from '../../plugins/index.js';
+import type { Capability, CapabilityParam } from '../../plugins/types.js';
 
 const CAPABILITIES: Capability[] = [
   {
@@ -370,9 +349,13 @@ const CAPABILITIES: Capability[] = [
 // Search Capabilities
 // ============================================
 
+function getAllCapabilities(): Capability[] {
+  return [...CAPABILITIES, ...plugins.flatMap(p => p.capabilities)];
+}
+
 function searchCapabilities(keyword: string): Capability[] {
   const lowerKeyword = keyword.toLowerCase();
-  return CAPABILITIES.filter(
+  return getAllCapabilities().filter(
     (cap) =>
       cap.id.toLowerCase().includes(lowerKeyword) ||
       cap.name.toLowerCase().includes(lowerKeyword) ||
@@ -481,7 +464,7 @@ export function createCatalogCommand(): Command {
     .description('Show detailed information about a capability')
     .action((capabilityId: string, options: unknown, cmd: Command) => {
       const globalOptions = cmd.optsWithGlobals();
-      const cap = CAPABILITIES.find((c) => c.id === capabilityId);
+      const cap = getAllCapabilities().find((c) => c.id === capabilityId);
 
       if (!cap) {
         if (globalOptions.output === 'json') {
@@ -521,15 +504,16 @@ export function createCatalogCommand(): Command {
     .action((options: unknown, cmd: Command) => {
       const globalOptions = cmd.optsWithGlobals();
 
+      const all = getAllCapabilities();
       if (globalOptions.output === 'json') {
         console.log(JSON.stringify({
           success: true,
           meta: { timestamp: new Date().toISOString(), version: VERSION },
-          data: { capabilities: CAPABILITIES, total: CAPABILITIES.length },
+          data: { capabilities: all, total: all.length },
         }, null, 2));
       } else {
-        console.log(chalk.cyan(`\nAvailable Capabilities (${CAPABILITIES.length}):\n`));
-        outputCapabilitiesTable(CAPABILITIES);
+        console.log(chalk.cyan(`\nAvailable Capabilities (${all.length}):\n`));
+        outputCapabilitiesTable(all);
       }
     });
 

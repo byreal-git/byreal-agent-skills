@@ -29,6 +29,10 @@ npm install -g @byreal-io/byreal-cli-realclaw
 - **Swap** — Preview and execute token swaps with slippage control and price impact estimation.
 - **Positions** — Open, close, and manage CLMM positions. Claim fees and rewards. Analyze position performance. Copy top farmers' positions with one command.
 - **Wallet** — Query wallet balance.
+- **Jupiter** — Swap tokens via Jupiter aggregator, get token prices.
+- **Kamino** — Deposit and withdraw tokens on Kamino Lend for idle yield.
+- **Rent Reclaim** — Close empty SPL token accounts to recover SOL rent.
+- **Token Sweep** — Consolidate dust tokens into USDC (or any target) via Jupiter swap + rent reclaim.
 - **Config** — Configure RPC URL, slippage tolerance, priority fees.
 
 ## Quick Start
@@ -79,6 +83,13 @@ All commands support `-o json` for structured output.
 | `positions top-positions` | View top positions in a pool                   |
 | `positions copy`          | Copy a farmer's position                       |
 | `wallet balance`          | Query wallet balance                           |
+| `jup swap`                | Swap tokens via Jupiter aggregator              |
+| `jup price`               | Get token price from Jupiter                    |
+| `kamino deposit`          | Deposit tokens into Kamino Lend                 |
+| `kamino withdraw`         | Withdraw tokens from Kamino Lend                |
+| `kamino status`           | View Kamino lending positions and yield          |
+| `rent reclaim`            | Close empty token accounts to recover SOL rent   |
+| `sweep execute`           | Consolidate dust tokens into target token        |
 | `update check`            | Check for CLI updates                          |
 
 ## Update

@@ -82,6 +82,13 @@ byreal-cli catalog show dex.pool.list
 | cli.stats | Show CLI download statistics |
 | update.check | Check for CLI updates |
 | update.install | Install latest CLI version |
+| defi.jup.swap | Swap tokens via Jupiter aggregator |
+| defi.jup.price | Get token prices from Jupiter |
+| defi.kamino.deposit | Deposit to Kamino Lend |
+| defi.kamino.withdraw | Withdraw from Kamino Lend |
+| defi.kamino.status | View Kamino positions and APY |
+| defi.rent.reclaim | Close empty accounts to reclaim SOL rent |
+| defi.sweep.execute | Consolidate dust tokens into USDC |
 
 ## Global Options
 
@@ -148,6 +155,16 @@ Present on-chain data first, then external context, then synthesize how external
 | Install update | \`byreal-cli update install\` |
 | Download stats | \`byreal-cli stats\` |
 | Detailed download stats | \`byreal-cli stats --detail\` |
+| Jupiter swap preview | \`byreal-cli jup swap --input-mint <mint> --output-mint <mint> --amount <amt> --dry-run --wallet-address <addr>\` |
+| Jupiter swap execute | \`byreal-cli jup swap --input-mint <mint> --output-mint <mint> --amount <amt> --wallet-address <addr>\` |
+| Jupiter token price | \`byreal-cli jup price --mint <mint>\` |
+| Kamino deposit | \`byreal-cli kamino deposit --amount <amt> --wallet-address <addr>\` |
+| Kamino withdraw | \`byreal-cli kamino withdraw --amount <amt> --wallet-address <addr>\` |
+| Kamino status | \`byreal-cli kamino status --wallet-address <addr>\` |
+| Rent reclaim scan | \`byreal-cli rent reclaim --dry-run --wallet-address <addr>\` |
+| Rent reclaim execute | \`byreal-cli rent reclaim --wallet-address <addr>\` |
+| Sweep dust preview | \`byreal-cli sweep execute --dry-run --wallet-address <addr>\` |
+| Sweep dust execute | \`byreal-cli sweep execute --wallet-address <addr>\` |
 
 ## Command Notes
 
@@ -260,6 +277,40 @@ When user asks vague questions like "有什么仓位可以 copy？", "最近有�
 - If user's balance is low (<$20), suggest starting with a single position to minimize gas cost
 - If all positions in a pool are out-of-range, skip that pool and explain why
 - To inspect a specific LP's full portfolio: \`byreal-cli positions list --user <wallet-address> -o json\`
+
+## Workflow: Jupiter Swap (External)
+
+When user wants to swap tokens via Jupiter (not the built-in Byreal swap):
+1. **Preview**: \`byreal-cli jup swap --input-mint <mint> --output-mint <mint> --amount <amt> --dry-run --wallet-address <addr>\`
+2. **Execute**: Remove \`--dry-run\` to generate the unsigned transaction
+3. Output: \`{ unsignedTransactions: [base64] }\`
+
+**When to use Jupiter swap vs Byreal swap**: Use \`jup swap\` for general Solana token swaps (any SPL token pair). Use \`swap execute\` for tokens listed on the Byreal DEX. Jupiter aggregates across all Solana DEXes for best price.
+
+## Workflow: Idle Yield with Kamino
+
+When user wants to earn yield on idle tokens (e.g. USDC):
+1. **Check status**: \`byreal-cli kamino status --wallet-address <addr>\` — view current positions and APY
+2. **Deposit**: \`byreal-cli kamino deposit --amount <amt> --wallet-address <addr>\` — deposit USDC (default) or specify \`--mint <mint>\` for other tokens
+3. **Withdraw**: \`byreal-cli kamino withdraw --amount <amt> --wallet-address <addr>\` — withdraw back to wallet
+
+Default market: Kamino Main Market. Use \`--market <address>\` for a different market.
+
+## Workflow: Sweep Dust Tokens
+
+When user wants to consolidate small token balances:
+1. **Preview**: \`byreal-cli sweep execute --dry-run --wallet-address <addr>\` — see which tokens will be swept, estimated USD values, and skip reasons
+2. **Execute**: \`byreal-cli sweep execute --wallet-address <addr>\` — generates Jupiter swap transactions for each dust token + close empty account transactions
+3. **Options**: \`--target-mint <mint>\` (default: USDC), \`--min-value-usd <amt>\` (default: $0.50), \`--exclude <mints>\` (comma-separated)
+
+## Workflow: Rent Reclaim
+
+When user wants to recover SOL from empty token accounts:
+1. **Scan**: \`byreal-cli rent reclaim --dry-run --wallet-address <addr>\` — see how many empty accounts and estimated SOL recovery
+2. **Execute**: \`byreal-cli rent reclaim --wallet-address <addr>\` — generates close transactions
+3. **Options**: \`--include-token2022\` to include Token-2022 accounts, \`--exclude <mints>\` to keep specific accounts
+
+Each empty account holds ~0.002 SOL in rent. Closing many empty accounts can recover meaningful SOL.
 
 ## Error Handling
 

@@ -53,7 +53,7 @@
     "@solana/spl-token": "0.4.13",
     "@solana/web3.js": "1.98.4",
     "@types/bn.js": "5.2.0",
-    "@types/node": "20.19.35",
+    "@types/node": "^20.19.35",
     "bn.js": "5.2.3",
     "bs58": "6.0.0",
     "chalk": "5.6.2",

@@ -1,6 +1,6 @@
 ---
 name: byreal-cli-realclaw
-description: "RealClaw edition of Byreal DEX CLI (Solana): query pools/tokens/TVL, analyze pool APR & risk, open/close/claim CLMM positions, token swap, wallet balance. Outputs unsigned base64 transactions for hosted wallet signing. Use when user mentions Byreal, LP, liquidity, pools, DeFi positions, token swap, or Solana DEX operations."
+description: "RealClaw edition of Byreal DEX CLI (Solana): query pools/tokens/TVL, analyze pool APR & risk, open/close/claim CLMM positions, token swap, wallet balance, Jupiter swap & limit orders, Kamino lending (idle yield), rent reclaim, dust token sweep. Outputs unsigned base64 transactions for hosted wallet signing. Use when user mentions Byreal, LP, liquidity, pools, DeFi positions, token swap, Jupiter, Kamino, rent, sweep, or Solana DEX operations."
 metadata:
   openclaw:
     homepage: https://github.com/byreal-git/byreal-agent-skills

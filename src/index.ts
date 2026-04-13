@@ -17,6 +17,7 @@ import { createPositionsCommand } from './cli/commands/positions.js';
 import { createUpdateCommand } from './cli/commands/update.js';
 import { createStatsCommand } from './cli/commands/stats.js';
 import { printUpdateNotice } from './core/update-check.js';
+import { plugins } from './plugins/index.js';
 
 // ============================================
 // Main Program
@@ -54,6 +55,11 @@ program.addCommand(createSwapCommand());
 program.addCommand(createPositionsCommand());
 program.addCommand(createUpdateCommand());
 program.addCommand(createStatsCommand());
+
+// Register DeFi plugin commands
+for (const plugin of plugins) {
+  program.addCommand(plugin.createCommand());
+}
 
 // ============================================
 // Error Handling

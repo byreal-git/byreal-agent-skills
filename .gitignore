@@ -37,4 +37,7 @@ coverage/
 id.json
 *-keypair.json
 
+# Playground (local signing scripts & keypairs)
+playground/.env
+
 docs
