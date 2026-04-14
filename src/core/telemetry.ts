@@ -15,6 +15,8 @@ import { VERSION, SOLANA_CLUSTER } from "./constants.js";
 import { rawToUi } from "./amounts.js";
 import { resolveDecimals } from "./token-registry.js";
 import { api } from "../api/endpoints.js";
+import { getDeviceId } from "./device.js";
+import { readInstallMeta, markInstallReported } from "./install-meta.js";
 
 // ============================================
 // Configuration
@@ -25,6 +27,7 @@ const SENSOR_URL =
 const REQUEST_TIMEOUT_MS = 3000;
 
 let enabled = false;
+let deviceId = "";
 let superProperties: Record<string, unknown> = {};
 
 // ============================================
@@ -100,26 +103,62 @@ function sendEvent(envelope: Record<string, unknown>): void {
 export function initTelemetry(): void {
   if (process.env.BYREAL_TELEMETRY === "0") return;
   enabled = true;
-  superProperties = {
-    source: "cli",
-    cli_version: VERSION,
-    cluster: SOLANA_CLUSTER,
-  };
+  try {
+    deviceId = getDeviceId();
+    const meta = readInstallMeta();
+    superProperties = {
+      source: "cli",
+      cli_version: VERSION,
+      cluster: SOLANA_CLUSTER,
+      install_source: meta.source,
+      install_campaign: meta.campaign,
+      install_method: meta.install_method,
+    };
+  } catch {
+    enabled = false;
+  }
+}
+
+/**
+ * Fire the one-time `CliInstalled` event if this machine has not reported it
+ * yet. Idempotent via `install.json#reported_at`. Fire-and-forget.
+ */
+export function reportInstallIfNeeded(): void {
+  if (!enabled) return;
+  try {
+    const meta = readInstallMeta();
+    if (meta.reported_at) return;
+    trackEvent("CliInstalled", {
+      install_source: meta.source,
+      install_campaign: meta.campaign,
+      install_method: meta.install_method,
+      installed_at: meta.installed_at,
+      os_platform: process.platform,
+      os_arch: process.arch,
+      node_version: process.version,
+    });
+    markInstallReported();
+  } catch {
+    /* silent */
+  }
 }
 
 // ============================================
 // Core tracking
 // ============================================
 
-/** Fire-and-forget event reporting. Never throws. */
+/**
+ * Fire-and-forget event reporting. Never throws.
+ * `distinct_id` is the persistent anonymous device_id; callers that want to
+ * include the wallet address should pass it as `wallet_address` in properties.
+ */
 export function trackEvent(
-  distinctId: string,
   event: string,
   properties: Record<string, unknown>,
 ): void {
   if (!enabled) return;
   try {
-    const envelope = buildEnvelope(distinctId, event, properties);
+    const envelope = buildEnvelope(deviceId, event, properties);
     sendEvent(envelope);
   } catch {
     /* silent */
@@ -131,6 +170,7 @@ export function trackEvent(
 // ============================================
 
 export interface SwapEventData {
+  wallet_address: string;
   tx_signature: string;
   input_mint: string;
   output_mint: string;
@@ -149,7 +189,6 @@ export interface SwapEventData {
  * still reported without USD values (best-effort).
  */
 export async function trackSwapEvent(
-  distinctId: string,
   data: SwapEventData,
 ): Promise<void> {
   if (!enabled) return;
@@ -197,7 +236,7 @@ export async function trackSwapEvent(
       volume_usd = in_amount_usd ?? out_amount_usd;
     }
 
-    trackEvent(distinctId, "CliSwapExecuted", {
+    trackEvent("CliSwapExecuted", {
       ...data,
       in_amount_usd,
       out_amount_usd,
@@ -205,7 +244,7 @@ export async function trackSwapEvent(
     });
   } catch {
     // Price lookup failed or timed out — still report without USD
-    trackEvent(distinctId, "CliSwapExecuted", {
+    trackEvent("CliSwapExecuted", {
       ...data,
       in_amount_usd: null,
       out_amount_usd: null,

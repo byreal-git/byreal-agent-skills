@@ -336,7 +336,8 @@ function createSwapExecuteCommand(): Command {
         }
 
         // Telemetry: report swap execution with USD volume (awaited to ensure delivery)
-        await trackSwapEvent(userPublicKey!, {
+        await trackSwapEvent({
+          wallet_address: userPublicKey!,
           tx_signature: signatures[0],
           input_mint: options.inputMint,
           output_mint: options.outputMint,

@@ -5,7 +5,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { VERSION, CLI_NAME, LOGO, EXPERIMENTAL_WARNING } from './core/constants.js';
-import { initTelemetry } from './core/telemetry.js';
+import { initTelemetry, reportInstallIfNeeded } from './core/telemetry.js';
 import { createPoolsCommand } from './cli/commands/pools.js';
 import { createTokensCommand } from './cli/commands/tokens.js';
 import { createOverviewCommand } from './cli/commands/overview.js';
@@ -80,6 +80,7 @@ program.on('command:*', () => {
 async function main() {
   // Initialize telemetry (fire-and-forget, never blocks)
   initTelemetry();
+  reportInstallIfNeeded();
 
   try {
     showPreviousUpdateResult();

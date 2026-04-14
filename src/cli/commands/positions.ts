@@ -745,7 +745,8 @@ function createPositionsOpenCommand(): Command {
         };
 
         // Telemetry: report position open (fire-and-forget)
-        trackEvent(publicKey.toBase58(), 'CliPositionOpened', {
+        trackEvent('CliPositionOpened', {
+          wallet_address: publicKey.toBase58(),
           tx_signature: sendResult.value.signature,
           pool_address: options.pool,
           tick_lower: tickLower,
@@ -1182,7 +1183,8 @@ function createPositionsIncreaseCommand(): Command {
         };
 
         // Telemetry: report position increase (fire-and-forget)
-        trackEvent(publicKey.toBase58(), 'CliPositionIncreased', {
+        trackEvent('CliPositionIncreased', {
+          wallet_address: publicKey.toBase58(),
           tx_signature: sendResult.value.signature,
           pool_address: poolAddress,
           nft_mint: options.nftMint,
@@ -1543,7 +1545,8 @@ function createPositionsDecreaseCommand(): Command {
         };
 
         // Telemetry: report position decrease (fire-and-forget)
-        trackEvent(publicKey.toBase58(), 'CliPositionDecreased', {
+        trackEvent('CliPositionDecreased', {
+          wallet_address: publicKey.toBase58(),
           tx_signature: sendResult.value.signature,
           pool_address: poolAddress,
           nft_mint: options.nftMint,
@@ -1765,7 +1768,8 @@ function createPositionsCloseCommand(): Command {
         };
 
         // Telemetry: report position close (fire-and-forget)
-        trackEvent(publicKey.toBase58(), 'CliPositionClosed', {
+        trackEvent('CliPositionClosed', {
+          wallet_address: publicKey.toBase58(),
           tx_signature: sendResult.value.signature,
           pool_address: poolAddress,
           nft_mint: options.nftMint,
@@ -2014,7 +2018,8 @@ function createPositionsClaimCommand(): Command {
       // Telemetry: report fee claim (fire-and-forget)
       const succeeded = results.filter((r) => r.signature).length;
       const failed = results.filter((r) => r.error).length;
-      trackEvent(address, 'CliFeeClaimed', {
+      trackEvent('CliFeeClaimed', {
+        wallet_address: address,
         tx_signatures: results.filter((r) => r.signature).map((r) => r.signature).join(','),
         position_count: results.length,
         succeeded,
@@ -3189,7 +3194,8 @@ function createCopyPositionCommand(): Command {
         };
 
         // Telemetry: report position copy (fire-and-forget)
-        trackEvent(publicKey.toBase58(), 'CliPositionCopied', {
+        trackEvent('CliPositionCopied', {
+          wallet_address: publicKey.toBase58(),
           tx_signature: sendResult.value.signature,
           pool_address: poolAddress,
           nft_address: result.nftAddress,
