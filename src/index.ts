@@ -5,7 +5,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { VERSION, CLI_NAME, LOGO, EXPERIMENTAL_WARNING } from './core/constants.js';
-import { initTelemetry, reportInstallIfNeeded } from './core/telemetry.js';
+import { initTelemetry, reportInstallIfNeeded, trackCommandInvoked } from './core/telemetry.js';
 import { createPoolsCommand } from './cli/commands/pools.js';
 import { createTokensCommand } from './cli/commands/tokens.js';
 import { createOverviewCommand } from './cli/commands/overview.js';
@@ -35,11 +35,12 @@ program
   .option('--debug', 'Show debug information')
   .option('--non-interactive', 'Disable interactive prompts')
   .addHelpText('before', chalk.cyan(LOGO) + chalk.yellow(EXPERIMENTAL_WARNING))
-  .hook('preAction', (thisCommand) => {
+  .hook('preAction', (thisCommand, actionCommand) => {
     const opts = thisCommand.opts();
     if (opts.debug) {
       process.env.DEBUG = 'true';
     }
+    trackCommandInvoked(actionCommand, opts);
   });
 
 // ============================================

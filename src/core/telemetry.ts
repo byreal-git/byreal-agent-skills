@@ -11,7 +11,8 @@
  * Opt-out: set BYREAL_TELEMETRY=0 to disable all telemetry.
  */
 
-import { VERSION, SOLANA_CLUSTER } from "./constants.js";
+import type { Command } from "commander";
+import { VERSION, SOLANA_CLUSTER, CLI_NAME } from "./constants.js";
 import { rawToUi } from "./amounts.js";
 import { resolveDecimals } from "./token-registry.js";
 import { api } from "../api/endpoints.js";
@@ -160,6 +161,84 @@ export function trackEvent(
   try {
     const envelope = buildEnvelope(deviceId, event, properties);
     sendEvent(envelope);
+  } catch {
+    /* silent */
+  }
+}
+
+// ============================================
+// Command invocation event (top-of-funnel usage)
+// ============================================
+
+const READ_COMMANDS = new Set<string>([
+  "pools list",
+  "pools info",
+  "pools klines",
+  "pools analyze",
+  "tokens list",
+  "overview",
+  "wallet address",
+  "wallet balance",
+  "wallet info",
+  "positions list",
+  "positions analyze",
+  "positions top-positions",
+  "config list",
+  "config get",
+  "catalog list",
+  "catalog search",
+  "catalog show",
+  "skill",
+  "stats",
+  "update check",
+]);
+
+const WRITE_COMMANDS = new Set<string>([
+  "wallet set",
+  "wallet reset",
+  "positions open",
+  "positions increase",
+  "positions decrease",
+  "positions close",
+  "positions claim",
+  "positions claim-rewards",
+  "positions claim-bonus",
+  "positions copy",
+  "swap execute",
+  "config set",
+  "setup",
+  "update install",
+]);
+
+/**
+ * Fire a `CliCommandInvoked` event for any leaf command. Called from the
+ * global `preAction` hook in `src/index.ts` — covers reads and writes alike,
+ * so we can measure DAU/WAU/MAU and intent→outcome funnels (this event will
+ * intentionally co-occur with `CliSwapExecuted` etc. for write paths).
+ */
+export function trackCommandInvoked(
+  cmd: Command,
+  rootOpts: Record<string, unknown>,
+): void {
+  if (!enabled) return;
+  try {
+    const leaf = cmd.name();
+    const parentName = cmd.parent?.name();
+    const isRoot = !parentName || parentName === CLI_NAME;
+    const group = isRoot ? leaf : parentName!;
+    const full = isRoot ? leaf : `${parentName} ${leaf}`;
+    const op = WRITE_COMMANDS.has(full)
+      ? "write"
+      : READ_COMMANDS.has(full)
+        ? "read"
+        : "unknown";
+    trackEvent("CliCommandInvoked", {
+      command_group: group,
+      command_name: leaf,
+      full_command: full,
+      operation_type: op,
+      output_format: (rootOpts.output as string) || "table",
+    });
   } catch {
     /* silent */
   }

@@ -18,6 +18,7 @@ When adding a new CLI command, **all** of the following must be updated in the s
 3. `src/cli/commands/catalog.ts` — Add capability entry to `CAPABILITIES` array
 4. `src/cli/commands/skill.ts` — Add to capability table, quick reference, detailed docs, and relevant workflow sections
 5. `README.md` — Add to the Commands table
+6. `src/core/telemetry.ts` — Add the `"<group> <leaf>"` string to either `READ_COMMANDS` or `WRITE_COMMANDS` so the global `CliCommandInvoked` event reports the correct `operation_type`. Forgetting this lands the command in 神策 as `operation_type: "unknown"`. When **renaming** or **removing** a command, update the same set.
 
 ## Architecture
 
