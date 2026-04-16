@@ -72,7 +72,7 @@ export function readInstallMeta(): InstallMeta {
 
   // Synthesize a baseline record for users who did not go through install.sh.
   const synthesized: InstallMeta = {
-    source: 'unknown',
+    source: 'organic',
     campaign: '',
     install_method: 'direct',
     installed_at: new Date().toISOString(),
