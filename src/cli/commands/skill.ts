@@ -90,7 +90,6 @@ byreal-cli catalog show dex.pool.list
 | defi.kamino.status | View Kamino positions and APY |
 | defi.rent.reclaim | Close empty accounts to reclaim SOL rent |
 | defi.sweep.execute | Consolidate dust tokens into USDC |
-| defi.titan.swap | Swap tokens via Titan Exchange aggregator |
 | defi.dflow.swap | Swap tokens via DFlow order-flow aggregator |
 
 ## Global Options
@@ -168,8 +167,6 @@ Present on-chain data first, then external context, then synthesize how external
 | Kamino status | \`byreal-cli kamino status --wallet-address <addr>\` |
 | Rent reclaim scan | \`byreal-cli rent reclaim --dry-run --wallet-address <addr>\` |
 | Rent reclaim execute | \`byreal-cli rent reclaim --wallet-address <addr>\` |
-| Titan swap preview | \`byreal-cli titan swap --input-mint <mint> --output-mint <mint> --amount <amt> --dry-run --wallet-address <addr>\` |
-| Titan swap execute | \`byreal-cli titan swap --input-mint <mint> --output-mint <mint> --amount <amt> --wallet-address <addr>\` |
 | DFlow swap preview | \`byreal-cli dflow swap --input-mint <mint> --output-mint <mint> --amount <amt> --dry-run --wallet-address <addr>\` |
 | DFlow swap execute | \`byreal-cli dflow swap --input-mint <mint> --output-mint <mint> --amount <amt> --wallet-address <addr>\` |
 | Sweep dust preview | \`byreal-cli sweep execute --dry-run --wallet-address <addr>\` |
@@ -289,17 +286,16 @@ When user asks vague questions like "有什么仓位可以 copy？", "最近有�
 
 ## Swap Routing Priority
 
-Default to \`byreal-cli swap execute\`. Fall back to \`jup swap\` / \`titan swap\` / \`dflow swap\` only if Byreal returns no route, or the user names an aggregator explicitly.
+Default to \`byreal-cli swap execute\`. Fall back to \`jup swap\` / \`dflow swap\` only if Byreal returns no route, or the user names an aggregator explicitly.
 
-## Workflow: Jupiter / Titan / DFlow Swap
+## Workflow: Jupiter / DFlow Swap
 
 \`\`\`
 byreal-cli jup swap   --input-mint <mint> --output-mint <mint> --amount <amt> [--dry-run] --wallet-address <addr>
-byreal-cli titan swap --input-mint <mint> --output-mint <mint> --amount <amt> [--dry-run] --wallet-address <addr>
 byreal-cli dflow swap --input-mint <mint> --output-mint <mint> --amount <amt> [--dry-run] --wallet-address <addr>
 \`\`\`
 
-Output: \`{ unsignedTransactions: [base64] }\`. Titan requires \`TITAN_WS_URL\` + \`TITAN_AUTH_TOKEN\`; Titan also supports \`--swap-mode ExactOut\`. DFlow optionally reads \`DFLOW_API_KEY\`.
+Output: \`{ unsignedTransactions: [base64] }\`. DFlow optionally reads \`DFLOW_API_KEY\`.
 
 ## Workflow: Idle Yield with Kamino
 
