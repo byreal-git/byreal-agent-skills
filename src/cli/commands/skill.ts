@@ -287,35 +287,19 @@ When user asks vague questions like "有什么仓位可以 copy？", "最近有�
 - If all positions in a pool are out-of-range, skip that pool and explain why
 - To inspect a specific LP's full portfolio: \`byreal-cli positions list --user <wallet-address> -o json\`
 
-## Workflow: Jupiter Swap (External)
+## Swap Routing Priority
 
-When user wants to swap tokens via Jupiter (not the built-in Byreal swap):
-1. **Preview**: \`byreal-cli jup swap --input-mint <mint> --output-mint <mint> --amount <amt> --dry-run --wallet-address <addr>\`
-2. **Execute**: Remove \`--dry-run\` to generate the unsigned transaction
-3. Output: \`{ unsignedTransactions: [base64] }\`
+Default to \`byreal-cli swap execute\`. Fall back to \`jup swap\` / \`titan swap\` / \`dflow swap\` only if Byreal returns no route, or the user names an aggregator explicitly.
 
-**When to use Jupiter swap vs Byreal swap**: Use \`jup swap\` for general Solana token swaps (any SPL token pair). Use \`swap execute\` for tokens listed on the Byreal DEX. Jupiter aggregates across all Solana DEXes for best price.
+## Workflow: Jupiter / Titan / DFlow Swap
 
-## Workflow: Titan Swap
+\`\`\`
+byreal-cli jup swap   --input-mint <mint> --output-mint <mint> --amount <amt> [--dry-run] --wallet-address <addr>
+byreal-cli titan swap --input-mint <mint> --output-mint <mint> --amount <amt> [--dry-run] --wallet-address <addr>
+byreal-cli dflow swap --input-mint <mint> --output-mint <mint> --amount <amt> [--dry-run] --wallet-address <addr>
+\`\`\`
 
-When user wants to swap tokens via Titan Exchange (WebSocket-based aggregator):
-1. **Preview**: \`byreal-cli titan swap --input-mint <mint> --output-mint <mint> --amount <amt> --dry-run --wallet-address <addr>\`
-2. **Execute**: Remove \`--dry-run\` to generate the unsigned transaction
-3. Output: \`{ unsignedTransactions: [base64] }\`
-4. **Requirements**: Set \`TITAN_WS_URL\` and \`TITAN_AUTH_TOKEN\` environment variables
-5. **Swap mode**: Use \`--swap-mode ExactOut\` for reverse swap (default: ExactIn)
-
-**When to use Titan swap**: Titan aggregates across multiple Solana DEXes via WebSocket streaming for competitive quotes. Requires API credentials.
-
-## Workflow: DFlow Swap
-
-When user wants to swap tokens via DFlow (order-flow aggregator):
-1. **Preview**: \`byreal-cli dflow swap --input-mint <mint> --output-mint <mint> --amount <amt> --dry-run --wallet-address <addr>\`
-2. **Execute**: Remove \`--dry-run\` to generate the unsigned transaction
-3. Output: \`{ unsignedTransactions: [base64] }\`
-4. **Optional**: Set \`DFLOW_API_KEY\` for production rate limits
-
-**When to use DFlow swap**: DFlow provides order-flow-based swaps with MEV protection. Works without API key (uses dev endpoint by default).
+Output: \`{ unsignedTransactions: [base64] }\`. Titan requires \`TITAN_WS_URL\` + \`TITAN_AUTH_TOKEN\`; Titan also supports \`--swap-mode ExactOut\`. DFlow optionally reads \`DFLOW_API_KEY\`.
 
 ## Workflow: Idle Yield with Kamino
 
