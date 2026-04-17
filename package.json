@@ -40,7 +40,7 @@
     "access": "public"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.19.0"
   },
   "files": [
     "dist/index.cjs",
@@ -71,6 +71,7 @@
     "vitest": "2.1.9"
   },
   "dependencies": {
-    "@byreal-io/byreal-clmm-sdk": "^0.2.2"
+    "@byreal-io/byreal-clmm-sdk": "^0.2.2",
+    "@titanexchange/sdk-ts": "^0.1.1"
   }
 }

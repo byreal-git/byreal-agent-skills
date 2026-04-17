@@ -90,6 +90,8 @@ byreal-cli catalog show dex.pool.list
 | defi.kamino.status | View Kamino positions and APY |
 | defi.rent.reclaim | Close empty accounts to reclaim SOL rent |
 | defi.sweep.execute | Consolidate dust tokens into USDC |
+| defi.titan.swap | Swap tokens via Titan Exchange aggregator |
+| defi.dflow.swap | Swap tokens via DFlow order-flow aggregator |
 
 ## Global Options
 
@@ -166,6 +168,10 @@ Present on-chain data first, then external context, then synthesize how external
 | Kamino status | \`byreal-cli kamino status --wallet-address <addr>\` |
 | Rent reclaim scan | \`byreal-cli rent reclaim --dry-run --wallet-address <addr>\` |
 | Rent reclaim execute | \`byreal-cli rent reclaim --wallet-address <addr>\` |
+| Titan swap preview | \`byreal-cli titan swap --input-mint <mint> --output-mint <mint> --amount <amt> --dry-run --wallet-address <addr>\` |
+| Titan swap execute | \`byreal-cli titan swap --input-mint <mint> --output-mint <mint> --amount <amt> --wallet-address <addr>\` |
+| DFlow swap preview | \`byreal-cli dflow swap --input-mint <mint> --output-mint <mint> --amount <amt> --dry-run --wallet-address <addr>\` |
+| DFlow swap execute | \`byreal-cli dflow swap --input-mint <mint> --output-mint <mint> --amount <amt> --wallet-address <addr>\` |
 | Sweep dust preview | \`byreal-cli sweep execute --dry-run --wallet-address <addr>\` |
 | Sweep dust execute | \`byreal-cli sweep execute --wallet-address <addr>\` |
 
@@ -289,6 +295,27 @@ When user wants to swap tokens via Jupiter (not the built-in Byreal swap):
 3. Output: \`{ unsignedTransactions: [base64] }\`
 
 **When to use Jupiter swap vs Byreal swap**: Use \`jup swap\` for general Solana token swaps (any SPL token pair). Use \`swap execute\` for tokens listed on the Byreal DEX. Jupiter aggregates across all Solana DEXes for best price.
+
+## Workflow: Titan Swap
+
+When user wants to swap tokens via Titan Exchange (WebSocket-based aggregator):
+1. **Preview**: \`byreal-cli titan swap --input-mint <mint> --output-mint <mint> --amount <amt> --dry-run --wallet-address <addr>\`
+2. **Execute**: Remove \`--dry-run\` to generate the unsigned transaction
+3. Output: \`{ unsignedTransactions: [base64] }\`
+4. **Requirements**: Set \`TITAN_WS_URL\` and \`TITAN_AUTH_TOKEN\` environment variables
+5. **Swap mode**: Use \`--swap-mode ExactOut\` for reverse swap (default: ExactIn)
+
+**When to use Titan swap**: Titan aggregates across multiple Solana DEXes via WebSocket streaming for competitive quotes. Requires API credentials.
+
+## Workflow: DFlow Swap
+
+When user wants to swap tokens via DFlow (order-flow aggregator):
+1. **Preview**: \`byreal-cli dflow swap --input-mint <mint> --output-mint <mint> --amount <amt> --dry-run --wallet-address <addr>\`
+2. **Execute**: Remove \`--dry-run\` to generate the unsigned transaction
+3. Output: \`{ unsignedTransactions: [base64] }\`
+4. **Optional**: Set \`DFLOW_API_KEY\` for production rate limits
+
+**When to use DFlow swap**: DFlow provides order-flow-based swaps with MEV protection. Works without API key (uses dev endpoint by default).
 
 ## Workflow: Idle Yield with Kamino
 
