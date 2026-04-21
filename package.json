@@ -72,6 +72,6 @@
   },
   "dependencies": {
     "@byreal-io/byreal-clmm-sdk": "^0.2.2",
-    "@titanexchange/sdk-ts": "^0.1.1"
+    "@msgpack/msgpack": "3.1.3"
   }
 }

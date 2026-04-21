@@ -19,8 +19,4 @@ await build({
   define: {
     __BYREAL_CLI_VERSION__: JSON.stringify(pkg.version),
   },
-  external: [
-    // Titan SDK has native addon transitive deps (websocket) that cannot be bundled.
-    '@titanexchange/sdk-ts',
-  ],
 });

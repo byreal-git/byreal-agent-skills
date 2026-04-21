@@ -1,9 +1,10 @@
 /**
- * Titan Exchange API client — WebSocket-based swap quotes
+ * Titan Exchange API client — REST Gateway swap quotes
  *
- * Titan streams quote updates via WebSocket. Each quote contains raw Solana
- * instructions + address lookup table addresses (not a pre-built transaction).
- * We build the VersionedTransaction ourselves from those fields.
+ * Titan Gateway returns a single msgpack-encoded response containing a map of
+ * provider → SwapRoute. Each route has raw Solana instructions + address
+ * lookup table addresses (not a pre-built transaction). We pick the best
+ * route and build the VersionedTransaction ourselves.
  */
 
 import {
@@ -14,15 +15,21 @@ import {
   AddressLookupTableAccount,
   ComputeBudgetProgram,
 } from '@solana/web3.js';
-import { V1Client, types as titanTypes } from '@titanexchange/sdk-ts';
+import { decode as msgpackDecode } from '@msgpack/msgpack';
 import { ByrealError, ErrorCodes } from '../../core/errors.js';
-import { TITAN_WS_URL, TITAN_AUTH_TOKEN, DEFAULTS } from '../../core/constants.js';
+import { TITAN_API_URL, TITAN_AUTH_TOKEN, DEFAULTS } from '../../core/constants.js';
 import { getConnection } from '../../core/solana.js';
 import type { Result } from '../../core/types.js';
 import type { TitanSwapRoute, TitanSwapQuoteResult } from './types.js';
 
 const TITAN_TIMEOUT_MS = 15_000;
-const MAX_STREAM_UPDATES = 5;
+
+// Raw shape of the Titan Gateway /api/v1/quote/swap response (after msgpack decode)
+interface TitanQuoteResponse {
+  id: string;
+  quotes: Record<string, TitanSwapRoute>;
+  metadata?: { ExpectedWinner?: string };
+}
 
 // ============================================
 // Swap Quote
@@ -48,106 +55,90 @@ export async function getSwapQuote(params: {
     };
   }
 
-  const wsUrl = `${TITAN_WS_URL}?auth=${TITAN_AUTH_TOKEN}`;
-  let client: InstanceType<typeof V1Client> | null = null;
+  const query = new URLSearchParams({
+    inputMint: params.inputMint,
+    outputMint: params.outputMint,
+    amount: params.amount,
+    userPublicKey: params.userPublicKey,
+    slippageBps: String(params.slippageBps),
+    swapMode: params.swapMode,
+  });
+  const url = `${TITAN_API_URL}/api/v1/quote/swap?${query.toString()}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TITAN_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${TITAN_AUTH_TOKEN}`,
+        Accept: 'application/vnd.msgpack',
+      },
+      signal: controller.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    const aborted = (e as Error).name === 'AbortError';
+    return {
+      ok: false,
+      error: new ByrealError({
+        code: ErrorCodes.NETWORK_ERROR,
+        type: 'NETWORK',
+        message: aborted
+          ? `Titan request timed out after ${TITAN_TIMEOUT_MS}ms`
+          : `Titan request failed: ${(e as Error).message}`,
+        retryable: true,
+      }),
+    };
+  }
+  clearTimeout(timer);
+
+  if (!response.ok) {
+    const bodyText = await response.text().catch(() => '');
+    return {
+      ok: false,
+      error: new ByrealError({
+        code: ErrorCodes.API_ERROR,
+        type: 'NETWORK',
+        message: `Titan API error ${response.status}: ${bodyText.slice(0, 200) || response.statusText}`,
+        retryable: response.status >= 500 || response.status === 429,
+      }),
+    };
+  }
+
+  let decoded: TitanQuoteResponse;
+  try {
+    const buf = new Uint8Array(await response.arrayBuffer());
+    decoded = msgpackDecode(buf) as TitanQuoteResponse;
+  } catch (e) {
+    return {
+      ok: false,
+      error: new ByrealError({
+        code: ErrorCodes.API_ERROR,
+        type: 'NETWORK',
+        message: `Failed to decode Titan msgpack response: ${(e as Error).message}`,
+        retryable: true,
+      }),
+    };
+  }
+
+  // Pick the best route across all providers.
+  const bestRoute = pickBestRoute(decoded.quotes ?? {}, params.swapMode);
+  if (!bestRoute || !bestRoute.instructions?.length) {
+    return {
+      ok: false,
+      error: new ByrealError({
+        code: ErrorCodes.API_ERROR,
+        type: 'NETWORK',
+        message: 'No swap route returned from Titan.',
+        retryable: true,
+      }),
+    };
+  }
 
   try {
-    client = await withTimeout(
-      V1Client.connect(wsUrl),
-      TITAN_TIMEOUT_MS,
-      'Titan WebSocket connection timed out',
-    );
-
-    const userPubkeyBytes = new PublicKey(params.userPublicKey).toBytes();
-    const inputMintBytes = new PublicKey(params.inputMint).toBytes();
-    const outputMintBytes = new PublicKey(params.outputMint).toBytes();
-
-    const swapMode = params.swapMode === 'ExactIn'
-      ? titanTypes.common.SwapMode.ExactIn
-      : titanTypes.common.SwapMode.ExactOut;
-
-    const { stream, streamId } = await withTimeout(
-      client.newSwapQuoteStream({
-        swap: {
-          inputMint: inputMintBytes,
-          outputMint: outputMintBytes,
-          amount: BigInt(params.amount),
-          swapMode,
-          slippageBps: params.slippageBps,
-        },
-        transaction: {
-          userPublicKey: userPubkeyBytes,
-        },
-        update: {
-          num_quotes: 3,
-        },
-      }),
-      TITAN_TIMEOUT_MS,
-      'Titan quote request timed out',
-    );
-
-    // Pick the best route across stream updates.
-    // Routes include instructions + ALTs; the pre-built `transaction` field
-    // is not populated by the current Titan API, so we build it ourselves.
-    let bestRoute: TitanSwapRoute | null = null;
-    let updateCount = 0;
-
-    // Redirect console.log → stderr for the entire SDK interaction.
-    // The Titan SDK logs "Requested to cancel stream ..." to stdout
-    // when the stream is cancelled, which corrupts piped JSON output.
-    const origLog = console.log;
-    console.log = (...args: unknown[]) => console.error(...args);
-
-    // Wrap stream iteration in its own try-catch — the Titan SDK has known
-    // bugs where stopStream / stream cleanup throws (ERR_INVALID_STATE,
-    // "Invalid Stream ID"). These are harmless if we already got our data.
-    try {
-      for await (const quotes of stream) {
-        updateCount++;
-        const quoteMap = quotes.quotes as Record<string, TitanSwapRoute>;
-
-        for (const [, route] of Object.entries(quoteMap)) {
-          if (!route.instructions?.length) continue;
-
-          if (!bestRoute) {
-            bestRoute = route;
-            continue;
-          }
-
-          if (swapMode === titanTypes.common.SwapMode.ExactIn) {
-            if (route.outAmount > bestRoute.outAmount) bestRoute = route;
-          } else {
-            if (route.inAmount < bestRoute.inAmount) bestRoute = route;
-          }
-        }
-
-        // Got a viable route — break immediately, let client.close() clean up
-        if (bestRoute || updateCount >= MAX_STREAM_UPDATES) break;
-      }
-    } catch {
-      // Tolerate SDK cleanup errors if we already collected a route
-    }
-
-    // Close connection before doing any on-chain work (fetch ALTs, blockhash)
-    client.close().catch(() => {});
-    client = null;
-
-    // Restore console.log
-    console.log = origLog;
-
-    if (!bestRoute || !bestRoute.instructions?.length) {
-      return {
-        ok: false,
-        error: new ByrealError({
-          code: ErrorCodes.API_ERROR,
-          type: 'NETWORK',
-          message: 'No swap route returned from Titan.',
-          retryable: true,
-        }),
-      };
-    }
-
-    // Build the VersionedTransaction from instructions + ALTs
     const transaction = await buildTransaction(
       bestRoute.instructions,
       bestRoute.addressLookupTables,
@@ -166,21 +157,33 @@ export async function getSwapQuote(params: {
       },
     };
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'Unknown Titan error';
     return {
       ok: false,
       error: new ByrealError({
         code: ErrorCodes.NETWORK_ERROR,
         type: 'NETWORK',
-        message: `Titan swap failed: ${message}`,
+        message: `Failed to build Titan transaction: ${(e as Error).message}`,
         retryable: true,
       }),
     };
-  } finally {
-    if (client) {
-      client.close().catch(() => {});
+  }
+}
+
+function pickBestRoute(
+  quotes: Record<string, TitanSwapRoute>,
+  swapMode: 'ExactIn' | 'ExactOut',
+): TitanSwapRoute | null {
+  let best: TitanSwapRoute | null = null;
+  for (const route of Object.values(quotes)) {
+    if (!route?.instructions?.length) continue;
+    if (!best) { best = route; continue; }
+    if (swapMode === 'ExactIn') {
+      if (BigInt(route.outAmount) > BigInt(best.outAmount)) best = route;
+    } else {
+      if (BigInt(route.inAmount) < BigInt(best.inAmount)) best = route;
     }
   }
+  return best;
 }
 
 // ============================================
@@ -257,18 +260,3 @@ async function buildTransaction(
   const tx = new VersionedTransaction(messageV0);
   return Buffer.from(tx.serialize()).toString('base64');
 }
-
-// ============================================
-// Helpers
-// ============================================
-
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), ms);
-    promise.then(
-      (val) => { clearTimeout(timer); resolve(val); },
-      (err) => { clearTimeout(timer); reject(err); },
-    );
-  });
-}
-

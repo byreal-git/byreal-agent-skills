@@ -5,13 +5,17 @@
 import type { Result } from "../../core/types.js";
 import { ok, err } from "../../core/types.js";
 import { networkError, apiError } from "../../core/errors.js";
-import { JUP_PRICE_API, JUP_SWAP_API } from "../../core/constants.js";
+import { JUP_PRICE_API, JUP_SWAP_API, JUPITER_API_KEY } from "../../core/constants.js";
 import type { ByrealError } from "../../core/errors.js";
 import type {
   JupiterQuoteResponse,
   JupiterSwapResponse,
   JupiterPriceResponse,
 } from "./types.js";
+
+function authHeaders(): Record<string, string> {
+  return JUPITER_API_KEY ? { "x-api-key": JUPITER_API_KEY } : {};
+}
 
 // ============================================
 // Swap API
@@ -37,7 +41,9 @@ export async function getQuote(params: {
       searchParams.set("slippageBps", String(params.slippageBps));
     }
 
-    const response = await fetch(`${JUP_SWAP_API}/quote?${searchParams}`);
+    const response = await fetch(`${JUP_SWAP_API}/quote?${searchParams}`, {
+      headers: authHeaders(),
+    });
     if (!response.ok) {
       const text = await response.text();
       return err(apiError(`Jupiter quote failed: ${text}`, response.status));
@@ -57,7 +63,7 @@ export async function getSwapTransaction(params: {
   try {
     const response = await fetch(`${JUP_SWAP_API}/swap`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({
         quoteResponse: params.quoteResponse,
         userPublicKey: params.userPublicKey,
@@ -92,7 +98,9 @@ export async function getPrice(
   mints: string[],
 ): Promise<Result<JupiterPriceResponse, ByrealError>> {
   try {
-    const response = await fetch(`${JUP_PRICE_API}?ids=${mints.join(",")}`);
+    const response = await fetch(`${JUP_PRICE_API}?ids=${mints.join(",")}`, {
+      headers: authHeaders(),
+    });
     if (!response.ok) {
       const text = await response.text();
       return err(apiError(`Jupiter price failed: ${text}`, response.status));

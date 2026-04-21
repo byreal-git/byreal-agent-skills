@@ -76,13 +76,20 @@ export const SOLANA_CLUSTER = process.env.SOLANA_CLUSTER || "mainnet-beta";
 // ============================================
 
 // Jupiter (REST swap aggregator)
-export const JUP_SWAP_API = "https://api.jup.ag/swap/v1";
-export const JUP_PRICE_API = "https://api.jup.ag/price/v3";
+// Paid API (api.jup.ag) requires x-api-key; falls back to lite-api.jup.ag when no key set.
+export const JUPITER_API_KEY =
+  process.env.JUPITER_API_KEY || process.env.JUP_API_KEY;
+const JUP_BASE = JUPITER_API_KEY
+  ? "https://api.jup.ag"
+  : "https://lite-api.jup.ag";
+export const JUP_SWAP_API = `${JUP_BASE}/swap/v1`;
+export const JUP_PRICE_API = `${JUP_BASE}/price/v3`;
 
-// Titan (WebSocket swap aggregator)
+// Titan (REST Gateway swap aggregator)
 // Default: global entry point auto-routes to closest region
-// Override with TITAN_WS_URL for regional endpoints (e.g. wss://jp.partners.api.titan.exchange/api/v1/ws)
-export const TITAN_WS_URL = "wss://partners.api.titan.exchange/api/v1/ws";
+// Override with TITAN_API_URL for regional endpoints (e.g. https://jp.partners.api.titan.exchange)
+export const TITAN_API_URL =
+  process.env.TITAN_API_URL || "https://partners.api.titan.exchange";
 export const TITAN_AUTH_TOKEN = process.env.TITAN_AUTH_TOKEN;
 
 // DFlow (REST swap aggregator)
