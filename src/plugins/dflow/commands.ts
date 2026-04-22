@@ -16,6 +16,12 @@ import { outputJson, outputErrorJson, outputErrorTable } from '../../cli/output/
 import { TABLE_CHARS } from '../../core/constants.js';
 import * as dflowApi from './api.js';
 
+function fallbackHint(route: dflowApi.DFlowRoute | null): string | null {
+  if (route === 'direct-paid') return 'byreal proxy unreachable — using quote-api.dflow.net with DFLOW_API_KEY';
+  if (route === 'direct-free') return 'byreal proxy unreachable — using dev-quote-api.dflow.net (no key, rate-limited)';
+  return null;
+}
+
 // ============================================
 // dflow swap
 // ============================================
@@ -110,6 +116,8 @@ export function createDFlowSwapCommand(): Command {
 
             console.log(chalk.cyan.bold('\n  DFlow Swap Preview\n'));
             console.log(table.toString());
+            const hint = fallbackHint(dflowApi.getLastRoute());
+            if (hint) console.error(chalk.gray(`[byreal] ${hint}`));
             console.log(chalk.yellow('\n  Remove --dry-run to generate the unsigned transaction'));
           }
           return;

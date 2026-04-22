@@ -18,6 +18,7 @@ import {
 import { decode as msgpackDecode } from '@msgpack/msgpack';
 import { ByrealError, ErrorCodes } from '../../core/errors.js';
 import { TITAN_API_URL, TITAN_AUTH_TOKEN, DEFAULTS } from '../../core/constants.js';
+import { PROXY_URL, isProxyAvailable } from '../../core/proxy.js';
 import { getConnection } from '../../core/solana.js';
 import type { Result } from '../../core/types.js';
 import type { TitanSwapRoute, TitanSwapQuoteResult } from './types.js';
@@ -31,6 +32,11 @@ interface TitanQuoteResponse {
   metadata?: { ExpectedWinner?: string };
 }
 
+// Titan has no free tier — only proxy or direct-with-token.
+export type TitanRoute = 'proxy' | 'direct';
+let lastRoute: TitanRoute | null = null;
+export function getLastRoute(): TitanRoute | null { return lastRoute; }
+
 // ============================================
 // Swap Quote
 // ============================================
@@ -43,13 +49,24 @@ export async function getSwapQuote(params: {
   slippageBps: number;
   userPublicKey: string;
 }): Promise<Result<TitanSwapQuoteResult, ByrealError>> {
-  if (!TITAN_AUTH_TOKEN) {
+  // Resolve route: proxy first, then direct-with-token. No free tier.
+  let url: string;
+  const headers: Record<string, string> = { Accept: 'application/vnd.msgpack' };
+  if (await isProxyAvailable()) {
+    lastRoute = 'proxy';
+    const base = PROXY_URL.replace(/\/$/, '');
+    url = `${base}/titan/api/v1/quote/swap`;
+  } else if (TITAN_AUTH_TOKEN) {
+    lastRoute = 'direct';
+    url = `${TITAN_API_URL}/api/v1/quote/swap`;
+    headers.Authorization = `Bearer ${TITAN_AUTH_TOKEN}`;
+  } else {
     return {
       ok: false,
       error: new ByrealError({
         code: ErrorCodes.MISSING_REQUIRED,
         type: 'VALIDATION',
-        message: 'Titan requires TITAN_AUTH_TOKEN environment variable. Set it in your shell profile or .env file.',
+        message: 'Titan is only available via the Byreal proxy. The proxy is currently unreachable — please contact the Byreal team.',
         retryable: false,
       }),
     };
@@ -63,7 +80,7 @@ export async function getSwapQuote(params: {
     slippageBps: String(params.slippageBps),
     swapMode: params.swapMode,
   });
-  const url = `${TITAN_API_URL}/api/v1/quote/swap?${query.toString()}`;
+  url = `${url}?${query.toString()}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TITAN_TIMEOUT_MS);
@@ -72,10 +89,7 @@ export async function getSwapQuote(params: {
   try {
     response = await fetch(url, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${TITAN_AUTH_TOKEN}`,
-        Accept: 'application/vnd.msgpack',
-      },
+      headers,
       signal: controller.signal,
     });
   } catch (e) {

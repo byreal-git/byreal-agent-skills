@@ -1,36 +1,54 @@
 /**
  * DFlow API client — REST-based swap quotes
+ *
+ * Routing (see src/core/proxy.ts):
+ *   1. proxy        — ${PROXY_URL}/dflow/... (key injected by gateway)
+ *   2. direct-paid  — https://quote-api.dflow.net/... (requires DFLOW_API_KEY)
+ *   3. direct-free  — https://dev-quote-api.dflow.net/... (no key, rate-limited)
  */
 
-import ky, { HTTPError, TimeoutError } from 'ky';
 import { ByrealError, ErrorCodes } from '../../core/errors.js';
-import { DFLOW_API_URL, DFLOW_API_KEY, DEFAULTS } from '../../core/constants.js';
+import {
+  DFLOW_API_KEY,
+  DFLOW_PAID_URL,
+  DFLOW_FREE_URL,
+  DEFAULTS,
+} from '../../core/constants.js';
+import { PROXY_URL, isProxyAvailable } from '../../core/proxy.js';
 import type { Result } from '../../core/types.js';
 import type { DFlowOrderResponse, DFlowSwapQuoteResult } from './types.js';
 
 // ============================================
-// HTTP Client
+// Route resolution
 // ============================================
 
-function createDFlowClient() {
-  return ky.create({
-    prefixUrl: DFLOW_API_URL,
-    timeout: DEFAULTS.REQUEST_TIMEOUT_MS,
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': 'byreal-cli',
-      ...(DFLOW_API_KEY ? { 'x-api-key': DFLOW_API_KEY } : {}),
-    },
-    hooks: {
-      beforeRequest: [
-        (request) => {
-          if (process.env.DEBUG) {
-            console.error(`[DEBUG] DFlow ${request.method} ${request.url}`);
-          }
-        },
-      ],
-    },
-  });
+export type DFlowRoute = 'proxy' | 'direct-paid' | 'direct-free';
+let lastRoute: DFlowRoute | null = null;
+export function getLastRoute(): DFlowRoute | null { return lastRoute; }
+
+async function resolveOrderUrl(): Promise<{
+  base: string;
+  headers: Record<string, string>;
+  route: DFlowRoute;
+}> {
+  if (await isProxyAvailable()) {
+    lastRoute = 'proxy';
+    return {
+      base: `${PROXY_URL.replace(/\/$/, '')}/dflow`,
+      headers: {},
+      route: 'proxy',
+    };
+  }
+  if (DFLOW_API_KEY) {
+    lastRoute = 'direct-paid';
+    return {
+      base: DFLOW_PAID_URL,
+      headers: { 'x-api-key': DFLOW_API_KEY },
+      route: 'direct-paid',
+    };
+  }
+  lastRoute = 'direct-free';
+  return { base: DFLOW_FREE_URL, headers: {}, route: 'direct-free' };
 }
 
 // ============================================
@@ -44,90 +62,98 @@ export async function getSwapQuote(params: {
   slippageBps: number;
   userPublicKey: string;
 }): Promise<Result<DFlowSwapQuoteResult, ByrealError>> {
-  const client = createDFlowClient();
-
   // DFlow uses 'auto' slippage by default; pass explicit bps if user provided
   const slippageValue = params.slippageBps > 0 ? String(params.slippageBps) : 'auto';
 
+  const query = new URLSearchParams({
+    userPublicKey: params.userPublicKey,
+    inputMint: params.inputMint,
+    outputMint: params.outputMint,
+    amount: params.amount,
+    slippageBps: slippageValue,
+  });
+
+  const { base, headers } = await resolveOrderUrl();
+  const url = `${base}/order?${query.toString()}`;
+
+  if (process.env.DEBUG) {
+    console.error(`[DEBUG] DFlow GET ${url}`);
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DEFAULTS.REQUEST_TIMEOUT_MS);
+
+  let response: Response;
   try {
-    const response = await client.get('order', {
-      searchParams: {
-        userPublicKey: params.userPublicKey,
-        inputMint: params.inputMint,
-        outputMint: params.outputMint,
-        amount: params.amount,
-        slippageBps: slippageValue,
-      },
+    response = await fetch(url, {
+      method: 'GET',
+      headers: { 'User-Agent': 'byreal-cli', ...headers },
+      signal: controller.signal,
     });
+  } catch (e) {
+    clearTimeout(timer);
+    const aborted = (e as Error).name === 'AbortError';
+    return {
+      ok: false,
+      error: new ByrealError({
+        code: aborted ? ErrorCodes.TIMEOUT : ErrorCodes.NETWORK_ERROR,
+        type: 'NETWORK',
+        message: aborted
+          ? 'DFlow request timed out.'
+          : `DFlow swap failed: ${(e as Error).message}`,
+        retryable: true,
+      }),
+    };
+  }
+  clearTimeout(timer);
 
-    const data = await response.json<DFlowOrderResponse>();
-
-    if (!data.transaction) {
+  if (!response.ok) {
+    if (response.status === 429) {
       return {
         ok: false,
         error: new ByrealError({
-          code: ErrorCodes.API_ERROR,
+          code: ErrorCodes.NETWORK_ERROR,
           type: 'NETWORK',
-          message: 'No transaction returned from DFlow /order endpoint.',
+          message: 'DFlow rate limit exceeded.',
           retryable: true,
         }),
       };
     }
-
     return {
-      ok: true,
-      value: {
-        inAmount: data.inAmount || params.amount,
-        outAmount: data.outAmount || '0',
-        inputMint: data.inputMint || params.inputMint,
-        outputMint: data.outputMint || params.outputMint,
-        transaction: data.transaction,
-        priceImpactPct: data.priceImpactPct,
-      },
-    };
-  } catch (e) {
-    return { ok: false, error: handleDFlowError(e) };
-  }
-}
-
-// ============================================
-// Error Handling
-// ============================================
-
-function handleDFlowError(error: unknown): ByrealError {
-  if (error instanceof HTTPError) {
-    const status = error.response.status;
-    if (status === 429) {
-      return new ByrealError({
-        code: ErrorCodes.NETWORK_ERROR,
+      ok: false,
+      error: new ByrealError({
+        code: ErrorCodes.API_ERROR,
         type: 'NETWORK',
-        message: 'DFlow rate limit exceeded. Set DFLOW_API_KEY for production use.',
+        message: `DFlow API error: ${response.status} ${response.statusText}`,
+        details: { status_code: response.status },
+        retryable: response.status >= 500,
+      }),
+    };
+  }
+
+  const data = (await response.json()) as DFlowOrderResponse;
+
+  if (!data.transaction) {
+    return {
+      ok: false,
+      error: new ByrealError({
+        code: ErrorCodes.API_ERROR,
+        type: 'NETWORK',
+        message: 'No transaction returned from DFlow /order endpoint.',
         retryable: true,
-      });
-    }
-    return new ByrealError({
-      code: ErrorCodes.API_ERROR,
-      type: 'NETWORK',
-      message: `DFlow API error: ${status} ${error.response.statusText}`,
-      details: { status_code: status },
-      retryable: status >= 500,
-    });
+      }),
+    };
   }
 
-  if (error instanceof TimeoutError) {
-    return new ByrealError({
-      code: ErrorCodes.TIMEOUT,
-      type: 'NETWORK',
-      message: 'DFlow request timed out.',
-      retryable: true,
-    });
-  }
-
-  const message = error instanceof Error ? error.message : 'Unknown DFlow error';
-  return new ByrealError({
-    code: ErrorCodes.NETWORK_ERROR,
-    type: 'NETWORK',
-    message: `DFlow swap failed: ${message}`,
-    retryable: true,
-  });
+  return {
+    ok: true,
+    value: {
+      inAmount: data.inAmount || params.amount,
+      outAmount: data.outAmount || '0',
+      inputMint: data.inputMint || params.inputMint,
+      outputMint: data.outputMint || params.outputMint,
+      transaction: data.transaction,
+      priceImpactPct: data.priceImpactPct,
+    },
+  };
 }

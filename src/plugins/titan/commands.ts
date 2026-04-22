@@ -16,6 +16,11 @@ import { outputJson, outputErrorJson, outputErrorTable } from '../../cli/output/
 import { TABLE_CHARS } from '../../core/constants.js';
 import * as titanApi from './api.js';
 
+function fallbackHint(route: titanApi.TitanRoute | null): string | null {
+  if (route === 'direct') return 'byreal proxy unreachable — using direct Titan Gateway with TITAN_AUTH_TOKEN';
+  return null;
+}
+
 // ============================================
 // titan swap
 // ============================================
@@ -109,6 +114,8 @@ export function createTitanSwapCommand(): Command {
             );
             console.log(chalk.cyan.bold('\n  Titan Swap Preview\n'));
             console.log(table.toString());
+            const hint = fallbackHint(titanApi.getLastRoute());
+            if (hint) console.error(chalk.gray(`[byreal] ${hint}`));
             console.log(chalk.yellow('\n  Remove --dry-run to generate the unsigned transaction'));
           }
           return;

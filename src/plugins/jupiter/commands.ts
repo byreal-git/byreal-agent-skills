@@ -16,6 +16,12 @@ import { outputJson, outputErrorJson, outputErrorTable } from '../../cli/output/
 import { TABLE_CHARS } from '../../core/constants.js';
 import * as jupiterApi from './api.js';
 
+function fallbackHint(route: jupiterApi.JupiterRoute | null): string | null {
+  if (route === 'direct-paid') return 'byreal proxy unreachable — using api.jup.ag with JUPITER_API_KEY';
+  if (route === 'direct-free') return 'byreal proxy unreachable — using lite-api.jup.ag (no key, rate-limited)';
+  return null;
+}
+
 // ============================================
 // jup swap
 // ============================================
@@ -104,6 +110,8 @@ export function createJupSwapCommand(): Command {
             );
             console.log(chalk.cyan.bold('\n  Jupiter Swap Preview\n'));
             console.log(table.toString());
+            const hint = fallbackHint(jupiterApi.getLastRoute());
+            if (hint) console.error(chalk.gray(`[byreal] ${hint}`));
             console.log(chalk.yellow('\n  Remove --dry-run to generate the unsigned transaction'));
           }
           return;
@@ -173,6 +181,8 @@ export function createJupPriceCommand(): Command {
         }
         console.log(chalk.cyan.bold('\n  Jupiter Price\n'));
         console.log(table.toString());
+        const hint = fallbackHint(jupiterApi.getLastRoute());
+        if (hint) console.error(chalk.gray(`[byreal] ${hint}`));
       }
     });
 }

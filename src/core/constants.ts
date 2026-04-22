@@ -75,25 +75,30 @@ export const SOLANA_CLUSTER = process.env.SOLANA_CLUSTER || "mainnet-beta";
 // Third-party DeFi Configuration
 // ============================================
 
+// Routing priority for all three aggregators (see src/core/proxy.ts):
+//   1. Byreal proxy (api-proxy) — keys injected by gateway, no local key needed
+//   2. Direct with API key from env — paid upstream
+//   3. Direct without key — free/anonymous upstream (Jupiter, DFlow only; Titan has no free tier)
+
 // Jupiter (REST swap aggregator)
-// Paid API (api.jup.ag) requires x-api-key; falls back to lite-api.jup.ag when no key set.
+// Paid: api.jup.ag (requires x-api-key). Free fallback: lite-api.jup.ag.
 export const JUPITER_API_KEY =
   process.env.JUPITER_API_KEY || process.env.JUP_API_KEY;
-const JUP_BASE = JUPITER_API_KEY
-  ? "https://api.jup.ag"
-  : "https://lite-api.jup.ag";
-export const JUP_SWAP_API = `${JUP_BASE}/swap/v1`;
-export const JUP_PRICE_API = `${JUP_BASE}/price/v3`;
+export const JUP_PAID_BASE = "https://api.jup.ag";
+export const JUP_FREE_BASE = "https://lite-api.jup.ag";
 
 // Titan (REST Gateway swap aggregator)
-// Default: global entry point auto-routes to closest region
-// Override with TITAN_API_URL for regional endpoints (e.g. https://jp.partners.api.titan.exchange)
+// Default: global entry point auto-routes to closest region.
+// Override with TITAN_API_URL for regional endpoints (e.g. https://jp.partners.api.titan.exchange).
+// No free tier — requires TITAN_AUTH_TOKEN when proxy is unavailable.
 export const TITAN_API_URL =
   process.env.TITAN_API_URL || "https://partners.api.titan.exchange";
 export const TITAN_AUTH_TOKEN = process.env.TITAN_AUTH_TOKEN;
 
 // DFlow (REST swap aggregator)
-export const DFLOW_API_URL = "https://dev-quote-api.dflow.net";
+// Paid: quote-api.dflow.net (requires x-api-key). Free fallback: dev-quote-api.dflow.net.
+export const DFLOW_PAID_URL = "https://quote-api.dflow.net";
+export const DFLOW_FREE_URL = "https://dev-quote-api.dflow.net";
 export const DFLOW_API_KEY = process.env.DFLOW_API_KEY;
 
 // ============================================
