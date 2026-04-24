@@ -15,6 +15,8 @@ import {
   DEFAULTS,
 } from '../../core/constants.js';
 import { PROXY_URL, isProxyAvailable } from '../../core/proxy.js';
+import { getFeeConfig, pickFeeSide, resolveFeeAccountForSwap } from '../../core/fee-config.js';
+import { getConnection } from '../../core/solana.js';
 import type { Result } from '../../core/types.js';
 import type { DFlowOrderResponse, DFlowSwapQuoteResult } from './types.js';
 
@@ -72,6 +74,22 @@ export async function getSwapQuote(params: {
     amount: params.amount,
     slippageBps: slippageValue,
   });
+
+  // Platform fee (optional). `pickFeeSide` picks the major-mint side so Ops
+  // only pre-builds ATAs for the small major-mint set. `platformFeeMode`
+  // must match the side of `feeAccount`'s mint — otherwise DFlow returns a
+  // "feeAccount mint mismatch" error. All three params move together; drop
+  // them as a group when the ATA is missing so the swap still runs fee-free.
+  const feeConfig = getFeeConfig();
+  const { mint: feeMint, side: feeSide } = pickFeeSide(params.inputMint, params.outputMint);
+  const feeAccount = feeConfig
+    ? await resolveFeeAccountForSwap(feeMint, getConnection(), feeConfig)
+    : null;
+  if (feeConfig && feeAccount) {
+    query.set('platformFeeBps', String(feeConfig.bps));
+    query.set('platformFeeMode', feeSide === 'input' ? 'inputMint' : 'outputMint');
+    query.set('feeAccount', feeAccount);
+  }
 
   const { base, headers } = await resolveOrderUrl();
   const url = `${base}/order?${query.toString()}`;

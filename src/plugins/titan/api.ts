@@ -20,6 +20,7 @@ import { ByrealError, ErrorCodes } from '../../core/errors.js';
 import { TITAN_API_URL, TITAN_AUTH_TOKEN, DEFAULTS } from '../../core/constants.js';
 import { PROXY_URL, isProxyAvailable } from '../../core/proxy.js';
 import { getConnection } from '../../core/solana.js';
+import { getFeeConfig, pickFeeSide, resolveFeeAccountForSwap } from '../../core/fee-config.js';
 import type { Result } from '../../core/types.js';
 import type { TitanSwapRoute, TitanSwapQuoteResult } from './types.js';
 
@@ -80,6 +81,23 @@ export async function getSwapQuote(params: {
     slippageBps: String(params.slippageBps),
     swapMode: params.swapMode,
   });
+
+  // Platform fee (optional). `pickFeeSide` picks the major-mint side so the
+  // treasury only needs ATAs on the handful of major mints. `feeFromInputMint`
+  // must match the side of `feeAccount`'s mint; mismatch → Titan 400. Titan
+  // also requires the partner JWT subject to be whitelisted server-side —
+  // unrelated to env config, handled via onboarding.
+  const feeConfig = getFeeConfig();
+  const { mint: feeMint, side: feeSide } = pickFeeSide(params.inputMint, params.outputMint);
+  const feeAccount = feeConfig
+    ? await resolveFeeAccountForSwap(feeMint, getConnection(), feeConfig)
+    : null;
+  if (feeConfig && feeAccount) {
+    query.set('feeAccount', feeAccount);
+    query.set('feeBps', String(feeConfig.bps));
+    query.set('feeFromInputMint', feeSide === 'input' ? 'true' : 'false');
+  }
+
   url = `${url}?${query.toString()}`;
 
   const controller = new AbortController();

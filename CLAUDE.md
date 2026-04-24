@@ -43,6 +43,8 @@ cp playground/.env.bak playground/.env
 #   SOL_ENDPOINT=<rpc-url>        # optional, defaults to Helius
 ```
 
+**Always `npm run build` before on-chain E2E.** `npx byreal-cli` resolves to `dist/index.cjs` (see `package.json#bin`), not `src/`. A plugin change that is not rebuilt will sign & broadcast the **old** behavior silently.
+
 ### Usage
 
 **Pipe CLI output directly to the signing script:**

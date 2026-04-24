@@ -56,8 +56,22 @@ Regional endpoints (override via `TITAN_API_URL`):
 - `https://jp.partners.api.titan.exchange` (Tokyo, Japan)
 - `https://de.partners.api.titan.exchange` (Frankfurt, Germany)
 
+## Fee Collection — Implemented
+
+Titan collects platform fees via three query parameters on `/api/v1/quote/swap`:
+
+- `feeAccount` — base58 ATA for the fee-side mint (must already exist on-chain; Titan does NOT auto-create)
+- `feeBps` — u16 basis points
+- `feeFromInputMint` — `"true"` to take fee from input mint (default: output)
+
+The Titan partner team whitelisted JWT subject `api:byreal` on 2026-04-22; no separate on-chain ATA registration was required. `getSwapQuote()` in `api.ts` calls `getFeeConfig()` + `resolveFeeAccountForSwap()` (same helpers Jupiter / DFlow use) and appends all three query params when a valid treasury ATA for the input mint exists on-chain. When the helpers return `null` (env unset, misconfigured, or treasury ATA missing) the three params are omitted together and Titan routes the swap fee-free — the same graceful-degradation contract as the other two aggregators.
+
+Policy note: fee is always taken from the input mint (`feeFromInputMint=true`) to align with Jupiter / DFlow and let Ops pre-build ATAs for just the common input mints.
+
+See `DOCS/swap-fee-collection.md` §5 for the evaluation and §10.3 T2 for the mainnet verification record.
+
 ## References
 
 - **API Docs**: https://titan-exchange.gitbook.io/titan/developer-doc
-- **Fee Collection**: https://titan-exchange.gitbook.io/titan/developer-doc/swap-api/guides/fee-collection (for future revenue integration)
+- **Fee Collection**: https://titan-exchange.gitbook.io/titan/developer-doc/swap-api/guides/fee-collection
 - **Playground**: https://github.com/Titan-Pathfinder/Playground-api — Demo app with a reference transaction builder (`lib/solana/simulate.ts`) — still useful as a reference even though it targets the WS SDK

@@ -16,6 +16,12 @@ import {
   JUP_FREE_BASE,
 } from "../../core/constants.js";
 import { PROXY_URL, isProxyAvailable } from "../../core/proxy.js";
+import {
+  getFeeConfig,
+  pickFeeSide,
+  resolveFeeAccountForSwap,
+} from "../../core/fee-config.js";
+import { getConnection } from "../../core/solana.js";
 import type { ByrealError } from "../../core/errors.js";
 import type {
   JupiterQuoteResponse,
@@ -89,6 +95,26 @@ export async function getQuote(params: {
       searchParams.set("slippageBps", String(params.slippageBps));
     }
 
+    // Platform fee (optional). `pickFeeSide` chooses the major-mint side
+    // (input preferred). Jupiter infers the fee side at swap time from the
+    // `feeAccount`'s mint; sending `feeAccount` here on /quote keeps the
+    // quoted outAmount aligned with the actual swap (Jupiter would otherwise
+    // assume output-side and mis-quote when fee lands on input). The ATA
+    // existence check is cached per-process so /swap reuses it.
+    const feeConfig = getFeeConfig();
+    if (feeConfig) {
+      const { mint: feeMint } = pickFeeSide(params.inputMint, params.outputMint);
+      const feeAccount = await resolveFeeAccountForSwap(
+        feeMint,
+        getConnection(),
+        feeConfig,
+      );
+      if (feeAccount) {
+        searchParams.set("platformFeeBps", String(feeConfig.bps));
+        searchParams.set("feeAccount", feeAccount);
+      }
+    }
+
     const { url, headers } = await resolveRoute("/swap/v1/quote");
     const response = await fetch(`${url}?${searchParams}`, { headers });
     if (!response.ok) {
@@ -108,6 +134,23 @@ export async function getSwapTransaction(params: {
   priorityFeeMicroLamports?: number;
 }): Promise<Result<JupiterSwapResponse, ByrealError>> {
   try {
+    // Platform fee (optional). `pickFeeSide` must produce the same decision
+    // as in getQuote() — and it does, because it's pure and reads only the
+    // two mints from the quote. resolveFeeAccountForSwap hits the per-process
+    // cache populated there, so the ATA check runs at most once per
+    // (treasury, mint) per CLI invocation.
+    const feeConfig = getFeeConfig();
+    const feeAccount = feeConfig
+      ? await resolveFeeAccountForSwap(
+          pickFeeSide(
+            params.quoteResponse.inputMint,
+            params.quoteResponse.outputMint,
+          ).mint,
+          getConnection(),
+          feeConfig,
+        )
+      : null;
+
     const { url, headers } = await resolveRoute("/swap/v1/swap");
     const response = await fetch(url, {
       method: "POST",
@@ -125,6 +168,7 @@ export async function getSwapTransaction(params: {
             priorityLevel: "medium",
           },
         },
+        ...(feeAccount ? { feeAccount } : {}),
       }),
     });
     if (!response.ok) {
