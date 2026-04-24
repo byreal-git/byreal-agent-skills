@@ -20,8 +20,10 @@ import {
   getFeeConfig,
   pickFeeSide,
   resolveFeeAccountForSwap,
+  resolveMintTokenProgram,
 } from "../../core/fee-config.js";
 import { getConnection } from "../../core/solana.js";
+import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import type { ByrealError } from "../../core/errors.js";
 import type {
   JupiterQuoteResponse,
@@ -101,9 +103,18 @@ export async function getQuote(params: {
     // quoted outAmount aligned with the actual swap (Jupiter would otherwise
     // assume output-side and mis-quote when fee lands on input). The ATA
     // existence check is cached per-process so /swap reuses it.
+    //
+    // When the fee mint is Token-2022 we also append `instructionVersion=V2`.
+    // V1 `Route` hard-codes legacy `Token::Transfer` for the fee leg and
+    // fails with `InvalidAccountData` on Token-2022 ATAs; `RouteV2` issues a
+    // `TransferChecked` through the right program. Setting it on /quote alone
+    // is sufficient — /swap reads the context from quoteResponse.
     const feeConfig = getFeeConfig();
     if (feeConfig) {
-      const { mint: feeMint } = pickFeeSide(params.inputMint, params.outputMint);
+      const { mint: feeMint } = pickFeeSide(
+        params.inputMint,
+        params.outputMint,
+      );
       const feeAccount = await resolveFeeAccountForSwap(
         feeMint,
         getConnection(),
@@ -112,6 +123,13 @@ export async function getQuote(params: {
       if (feeAccount) {
         searchParams.set("platformFeeBps", String(feeConfig.bps));
         searchParams.set("feeAccount", feeAccount);
+        const feeTokenProgram = await resolveMintTokenProgram(
+          feeMint,
+          getConnection(),
+        );
+        if (feeTokenProgram.equals(TOKEN_2022_PROGRAM_ID)) {
+          searchParams.set("instructionVersion", "V2");
+        }
       }
     }
 

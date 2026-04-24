@@ -34,6 +34,9 @@ describe('fee-config', () => {
   beforeEach(() => {
     delete process.env.FEE_RECIPIENT_WALLET;
     delete process.env.FEE_BPS;
+    // warnOnce is gated by DEBUG (ops-only diagnostic); tests assert on the
+    // warning messages, so opt in.
+    process.env.DEBUG = '1';
     __resetFeeConfigForTests();
     errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
   });

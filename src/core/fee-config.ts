@@ -21,8 +21,10 @@
  * deriving the ATA, because the two programs produce different PDAs for the
  * same (owner, mint) pair. Treasury must pre-create its ATAs under the
  * matching program (`spl-token create-account <mint> --program-id <id>`).
- * Jupiter does not support Token-2022 fee collection — those swaps fall
- * through to graceful degradation.
+ * The resolved token program is exposed via `resolveMintTokenProgram` so
+ * Jupiter callers can append `instructionVersion=V2` when the fee mint is
+ * Token-2022 (V1 `Route` uses legacy `Token::Transfer` and fails with
+ * `InvalidAccountData` on Token-2022 ATAs — verified on mainnet).
  */
 
 import { Connection, PublicKey } from "@solana/web3.js";
@@ -72,10 +74,17 @@ export function pickFeeSide(
 }
 
 const warnedKeys = new Set<string>();
+/**
+ * Internal diagnostic, gated by `DEBUG` to keep the CLI output clean — fee is
+ * transparent to the user, so ATA / env / RPC degradation paths are ops
+ * concerns, not user messaging. Ops can run with `DEBUG=1` to see them.
+ */
 function warnOnce(key: string, message: string): void {
   if (warnedKeys.has(key)) return;
   warnedKeys.add(key);
-  console.error(`[fee-config] ${message}`);
+  if (process.env.DEBUG) {
+    console.error(`[fee-config] ${message}`);
+  }
 }
 
 // Cache `${recipientBase58}:${mint}` -> boolean so the ATA check runs once per
@@ -95,7 +104,7 @@ const mintProgramCache = new Map<string, PublicKey>();
  * the caller still has *some* ATA to verify — the subsequent on-chain
  * existence check catches the miss and degrades cleanly.
  */
-async function resolveMintTokenProgram(
+export async function resolveMintTokenProgram(
   mint: string,
   connection: Connection,
 ): Promise<PublicKey> {
