@@ -7,9 +7,16 @@ import chalk from 'chalk';
 import Table from 'cli-table3';
 import { PublicKey } from '@solana/web3.js';
 import type { GlobalOptions } from '../../core/types.js';
-import { resolveExecutionMode, printDryRunBanner } from '../../core/confirm.js';
-import { missingWalletAddressError } from '../../core/errors.js';
-import { outputJson, outputErrorJson, outputErrorTable } from '../../cli/output/formatters.js';
+import { printDryRunBanner, printPrivySignBanner } from '../../core/confirm.js';
+import { ByrealError, missingWalletAddressError } from '../../core/errors.js';
+import { requirePrivyContext, privyBroadcastMany } from '../../privy/index.js';
+import {
+  outputJson,
+  outputErrorJson,
+  outputErrorTable,
+  outputMultiBroadcastResult,
+  safeResolveExecutionMode,
+} from '../../cli/output/formatters.js';
 import { TABLE_CHARS } from '../../core/constants.js';
 import { scanEmptyAccounts, buildCloseTransactions } from './accounts.js';
 
@@ -17,13 +24,14 @@ export function createRentReclaimCommand(): Command {
   return new Command('reclaim')
     .description('Close empty token accounts to reclaim SOL rent')
     .option('--dry-run', 'Scan and report without generating transactions')
+    .option('--execute', 'Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)')
     .option('--include-token2022', 'Also close empty Token-2022 accounts')
     .option('--exclude <mints>', 'Comma-separated mint addresses to never close')
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
-      const mode = resolveExecutionMode(options);
+      const mode = safeResolveExecutionMode(options, format);
 
       const walletAddress = globalOptions.walletAddress;
       if (!walletAddress) {
@@ -93,15 +101,38 @@ export function createRentReclaimCommand(): Command {
             }
             console.log(acctTable.toString());
 
-            console.log(chalk.yellow('\n  Remove --dry-run to generate the unsigned transaction(s)'));
+            console.log(chalk.yellow('\n  Remove --dry-run to emit an unsigned transaction; add --execute to sign + broadcast via Privy.'));
           }
           return;
         }
 
-        // Execute: build close transactions
+        // Build close transactions (used by both unsigned-tx and execute modes).
         const txs = await buildCloseTransactions(walletAddress, scan.emptyAccounts);
-        console.log(JSON.stringify({ unsignedTransactions: txs }));
+
+        if (mode === 'unsigned-tx') {
+          console.log(JSON.stringify({ unsignedTransactions: txs }));
+          return;
+        }
+
+        // Default (execute): sign + broadcast each via Privy.
+        const ctx = requirePrivyContext(walletAddress);
+        printPrivySignBanner();
+        const broadcast = await privyBroadcastMany(ctx, txs);
+        if (!broadcast.ok) {
+          format === 'json' ? outputErrorJson(broadcast.error.toJSON()) : outputErrorTable(broadcast.error.toJSON());
+          process.exit(1);
+        }
+        if (format === 'json') {
+          outputJson(broadcast.value, startTime);
+        } else {
+          outputMultiBroadcastResult(broadcast.value);
+        }
+        if (broadcast.value.failCount > 0) process.exit(1);
       } catch (e) {
+        if (e instanceof ByrealError) {
+          format === 'json' ? outputErrorJson(e.toJSON()) : outputErrorTable(e.toJSON());
+          process.exit(1);
+        }
         const message = (e as Error).message || 'Rent reclaim failed';
         format === 'json'
           ? outputErrorJson({ code: 'RPC_ERROR', type: 'SYSTEM', message, retryable: true })

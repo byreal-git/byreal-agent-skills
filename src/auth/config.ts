@@ -57,6 +57,17 @@ export function loadConfig(): Result<ByrealConfig, ByrealError> {
       },
     };
 
+    // Optional Privy fields — undefined unless explicitly set on disk.
+    if (typeof parsed.privy_proxy_url === 'string' && parsed.privy_proxy_url) {
+      config.privy_proxy_url = parsed.privy_proxy_url;
+    }
+    if (
+      typeof parsed.privy_api_base_path === 'string' &&
+      parsed.privy_api_base_path
+    ) {
+      config.privy_api_base_path = parsed.privy_api_base_path;
+    }
+
     return ok(config);
   } catch (e) {
     if (e instanceof SyntaxError) {
@@ -90,6 +101,8 @@ const VALID_KEYS = new Set([
   'cluster',
   'defaults.priority_fee_micro_lamports',
   'defaults.slippage_bps',
+  'privy_proxy_url',
+  'privy_api_base_path',
 ]);
 
 export function getConfigValue(key: string): Result<unknown, ByrealError> {
@@ -170,6 +183,20 @@ function validateConfigValue(key: string, value: string): Result<unknown, Byreal
         return err(validationError('priority_fee_micro_lamports must be a non-negative integer', 'priority_fee_micro_lamports'));
       }
       return ok(num);
+    }
+    case 'privy_proxy_url': {
+      try {
+        new URL(value);
+        return ok(value.replace(/\/+$/, ''));
+      } catch {
+        return err(validationError('privy_proxy_url must be a valid URL', 'privy_proxy_url'));
+      }
+    }
+    case 'privy_api_base_path': {
+      if (!value.startsWith('/')) {
+        return err(validationError('privy_api_base_path must start with /', 'privy_api_base_path'));
+      }
+      return ok(value.replace(/\/+$/, ''));
     }
     default:
       return ok(value);

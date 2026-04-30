@@ -102,12 +102,38 @@ byreal-cli catalog show dex.pool.list
 | -v, --version | Show version |
 | -h, --help | Show help |
 
+## Three Execution Modes (write commands)
+
+Every write command (\`swap execute\`, \`positions open/close/increase/decrease/claim/claim-rewards/claim-bonus/copy\`, all plugin write commands like \`jup swap\` / \`dflow swap\` / \`titan swap\` / \`kamino deposit/withdraw\` / \`rent reclaim\` / \`sweep execute\`) supports three modes:
+
+| Mode | Flag | What it does | Output |
+|------|------|--------------|--------|
+| **unsigned-tx** (default) | (none) | Emit base64 unsigned transaction(s) so an external signer can take over | \`{ unsignedTransactions: [...] }\` (identical to the pre-Privy CLI) |
+| **execute** | \`--execute\` | Sign + broadcast on-chain via Privy proxy | \`{ signature: "<txid>", explorer: "https://solscan.io/tx/<txid>" }\` (single tx) or \`{ results: [{index, signature?, error?}], successCount, failCount }\` (multi-tx) |
+| **dry-run** | \`--dry-run\` | Preview only — no transaction generated, no signing | Preview JSON / table |
+
+\`--dry-run\` and \`--execute\` are mutually exclusive (CLI errors on both).
+
+**Backward-compatible default**: every write command still emits unsigned transactions by default. To sign + broadcast through the Byreal Privy proxy, add \`--execute\` explicitly.
+
+### Privy Configuration
+
+\`--execute\` requires a Privy agent token + proxy URL. Sources (highest precedence first):
+
+1. Env vars: \`AGENT_TOKEN\`, \`PRIVY_PROXY_URL\`, \`PRIVY_API_BASE_PATH\`
+2. \`~/.openclaw/realclaw-config.json\` — \`{ baseUrl, apiBasePath?, wallets: [{ address, token, type: "solana" | "evm" }] }\`. The CLI picks the wallet whose \`address\` matches \`--wallet-address\` and whose \`type === "solana"\`.
+3. Legacy: \`~/.openclaw/agent_token\` (single-token file) plus \`~/.config/byreal/config.json#privy_proxy_url\` (or \`byreal-cli config set privy_proxy_url <url>\`).
+
+If Privy is not configured, \`--execute\` fails with \`PRIVY_NOT_CONFIGURED\` and includes actionable suggestions (configure realclaw / configure legacy / drop \`--execute\` to keep the default unsigned output). The CLI never silently degrades.
+
+If \`--wallet-address\` does not match any \`type=solana\` entry in \`realclaw-config.json\`, the CLI fails with \`PRIVY_WALLET_NOT_FOUND\` (rather than fall back to a different wallet's token).
+
 ## Hard Constraints (Do NOT violate)
 
 1. **\`-o json\` only for parsing** — when you need to extract values for the next command. When the user wants to **see** results, omit it — the CLI has built-in tables, K-line charts, and formatted analysis. Never fetch JSON then re-draw them yourself.
 2. **Never truncate on-chain data** — always display the FULL string for: transaction signatures, mint addresses, pool addresses, NFT addresses, wallet addresses. Never use \`xxx...yyy\`.
-3. **Never request or display private keys** — the CLI does not handle private keys. All write commands output unsigned transactions.
-4. **\`--wallet-address\` required for all write commands** — the user must provide their Solana wallet public key. No local wallet setup or keypair storage. Preview with \`--dry-run\` first, remove \`--dry-run\` to generate the unsigned transaction.
+3. **Never request or display private keys** — the CLI does not store private keys locally. Signing is performed by the Privy proxy via the agent token; private keys live in Privy.
+4. **\`--wallet-address\` required for all write commands** — the user must provide their Solana wallet public key. Default mode emits an unsigned transaction (back-compat); add \`--execute\` to sign + broadcast via Privy, or \`--dry-run\` to preview.
 5. **Large amounts (> $10,000)**: Require explicit user confirmation
 6. **High slippage (> 200 bps)**: Warn user before proceeding
 7. **Token amounts use UI format** — \`--amount 0.1\` means 0.1 tokens, not lamports. The CLI auto-resolves decimals from mint address. Never convert manually. Use \`--raw\` only for raw units.
@@ -134,7 +160,8 @@ Present on-chain data first, then external context, then synthesize how external
 | List tokens | \`byreal-cli tokens list\` |
 | Global stats | \`byreal-cli overview\` |
 | Swap preview | \`byreal-cli swap execute --input-mint <mint> --output-mint <mint> --amount <amount> --dry-run\` |
-| Swap execute | \`byreal-cli swap execute --input-mint <mint> --output-mint <mint> --amount <amount> --wallet-address <addr>\` |
+| Swap (unsigned) | \`byreal-cli swap execute --input-mint <mint> --output-mint <mint> --amount <amount> --wallet-address <addr>\` |
+| Swap (sign + broadcast) | \`byreal-cli swap execute --input-mint <mint> --output-mint <mint> --amount <amount> --wallet-address <addr> --execute\` |
 | List positions | \`byreal-cli positions list\` |
 | Open position (USD) | \`byreal-cli positions open --pool <addr> --price-lower <p> --price-upper <p> --amount-usd <usd> --wallet-address <addr>\` |
 | Open position (token) | \`byreal-cli positions open --pool <addr> --price-lower <p> --price-upper <p> --base <token> --amount <amount> --wallet-address <addr>\` |
@@ -192,13 +219,23 @@ For detailed parameter info on any command, run: \`byreal-cli catalog show <capa
 - **Incentive rewards** → \`positions claim-rewards\` (team-added pool incentives)
 - **Copy bonus** → \`positions claim-bonus\` (referral rewards from copy trading)
 
-### Claim Rewards / Bonus: 3-Step Flow
-\`claim-rewards\` and \`claim-bonus\` require a multi-step flow (backend co-signs):
-1. **Preview**: \`positions claim-rewards --dry-run --wallet-address <addr> -o json\`
-2. **Generate unsigned tx**: \`positions claim-rewards --wallet-address <addr> -o json\` → returns \`orderCode\` + \`unsignedTransactions\` (each with \`txPayload\`, \`txCode\`)
-3. **Submit signed tx**: After wallet signs each \`txPayload\`, call \`positions submit-rewards --order-code "ORD_xxx" --signed-payloads '[{"txCode":"TX_xxx","poolAddress":"...","signedTx":"<base64>"}]' --wallet-address <addr>\`
+### Claim Rewards / Bonus: One-Shot Atomic Command (with --execute)
 
-**Critical**: Do NOT skip Step 3 — without \`submit-rewards\`, signed transactions are never broadcast. The \`orderCode\` ties steps together. For \`claim-bonus\`: same flow, replace \`claim-rewards\` with \`claim-bonus\` in Step 1-2.
+When \`--execute\` is set, \`claim-rewards\` and \`claim-bonus\` are atomic. The CLI internally does encode → Privy sign → backend submit, returns the final order result. **Do not chain skills or call \`submit-rewards\` manually when running with \`--execute\`.**
+
+\`\`\`
+byreal-cli positions claim-rewards --wallet-address <addr> --execute -o json
+# → { orderCode, txList: [...], claimTokenList: [...] }
+\`\`\`
+
+\`txList\` contains the on-chain signatures the backend broadcast. \`claimTokenList\` shows which tokens were claimed.
+
+**Default multi-step flow** (no \`--execute\` flag — back-compat for external signers):
+1. \`positions claim-rewards --wallet-address <addr> -o json\` → returns \`{ orderCode, unsignedTransactions: [{ poolAddress, txPayload, txCode, tokens }] }\`
+2. External signer signs each \`txPayload\`
+3. \`positions submit-rewards --order-code <orderCode> --signed-payloads '[{"txCode":"...","poolAddress":"...","signedTx":"<base64>"}]' --wallet-address <addr>\`
+
+The multi-step flow is the default for backward compatibility; if Privy is configured, prefer \`--execute\` for the one-shot atomic command.
 
 ### Copy Bonus Epochs
 - **Accruing**: Current epoch, bonus accumulating
@@ -209,7 +246,7 @@ For detailed parameter info on any command, run: \`byreal-cli catalog show <capa
 \`positions open --dry-run\` and \`positions increase --dry-run\` automatically check wallet balance. If insufficient, response includes \`balanceWarnings\` (deficit) and \`walletBalances\` (all available tokens) — no need to run \`wallet balance\` separately.
 
 ### Config Keys
-Supported keys for \`config get/set\`: rpc_url, cluster, defaults.slippage_bps, defaults.priority_fee_micro_lamports
+Supported keys for \`config get/set\`: rpc_url, cluster, defaults.slippage_bps, defaults.priority_fee_micro_lamports, privy_proxy_url, privy_api_base_path
 
 ## Workflow: Finding Investment Opportunities
 
@@ -227,7 +264,7 @@ When the user asks about investment opportunities, potential pools, or yield far
    - USD budget: \`positions open --pool <id> --price-lower <p> --price-upper <p> --amount-usd <usd> --dry-run -o json\`
    - Token amount: \`positions open --pool <id> --price-lower <p> --price-upper <p> --base MintA --amount <amt> --dry-run -o json\`
 4. **If insufficient balance**: dry-run response includes \`balanceWarnings\` (deficit) + \`walletBalances\` (all tokens). Pick a swap source from ANY token in the wallet (prefer highest USD balance, stablecoins/SOL for lower slippage), swap to cover the deficit. **Wait 3-5 seconds** after swap before re-running dry-run (RPC propagation delay).
-5. **Execute**: remove \`--dry-run\`, add \`--wallet-address <addr>\` to generate the unsigned transaction
+5. **Run for real**: drop \`--dry-run\` (keep \`--wallet-address <addr>\`). The default emits an unsigned base64 transaction \`{ unsignedTransactions: [...] }\` for an external signer (back-compat). Add \`--execute\` to sign + broadcast via Privy directly → \`{ signature, explorer }\`.
 
 ## Workflow: Increase/Decrease Liquidity
 
@@ -237,12 +274,12 @@ When user wants to add more liquidity to an existing position or partially withd
 1. \`byreal-cli positions list -o json\` — find the position's NFT mint address
 2. \`byreal-cli positions increase --nft-mint <nft-mint> --amount-usd <usd> --dry-run -o json\` — preview (includes balance check)
 3. If insufficient balance → swap to get required tokens (see "Insufficient Balance" workflow)
-4. \`byreal-cli positions increase --nft-mint <nft-mint> --amount-usd <usd> --wallet-address <addr> -o json\` — generate unsigned transaction
+4. \`byreal-cli positions increase --nft-mint <nft-mint> --amount-usd <usd> --wallet-address <addr> -o json\` — emit unsigned tx (default). Add \`--execute\` to sign + broadcast via Privy.
 
 **Decrease liquidity** (partial withdrawal):
 1. \`byreal-cli positions list -o json\` — find the position's NFT mint address
 2. \`byreal-cli positions decrease --nft-mint <nft-mint> --percentage 50 --dry-run -o json\` — preview how much you'll receive
-3. \`byreal-cli positions decrease --nft-mint <nft-mint> --percentage 50 --wallet-address <addr> -o json\` — generate unsigned transaction
+3. \`byreal-cli positions decrease --nft-mint <nft-mint> --percentage 50 --wallet-address <addr> -o json\` — emit unsigned tx (default). Add \`--execute\` to sign + broadcast via Privy.
 
 **Key distinction**: Use \`decrease\` to partially withdraw while keeping the position open. Use \`close\` to fully exit and burn the NFT.
 
@@ -288,14 +325,15 @@ When user asks vague questions like "有什么仓位可以 copy？", "最近有�
 
 Default to \`byreal-cli swap execute\`. Fall back to \`jup swap\` / \`dflow swap\` only if Byreal returns no route, or the user names an aggregator explicitly.
 
-## Workflow: Jupiter / DFlow Swap
+## Workflow: Jupiter / Titan / DFlow Swap
 
 \`\`\`
-byreal-cli jup swap   --input-mint <mint> --output-mint <mint> --amount <amt> [--dry-run] --wallet-address <addr>
-byreal-cli dflow swap --input-mint <mint> --output-mint <mint> --amount <amt> [--dry-run] --wallet-address <addr>
+byreal-cli jup swap   --input-mint <mint> --output-mint <mint> --amount <amt> [--dry-run|--execute] --wallet-address <addr>
+byreal-cli titan swap --input-mint <mint> --output-mint <mint> --amount <amt> [--dry-run|--execute] --wallet-address <addr>
+byreal-cli dflow swap --input-mint <mint> --output-mint <mint> --amount <amt> [--dry-run|--execute] --wallet-address <addr>
 \`\`\`
 
-Output: \`{ unsignedTransactions: [base64] }\`. DFlow optionally reads \`DFLOW_API_KEY\`.
+Default (no flag) emits \`{ unsignedTransactions: [base64] }\` for back-compat. \`--execute\` signs + broadcasts via Privy → output \`{ signature, explorer }\`. DFlow optionally reads \`DFLOW_API_KEY\`. Titan reads \`TITAN_AUTH_TOKEN\` if proxy unreachable.
 
 ## Workflow: Idle Yield with Kamino
 

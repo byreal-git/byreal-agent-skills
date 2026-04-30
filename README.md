@@ -1,6 +1,6 @@
 # Byreal Agent Skills
 
-> **Note:** This is the **RealClaw** internal branch (`openclaw`). Write commands output unsigned base64 transactions by default and require `--wallet-address <address>` instead of local keypair setup. Package name: `@byreal-io/byreal-cli-realclaw`.
+> **Note:** This is the **RealClaw** internal branch (`openclaw`). Write commands emit unsigned transactions by default (back-compat with the pre-Privy CLI); add `--execute` to sign and broadcast on-chain via the Byreal Privy proxy. All write commands require `--wallet-address <address>` (no local keypair setup). Package name: `@byreal-io/byreal-cli-realclaw`.
 
 Agent skills for [Byreal](https://byreal.io) — a concentrated liquidity (CLMM) DEX on Solana. Every command supports structured JSON output, and the built-in skill system lets AI agents discover and use all capabilities automatically.
 
@@ -52,13 +52,66 @@ byreal-cli swap execute \
   --output-mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v \
   --amount 0.1 --dry-run
 
-# Copy a top farmer's position (outputs unsigned base64 transaction)
-byreal-cli positions copy \
+# Same swap — emit unsigned base64 transaction for an external signer (default, back-compat)
+byreal-cli swap execute \
   --wallet-address <your-wallet-address> \
-  --position <address> --amount-usd 100
+  --input-mint So11111111111111111111111111111111111111112 \
+  --output-mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v \
+  --amount 0.1
+
+# Same swap — sign + broadcast on-chain via Privy
+byreal-cli swap execute \
+  --wallet-address <your-wallet-address> \
+  --input-mint So11111111111111111111111111111111111111112 \
+  --output-mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v \
+  --amount 0.1 --execute
 ```
 
 All commands support `-o json` for structured output.
+
+## Execution Modes (write commands)
+
+Write commands (`swap execute`, `positions open/close/...`, plugin write commands) support three modes:
+
+| Flag           | Behavior                                                                                       |
+| -------------- | ---------------------------------------------------------------------------------------------- |
+| (none)         | **Default (back-compat)**: emit `{ unsignedTransactions: [base64] }` for an external signer    |
+| `--execute`    | Sign + broadcast via the Byreal Privy proxy → returns `{ signature, ... }`                     |
+| `--dry-run`    | Preview only, no transaction generated                                                         |
+
+`--dry-run` and `--execute` are mutually exclusive.
+
+### Privy Setup (required for `--execute`)
+
+The CLI signs transactions via the Byreal Privy proxy. Configure either:
+
+**Option A — multi-wallet config (`~/.openclaw/realclaw-config.json`):**
+
+```json
+{
+  "baseUrl": "https://api2.byreal.io",
+  "apiBasePath": "/byreal/api/privy-proxy/v1",
+  "wallets": [
+    { "address": "<your-solana-pubkey>", "token": "oc_at_...", "type": "solana" }
+  ]
+}
+```
+
+**Option B — legacy single token:**
+
+```bash
+echo "oc_at_..." > ~/.openclaw/agent_token
+byreal-cli config set privy_proxy_url https://api2.byreal.io
+```
+
+**Option C — environment variables (CI / debug):**
+
+```bash
+export AGENT_TOKEN="oc_at_..."
+export PRIVY_PROXY_URL="https://api2.byreal.io"
+```
+
+If Privy is not configured, `--execute` fails fast with `PRIVY_NOT_CONFIGURED` and actionable suggestions; the CLI never silently degrades. Drop `--execute` to keep the default unsigned-transaction output and sign with an external tool.
 
 ## Commands
 

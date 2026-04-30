@@ -7,9 +7,16 @@ import chalk from 'chalk';
 import Table from 'cli-table3';
 import { PublicKey } from '@solana/web3.js';
 import type { GlobalOptions } from '../../core/types.js';
-import { resolveExecutionMode, printDryRunBanner } from '../../core/confirm.js';
-import { missingWalletAddressError } from '../../core/errors.js';
-import { outputJson, outputErrorJson, outputErrorTable } from '../../cli/output/formatters.js';
+import { printDryRunBanner, printPrivySignBanner } from '../../core/confirm.js';
+import { ByrealError, missingWalletAddressError } from '../../core/errors.js';
+import { requirePrivyContext, privyBroadcastOne } from '../../privy/index.js';
+import {
+  outputJson,
+  outputErrorJson,
+  outputErrorTable,
+  outputTransactionResult,
+  safeResolveExecutionMode,
+} from '../../cli/output/formatters.js';
 import { TABLE_CHARS } from '../../core/constants.js';
 import * as kaminoApi from './api.js';
 
@@ -47,11 +54,12 @@ export function createKaminoDepositCommand(): Command {
     .option('--reserve <address>', 'Reserve address (auto-resolved from mint if omitted)')
     .option('--market <address>', 'Market address', kaminoApi.KAMINO_MAIN_MARKET)
     .option('--dry-run', 'Preview without generating a transaction')
+    .option('--execute', 'Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)')
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
-      const mode = resolveExecutionMode(options);
+      const mode = safeResolveExecutionMode(options, format);
       const walletAddress = validateWallet(globalOptions.walletAddress, format);
 
       try {
@@ -79,7 +87,7 @@ export function createKaminoDepositCommand(): Command {
             );
             console.log(chalk.cyan.bold('\n  Kamino Deposit Preview\n'));
             console.log(table.toString());
-            console.log(chalk.yellow('\n  Remove --dry-run to generate the unsigned transaction'));
+            console.log(chalk.yellow('\n  Remove --dry-run to emit an unsigned transaction; add --execute to sign + broadcast via Privy.'));
           }
           return;
         }
@@ -97,8 +105,34 @@ export function createKaminoDepositCommand(): Command {
           process.exit(1);
         }
 
-        console.log(JSON.stringify({ unsignedTransactions: [result.value.transaction] }));
+        const base64 = result.value.transaction;
+
+        if (mode === 'unsigned-tx') {
+          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+          return;
+        }
+
+        // Default (execute): sign + broadcast via Privy.
+        const ctx = requirePrivyContext(walletAddress);
+        printPrivySignBanner();
+        const broadcast = await privyBroadcastOne(ctx, base64);
+        if (!broadcast.ok) {
+          format === 'json' ? outputErrorJson(broadcast.error.toJSON()) : outputErrorTable(broadcast.error.toJSON());
+          process.exit(1);
+        }
+        if (format === 'json') {
+          outputJson({
+            signature: broadcast.value.signature,
+            explorer: `https://solscan.io/tx/${broadcast.value.signature}`,
+          }, startTime);
+        } else {
+          outputTransactionResult(broadcast.value.signature);
+        }
       } catch (e) {
+        if (e instanceof ByrealError) {
+          format === 'json' ? outputErrorJson(e.toJSON()) : outputErrorTable(e.toJSON());
+          process.exit(1);
+        }
         const message = (e as Error).message || 'Kamino deposit failed';
         format === 'json'
           ? outputErrorJson({ code: 'API_ERROR', type: 'NETWORK', message, retryable: true })
@@ -120,11 +154,12 @@ export function createKaminoWithdrawCommand(): Command {
     .option('--reserve <address>', 'Reserve address (auto-resolved from mint if omitted)')
     .option('--market <address>', 'Market address', kaminoApi.KAMINO_MAIN_MARKET)
     .option('--dry-run', 'Preview without generating a transaction')
+    .option('--execute', 'Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)')
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
-      const mode = resolveExecutionMode(options);
+      const mode = safeResolveExecutionMode(options, format);
       const walletAddress = validateWallet(globalOptions.walletAddress, format);
 
       try {
@@ -152,7 +187,7 @@ export function createKaminoWithdrawCommand(): Command {
             );
             console.log(chalk.cyan.bold('\n  Kamino Withdraw Preview\n'));
             console.log(table.toString());
-            console.log(chalk.yellow('\n  Remove --dry-run to generate the unsigned transaction'));
+            console.log(chalk.yellow('\n  Remove --dry-run to emit an unsigned transaction; add --execute to sign + broadcast via Privy.'));
           }
           return;
         }
@@ -170,8 +205,34 @@ export function createKaminoWithdrawCommand(): Command {
           process.exit(1);
         }
 
-        console.log(JSON.stringify({ unsignedTransactions: [result.value.transaction] }));
+        const base64 = result.value.transaction;
+
+        if (mode === 'unsigned-tx') {
+          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+          return;
+        }
+
+        // Default (execute): sign + broadcast via Privy.
+        const ctx = requirePrivyContext(walletAddress);
+        printPrivySignBanner();
+        const broadcast = await privyBroadcastOne(ctx, base64);
+        if (!broadcast.ok) {
+          format === 'json' ? outputErrorJson(broadcast.error.toJSON()) : outputErrorTable(broadcast.error.toJSON());
+          process.exit(1);
+        }
+        if (format === 'json') {
+          outputJson({
+            signature: broadcast.value.signature,
+            explorer: `https://solscan.io/tx/${broadcast.value.signature}`,
+          }, startTime);
+        } else {
+          outputTransactionResult(broadcast.value.signature);
+        }
       } catch (e) {
+        if (e instanceof ByrealError) {
+          format === 'json' ? outputErrorJson(e.toJSON()) : outputErrorTable(e.toJSON());
+          process.exit(1);
+        }
         const message = (e as Error).message || 'Kamino withdraw failed';
         format === 'json'
           ? outputErrorJson({ code: 'API_ERROR', type: 'NETWORK', message, retryable: true })

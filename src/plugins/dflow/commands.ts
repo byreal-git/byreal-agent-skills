@@ -10,9 +10,16 @@ import type { GlobalOptions } from '../../core/types.js';
 import { uiToRaw, rawToUi } from '../../core/amounts.js';
 import { getSlippageBps } from '../../core/solana.js';
 import { resolveDecimals } from '../../core/token-registry.js';
-import { resolveExecutionMode, printDryRunBanner } from '../../core/confirm.js';
-import { missingWalletAddressError } from '../../core/errors.js';
-import { outputJson, outputErrorJson, outputErrorTable } from '../../cli/output/formatters.js';
+import { printDryRunBanner, printPrivySignBanner } from '../../core/confirm.js';
+import { ByrealError, missingWalletAddressError } from '../../core/errors.js';
+import { requirePrivyContext, privyBroadcastOne } from '../../privy/index.js';
+import {
+  outputJson,
+  outputErrorJson,
+  outputErrorTable,
+  outputTransactionResult,
+  safeResolveExecutionMode,
+} from '../../cli/output/formatters.js';
 import { TABLE_CHARS } from '../../core/constants.js';
 import * as dflowApi from './api.js';
 
@@ -35,11 +42,12 @@ export function createDFlowSwapCommand(): Command {
     .option('--slippage <bps>', 'Slippage tolerance in basis points')
     .option('--raw', 'Amount is already in raw (smallest unit) format')
     .option('--dry-run', 'Preview the swap without generating a transaction')
+    .option('--execute', 'Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)')
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
-      const mode = resolveExecutionMode(options);
+      const mode = safeResolveExecutionMode(options, format);
 
       const walletAddress = globalOptions.walletAddress;
       if (!walletAddress) {
@@ -118,14 +126,39 @@ export function createDFlowSwapCommand(): Command {
             console.log(table.toString());
             const hint = fallbackHint(dflowApi.getLastRoute());
             if (hint) console.error(chalk.gray(`[byreal] ${hint}`));
-            console.log(chalk.yellow('\n  Remove --dry-run to generate the unsigned transaction'));
+            console.log(chalk.yellow('\n  Remove --dry-run to emit an unsigned transaction; add --execute to sign + broadcast via Privy.'));
           }
           return;
         }
 
-        // Execute: output unsigned transaction
-        console.log(JSON.stringify({ unsignedTransactions: [quote.transaction] }));
+        const base64 = quote.transaction;
+
+        if (mode === 'unsigned-tx') {
+          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+          return;
+        }
+
+        // Default (execute): sign + broadcast via Privy.
+        const ctx = requirePrivyContext(walletAddress);
+        printPrivySignBanner();
+        const broadcast = await privyBroadcastOne(ctx, base64);
+        if (!broadcast.ok) {
+          format === 'json' ? outputErrorJson(broadcast.error.toJSON()) : outputErrorTable(broadcast.error.toJSON());
+          process.exit(1);
+        }
+        if (format === 'json') {
+          outputJson({
+            signature: broadcast.value.signature,
+            explorer: `https://solscan.io/tx/${broadcast.value.signature}`,
+          }, startTime);
+        } else {
+          outputTransactionResult(broadcast.value.signature);
+        }
       } catch (e) {
+        if (e instanceof ByrealError) {
+          format === 'json' ? outputErrorJson(e.toJSON()) : outputErrorTable(e.toJSON());
+          process.exit(1);
+        }
         const message = (e as Error).message || 'DFlow swap failed';
         format === 'json'
           ? outputErrorJson({ code: 'API_ERROR', type: 'NETWORK', message, retryable: true })

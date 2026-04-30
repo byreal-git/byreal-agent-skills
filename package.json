@@ -1,6 +1,6 @@
 {
   "name": "@byreal-io/byreal-cli-realclaw",
-  "version": "0.3.13",
+  "version": "0.4.0",
   "description": "AI-native CLI for Byreal CLMM DEX on Solana",
   "type": "module",
   "main": "dist/index.cjs",
@@ -23,7 +23,8 @@
     "test:run": "vitest run",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run build",
-    "postversion": "npm publish && git push && git push --tags"
+    "release:stable": "npm version patch && npm publish && git push && git push --tags",
+    "release:beta": "npm version prerelease --preid=beta && npm publish --tag beta && git push && git push --tags"
   },
   "keywords": [
     "byreal",

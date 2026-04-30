@@ -252,6 +252,10 @@ export interface ByrealConfig {
   rpc_url: string;
   cluster: string;
   defaults: ByrealDefaults;
+  /** Privy proxy base URL (e.g., "https://api2.byreal.io"). */
+  privy_proxy_url?: string;
+  /** REST path prefix for the Privy proxy service. */
+  privy_api_base_path?: string;
 }
 
 export interface WalletBalance {

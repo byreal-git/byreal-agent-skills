@@ -5,6 +5,8 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import { TABLE_CHARS, VERSION } from '../../core/constants.js';
+import { resolveExecutionMode, type ExecutionMode } from '../../core/confirm.js';
+import { ByrealError } from '../../core/errors.js';
 import type {
   OutputFormat,
   Pool,
@@ -63,6 +65,31 @@ export function outputJson<T>(data: T, startTime?: number): void {
 
 export function outputErrorJson(error: CliError): void {
   console.log(JSON.stringify({ success: false, error }, null, 2));
+}
+
+/**
+ * Resolve execution mode and emit a structured error if --dry-run + --execute
+ * are both set (which makes resolveExecutionMode throw a ByrealError). Wraps
+ * the throw site so command handlers don't have to repeat the same try/catch
+ * boilerplate at every entry point.
+ *
+ * On conflicting flags: emits formatted error to stdout and process.exit(1).
+ * Otherwise returns the resolved mode.
+ */
+export function safeResolveExecutionMode(
+  options: { dryRun?: boolean; execute?: boolean },
+  format: OutputFormat,
+): ExecutionMode {
+  try {
+    return resolveExecutionMode(options);
+  } catch (e) {
+    if (e instanceof ByrealError) {
+      if (format === 'json') outputErrorJson(e.toJSON());
+      else outputErrorTable(e.toJSON());
+      process.exit(1);
+    }
+    throw e;
+  }
 }
 
 // ============================================
@@ -388,6 +415,12 @@ export function outputConfigList(config: ByrealConfig): void {
     ['defaults.priority_fee_micro_lamports', String(config.defaults.priority_fee_micro_lamports)],
     ['defaults.slippage_bps', String(config.defaults.slippage_bps)],
   );
+  if (config.privy_proxy_url) {
+    table.push(['privy_proxy_url', config.privy_proxy_url]);
+  }
+  if (config.privy_api_base_path) {
+    table.push(['privy_api_base_path', config.privy_api_base_path]);
+  }
 
   console.log(table.toString());
 }
@@ -1082,4 +1115,49 @@ export function outputRewardOrderResult(result: RewardOrderResult): void {
     }
     console.log();
   }
+}
+
+// ============================================
+// Privy broadcast result formatters
+// ============================================
+
+/**
+ * Single-transaction broadcast (table mode).
+ *
+ * Note: the Privy proxy returns once the tx has been *submitted* to the network
+ * (either via `signAndSendTransaction` or via the proxy's own `sendTransaction`
+ * after enhanced-mode blockhash refresh). It does NOT wait for finalization.
+ * Callers should follow up with a balance / position check if they need to
+ * confirm on-chain effect — don't infer success from this output alone.
+ */
+export function outputTransactionResult(signature: string): void {
+  console.log(chalk.green('\n  Transaction submitted (not yet finalized)'));
+  console.log(chalk.gray(`    Signature: ${signature}`));
+  console.log(chalk.blue(`    https://solscan.io/tx/${signature}\n`));
+}
+
+/** Multi-transaction broadcast result (table mode). Same semantics as above. */
+export function outputMultiBroadcastResult(result: {
+  results: Array<{ index: number; signature?: string; error?: string }>;
+  successCount: number;
+  failCount: number;
+}): void {
+  const total = result.results.length;
+  const headline =
+    result.failCount === 0
+      ? chalk.green(`\n  ${total} transactions submitted (not yet finalized)`)
+      : chalk.yellow(
+          `\n  ${result.successCount}/${total} transactions submitted (${result.failCount} failed at submission)`,
+        );
+  console.log(headline);
+  for (const r of result.results) {
+    const idx = `[${r.index + 1}/${total}]`;
+    if (r.signature) {
+      console.log(chalk.gray(`    ${idx} ${r.signature}`));
+      console.log(chalk.blue(`    ${idx} https://solscan.io/tx/${r.signature}`));
+    } else {
+      console.log(chalk.red(`    ${idx} failed: ${r.error ?? 'unknown error'}`));
+    }
+  }
+  console.log();
 }

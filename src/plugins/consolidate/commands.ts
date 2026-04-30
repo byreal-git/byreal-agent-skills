@@ -7,9 +7,16 @@ import chalk from 'chalk';
 import Table from 'cli-table3';
 import { PublicKey } from '@solana/web3.js';
 import type { GlobalOptions } from '../../core/types.js';
-import { resolveExecutionMode, printDryRunBanner } from '../../core/confirm.js';
-import { missingWalletAddressError } from '../../core/errors.js';
-import { outputJson, outputErrorJson, outputErrorTable } from '../../cli/output/formatters.js';
+import { printDryRunBanner, printPrivySignBanner } from '../../core/confirm.js';
+import { ByrealError, missingWalletAddressError } from '../../core/errors.js';
+import { requirePrivyContext, privyBroadcastMany } from '../../privy/index.js';
+import {
+  outputJson,
+  outputErrorJson,
+  outputErrorTable,
+  outputMultiBroadcastResult,
+  safeResolveExecutionMode,
+} from '../../cli/output/formatters.js';
 import { TABLE_CHARS } from '../../core/constants.js';
 import { buildSweepPlan, executeSweep } from './sweep.js';
 
@@ -20,11 +27,12 @@ export function createSweepExecuteCommand(): Command {
     .option('--max-value-usd <amount>', 'Only sweep tokens below this USD value', '0.5')
     .option('--exclude <mints>', 'Comma-separated mint addresses to skip')
     .option('--dry-run', 'Preview consolidation plan without generating transactions')
+    .option('--execute', 'Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)')
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
-      const mode = resolveExecutionMode(options);
+      const mode = safeResolveExecutionMode(options, format);
 
       const walletAddress = globalOptions.walletAddress;
       if (!walletAddress) {
@@ -125,7 +133,7 @@ export function createSweepExecuteCommand(): Command {
               ]);
             }
             console.log(tokenTable.toString());
-            console.log(chalk.yellow('\n  Remove --dry-run to generate the unsigned transactions'));
+            console.log(chalk.yellow('\n  Remove --dry-run to emit an unsigned transaction; add --execute to sign + broadcast via Privy.'));
           }
           return;
         }
@@ -156,12 +164,38 @@ export function createSweepExecuteCommand(): Command {
           return;
         }
 
-        console.log(JSON.stringify({
-          unsignedTransactions: swapTransactions,
-          swapCount: swapTransactions.length,
-          ...(failures.length > 0 ? { failures } : {}),
-        }));
+        if (mode === 'unsigned-tx') {
+          console.log(JSON.stringify({
+            unsignedTransactions: swapTransactions,
+            swapCount: swapTransactions.length,
+            ...(failures.length > 0 ? { failures } : {}),
+          }));
+          return;
+        }
+
+        // Default (execute): sign + broadcast each tx via Privy.
+        const ctx = requirePrivyContext(walletAddress);
+        printPrivySignBanner();
+        const broadcast = await privyBroadcastMany(ctx, swapTransactions);
+        if (!broadcast.ok) {
+          format === 'json' ? outputErrorJson(broadcast.error.toJSON()) : outputErrorTable(broadcast.error.toJSON());
+          process.exit(1);
+        }
+        if (format === 'json') {
+          outputJson({ ...broadcast.value, ...(failures.length > 0 ? { failures } : {}) }, startTime);
+        } else {
+          outputMultiBroadcastResult(broadcast.value);
+          if (failures.length > 0) {
+            console.log(chalk.gray(`  ${failures.length} token(s) skipped (failed to quote):`));
+            for (const f of failures) console.log(chalk.gray(`    ${f.mint}: ${f.reason}`));
+          }
+        }
+        if (broadcast.value.failCount > 0) process.exit(1);
       } catch (e) {
+        if (e instanceof ByrealError) {
+          format === 'json' ? outputErrorJson(e.toJSON()) : outputErrorTable(e.toJSON());
+          process.exit(1);
+        }
         const message = (e as Error).message || 'Token consolidation failed';
         format === 'json'
           ? outputErrorJson({ code: 'API_ERROR', type: 'NETWORK', message, retryable: true })

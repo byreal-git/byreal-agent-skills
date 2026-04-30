@@ -1,7 +1,10 @@
 /**
- * Swap commands for Byreal CLI (openclaw branch)
- * Default: output unsigned transaction as base64.
- * --dry-run: preview the swap without generating a transaction.
+ * Swap commands for Byreal CLI (openclaw branch).
+ *
+ * Three modes (see src/core/confirm.ts):
+ *   - default:              emit { unsignedTransactions: [base64] } (back-compat).
+ *   - --execute:            sign + broadcast via Privy proxy.
+ *   - --dry-run:            preview only.
  */
 
 import { Command } from 'commander';
@@ -12,13 +15,22 @@ import { api } from '../../api/endpoints.js';
 import { uiToRaw, rawToUi } from '../../core/amounts.js';
 import { getSlippageBps } from '../../core/solana.js';
 import { resolveDecimals } from '../../core/token-registry.js';
-import { resolveExecutionMode, printDryRunBanner } from '../../core/confirm.js';
-import { missingWalletAddressError } from '../../core/errors.js';
+import {
+  resolveExecutionMode,
+  printDryRunBanner,
+  printPrivySignBanner,
+} from '../../core/confirm.js';
+import {
+  ByrealError,
+  missingWalletAddressError,
+} from '../../core/errors.js';
+import { requirePrivyContext, privyBroadcastOne } from '../../privy/index.js';
 import {
   outputJson,
   outputErrorJson,
   outputErrorTable,
   outputSwapQuoteTable,
+  outputTransactionResult,
   formatUsd,
 } from '../output/formatters.js';
 
@@ -52,13 +64,31 @@ async function resolveUiAmounts(quote: { inAmount: string; outAmount: string; in
   };
 }
 
+function emitError(format: string, error: unknown): never {
+  if (error instanceof ByrealError) {
+    if (format === 'json') {
+      outputErrorJson(error.toJSON());
+    } else {
+      outputErrorTable(error.toJSON());
+    }
+  } else {
+    const message = (error as Error)?.message ?? 'Unknown error';
+    if (format === 'json') {
+      outputErrorJson({ code: 'UNKNOWN_ERROR', type: 'SYSTEM', message, retryable: false });
+    } else {
+      console.error(chalk.red(`\nError: ${message}`));
+    }
+  }
+  process.exit(1);
+}
+
 // ============================================
 // swap execute
 // ============================================
 
 function createSwapExecuteCommand(): Command {
   return new Command('execute')
-    .description('Preview or generate a swap transaction')
+    .description('Preview, sign, or emit a swap transaction')
     .requiredOption('--input-mint <address>', 'Input token mint address')
     .requiredOption('--output-mint <address>', 'Output token mint address')
     .requiredOption('--amount <amount>', 'Amount to swap (UI amount, decimals auto-resolved)')
@@ -66,26 +96,26 @@ function createSwapExecuteCommand(): Command {
     .option('--slippage <bps>', 'Slippage tolerance in basis points')
     .option('--raw', 'Amount is already in raw (smallest unit) format')
     .option('--dry-run', 'Preview the swap without generating a transaction')
+    .option('--execute', 'Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)')
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
 
-      const mode = resolveExecutionMode(options);
-
-      // Resolve wallet address from global option
-      const userPublicKey = globalOptions.walletAddress;
-      if (!userPublicKey) {
-        const err = missingWalletAddressError();
-        if (format === 'json') {
-          outputErrorJson(err.toJSON());
-        } else {
-          outputErrorTable(err.toJSON());
-        }
-        process.exit(1);
+      // Resolve mode (throws ByrealError on conflicting flags).
+      let mode: ReturnType<typeof resolveExecutionMode>;
+      try {
+        mode = resolveExecutionMode(options);
+      } catch (e) {
+        emitError(format, e);
       }
 
-      // Validate address format
+      // Wallet address is required for all modes (the swap quote needs it).
+      const userPublicKey = globalOptions.walletAddress;
+      if (!userPublicKey) {
+        emitError(format, missingWalletAddressError());
+      }
+
       try {
         new PublicKey(userPublicKey);
       } catch {
@@ -122,24 +152,21 @@ function createSwapExecuteCommand(): Command {
         });
 
         if (!quoteResult.ok) {
-          if (format === 'json') {
-            outputErrorJson(quoteResult.error);
-          } else {
-            outputErrorTable(quoteResult.error);
-          }
-          process.exit(1);
+          emitError(format, new ByrealError({
+            code: quoteResult.error.code as never,
+            type: quoteResult.error.type,
+            message: quoteResult.error.message,
+            retryable: quoteResult.error.retryable,
+          }));
         }
 
         const quote = quoteResult.value;
-
-        // Resolve UI amounts for display
         const { uiInAmount, uiOutAmount } = await resolveUiAmounts(quote);
 
-        // Dry-run: show preview and exit
+        // ─── Mode: dry-run ───
         if (mode === 'dry-run') {
           printDryRunBanner();
           if (format === 'json') {
-            // Fetch token prices for USD values
             let inAmountUsd: string | undefined;
             let outAmountUsd: string | undefined;
             try {
@@ -155,12 +182,12 @@ function createSwapExecuteCommand(): Command {
             outputJson({ mode: 'dry-run', ...quote, uiInAmount, uiOutAmount, inAmountUsd, outAmountUsd }, startTime);
           } else {
             outputSwapQuoteTable(quote, uiInAmount, uiOutAmount);
-            console.log(chalk.yellow('\n  Remove --dry-run to generate the unsigned transaction'));
+            console.log(chalk.yellow('\n  Remove --dry-run to emit an unsigned transaction; add --execute to sign + broadcast via Privy.'));
           }
           return;
         }
 
-        // Default (execute): output unsigned transaction
+        // From here on we need the unsigned transaction.
         if (!quote.transaction) {
           const errMsg = 'No transaction returned in quote. Ensure wallet address is valid.';
           if (format === 'json') {
@@ -170,15 +197,34 @@ function createSwapExecuteCommand(): Command {
           }
           process.exit(1);
         }
-        console.log(JSON.stringify({ unsignedTransactions: [quote.transaction] }));
-      } catch (e) {
-        const message = (e as Error).message || 'Failed to resolve token decimals';
-        if (format === 'json') {
-          outputErrorJson({ code: 'VALIDATION_ERROR', type: 'VALIDATION', message, retryable: false });
-        } else {
-          console.error(chalk.red(`\nError: ${message}`));
+
+        // ─── Mode: unsigned-tx (legacy) ───
+        if (mode === 'unsigned-tx') {
+          console.log(JSON.stringify({ unsignedTransactions: [quote.transaction] }));
+          return;
         }
-        process.exit(1);
+
+        // ─── Mode: execute (default) — sign + broadcast via Privy ───
+        const ctx = requirePrivyContext(userPublicKey);
+        printPrivySignBanner();
+        const broadcast = await privyBroadcastOne(ctx, quote.transaction);
+        if (!broadcast.ok) {
+          emitError(format, broadcast.error);
+        }
+        if (format === 'json') {
+          outputJson(
+            {
+              signature: broadcast.value.signature,
+              explorer: `https://solscan.io/tx/${broadcast.value.signature}`,
+              quote: { ...quote, uiInAmount, uiOutAmount },
+            },
+            startTime,
+          );
+        } else {
+          outputTransactionResult(broadcast.value.signature);
+        }
+      } catch (e) {
+        emitError(format, e);
       }
     });
 }

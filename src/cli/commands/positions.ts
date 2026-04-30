@@ -1,12 +1,16 @@
 /**
- * Positions commands for Byreal CLI (openclaw branch)
- * Default: output unsigned base64 transactions.
- * --dry-run: preview without generating transactions.
+ * Positions commands for Byreal CLI (openclaw branch).
+ *
+ * Three execution modes (see src/core/confirm.ts):
+ *   - default:            emit base64 unsigned transaction(s) (back-compat).
+ *   - --execute:          sign + broadcast via Privy proxy.
+ *   - --dry-run:          preview only; no transaction generated.
  *
  * - positions list: List user positions
  * - positions open: Open a new position (SDK)
  * - positions close: Close a position (SDK)
  * - positions claim: Claim fees (API)
+ * - positions claim-rewards / claim-bonus: atomic encode + sign + submit
  */
 
 import { Command } from "commander";
@@ -19,14 +23,23 @@ import { api } from "../../api/endpoints.js";
 import { uiToRaw, rawToUi } from "../../core/amounts.js";
 import { getConnection, getSlippageBps } from "../../core/solana.js";
 import {
-  resolveExecutionMode,
   printDryRunBanner,
+  printPrivySignBanner,
 } from "../../core/confirm.js";
 import {
   deserializeTransaction,
   serializeTransaction,
 } from "../../core/transaction.js";
-import { missingWalletAddressError } from "../../core/errors.js";
+import {
+  ByrealError,
+  missingWalletAddressError,
+} from "../../core/errors.js";
+import {
+  requirePrivyContext,
+  privyBroadcastOne,
+  privyBroadcastMany,
+  privySignMany,
+} from "../../privy/index.js";
 import {
   outputJson,
   outputErrorJson,
@@ -43,6 +56,9 @@ import {
   outputTopPositionsTable,
   outputCopyPositionPreview,
   outputRewardOrderResult,
+  outputTransactionResult,
+  outputMultiBroadcastResult,
+  safeResolveExecutionMode,
   formatUsd,
 } from "../output/formatters.js";
 
@@ -341,13 +357,14 @@ function createPositionsOpenCommand(): Command {
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--raw", "Amount is already in raw (smallest unit) format")
     .option("--dry-run", "Preview the position without opening")
+    .option("--execute", "Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
 
       // Check execution mode
-      const mode = resolveExecutionMode(options);
+      const mode = safeResolveExecutionMode(options, format);
 
       // Resolve wallet address from global option
       const walletAddress = globalOptions.walletAddress;
@@ -650,14 +667,14 @@ function createPositionsOpenCommand(): Command {
             } else {
               console.log(chalk.green("\n  Balance check: sufficient"));
               console.log(
-                chalk.yellow("\n  Remove --dry-run to generate the unsigned transaction"),
+                chalk.yellow("\n  Remove --dry-run to emit an unsigned transaction; add --execute to sign + broadcast via Privy."),
               );
             }
           }
           return;
         }
 
-        // Default (execute): build transaction and output unsigned base64
+        // Build the unsigned transaction (used by both unsigned-tx and execute modes).
         const result = await chain.createPositionInstructions({
           userAddress: publicKey,
           poolInfo,
@@ -668,7 +685,32 @@ function createPositionsOpenCommand(): Command {
           otherAmountMax,
         });
         const base64 = serializeTransaction(result.transaction);
-        console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+
+        if (mode === "unsigned-tx") {
+          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+          return;
+        }
+
+        // Default (execute): sign + broadcast via Privy.
+        const ctx = requirePrivyContext(walletAddress);
+        printPrivySignBanner();
+        const broadcast = await privyBroadcastOne(ctx, base64);
+        if (!broadcast.ok) {
+          if (format === "json") outputErrorJson(broadcast.error.toJSON());
+          else outputErrorTable(broadcast.error.toJSON());
+          process.exit(1);
+        }
+        if (format === "json") {
+          outputJson(
+            {
+              signature: broadcast.value.signature,
+              explorer: `https://solscan.io/tx/${broadcast.value.signature}`,
+            },
+            startTime,
+          );
+        } else {
+          outputTransactionResult(broadcast.value.signature);
+        }
       } catch (e) {
         const message = (e as Error).message || "Unknown SDK error";
         if (format === "json") {
@@ -712,13 +754,14 @@ function createPositionsIncreaseCommand(): Command {
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--raw", "Amount is already in raw (smallest unit) format")
     .option("--dry-run", "Preview without executing")
+    .option("--execute", "Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
 
       // Check execution mode
-      const mode = resolveExecutionMode(options);
+      const mode = safeResolveExecutionMode(options, format);
 
       // Resolve wallet address from global option
       const walletAddress = globalOptions.walletAddress;
@@ -1006,14 +1049,14 @@ function createPositionsIncreaseCommand(): Command {
             } else {
               console.log(chalk.green("\n  Balance check: sufficient"));
               console.log(
-                chalk.yellow("\n  Remove --dry-run to generate the unsigned transaction"),
+                chalk.yellow("\n  Remove --dry-run to emit an unsigned transaction; add --execute to sign + broadcast via Privy."),
               );
             }
           }
           return;
         }
 
-        // Default (execute): build transaction and output unsigned base64
+        // Build the unsigned transaction (used by both unsigned-tx and execute modes).
         const result = await chain.addLiquidityInstructions({
           userAddress: publicKey,
           nftMint,
@@ -1022,7 +1065,32 @@ function createPositionsIncreaseCommand(): Command {
           otherAmountMax,
         });
         const base64 = serializeTransaction(result.transaction);
-        console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+
+        if (mode === "unsigned-tx") {
+          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+          return;
+        }
+
+        // Default (execute): sign + broadcast via Privy.
+        const ctx = requirePrivyContext(walletAddress);
+        printPrivySignBanner();
+        const broadcast = await privyBroadcastOne(ctx, base64);
+        if (!broadcast.ok) {
+          if (format === "json") outputErrorJson(broadcast.error.toJSON());
+          else outputErrorTable(broadcast.error.toJSON());
+          process.exit(1);
+        }
+        if (format === "json") {
+          outputJson(
+            {
+              signature: broadcast.value.signature,
+              explorer: `https://solscan.io/tx/${broadcast.value.signature}`,
+            },
+            startTime,
+          );
+        } else {
+          outputTransactionResult(broadcast.value.signature);
+        }
       } catch (e) {
         const message = (e as Error).message || "Unknown SDK error";
         if (format === "json") {
@@ -1058,13 +1126,14 @@ function createPositionsDecreaseCommand(): Command {
     )
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--dry-run", "Preview without executing")
+    .option("--execute", "Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
 
       // Check execution mode
-      const mode = resolveExecutionMode(options);
+      const mode = safeResolveExecutionMode(options, format);
 
       // Validate: must provide one of --percentage or --amount-usd
       const hasPercentage = options.percentage !== undefined;
@@ -1284,13 +1353,13 @@ function createPositionsDecreaseCommand(): Command {
           } else {
             outputPositionDecreasePreview(previewData);
             console.log(
-              chalk.yellow("\n  Remove --dry-run to generate the unsigned transaction"),
+              chalk.yellow("\n  Remove --dry-run to emit an unsigned transaction; add --execute to sign + broadcast via Privy."),
             );
           }
           return;
         }
 
-        // Default (execute): build transaction and output unsigned base64
+        // Build the unsigned transaction (used by both unsigned-tx and execute modes).
         let result;
         if (percentage >= 100) {
           // 100%: remove all liquidity but keep position NFT open
@@ -1310,7 +1379,32 @@ function createPositionsDecreaseCommand(): Command {
         }
 
         const base64 = serializeTransaction(result.transaction);
-        console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+
+        if (mode === "unsigned-tx") {
+          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+          return;
+        }
+
+        // Default (execute): sign + broadcast via Privy.
+        const ctx = requirePrivyContext(walletAddress);
+        printPrivySignBanner();
+        const broadcast = await privyBroadcastOne(ctx, base64);
+        if (!broadcast.ok) {
+          if (format === "json") outputErrorJson(broadcast.error.toJSON());
+          else outputErrorTable(broadcast.error.toJSON());
+          process.exit(1);
+        }
+        if (format === "json") {
+          outputJson(
+            {
+              signature: broadcast.value.signature,
+              explorer: `https://solscan.io/tx/${broadcast.value.signature}`,
+            },
+            startTime,
+          );
+        } else {
+          outputTransactionResult(broadcast.value.signature);
+        }
       } catch (e) {
         const message = (e as Error).message || "Unknown SDK error";
         if (format === "json") {
@@ -1341,13 +1435,14 @@ function createPositionsCloseCommand(): Command {
     .requiredOption("--nft-mint <address>", "Position NFT mint address")
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--dry-run", "Preview the close without executing")
+    .option("--execute", "Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
 
       // Check execution mode
-      const mode = resolveExecutionMode(options);
+      const mode = safeResolveExecutionMode(options, format);
 
       // Resolve wallet address from global option
       const walletAddress = globalOptions.walletAddress;
@@ -1433,13 +1528,13 @@ function createPositionsCloseCommand(): Command {
           } else {
             outputPositionClosePreview(previewData);
             console.log(
-              chalk.yellow("\n  Remove --dry-run to generate the unsigned transaction"),
+              chalk.yellow("\n  Remove --dry-run to emit an unsigned transaction; add --execute to sign + broadcast via Privy."),
             );
           }
           return;
         }
 
-        // Default (execute): build transaction and output unsigned base64
+        // Build the unsigned transaction (used by both unsigned-tx and execute modes).
         const slippage = options.slippage
           ? parseInt(options.slippage, 10) / 10000
           : getSlippageBps() / 10000;
@@ -1451,7 +1546,32 @@ function createPositionsCloseCommand(): Command {
           slippage,
         });
         const base64 = serializeTransaction(result.transaction);
-        console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+
+        if (mode === "unsigned-tx") {
+          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+          return;
+        }
+
+        // Default (execute): sign + broadcast via Privy.
+        const ctx = requirePrivyContext(walletAddress);
+        printPrivySignBanner();
+        const broadcast = await privyBroadcastOne(ctx, base64);
+        if (!broadcast.ok) {
+          if (format === "json") outputErrorJson(broadcast.error.toJSON());
+          else outputErrorTable(broadcast.error.toJSON());
+          process.exit(1);
+        }
+        if (format === "json") {
+          outputJson(
+            {
+              signature: broadcast.value.signature,
+              explorer: `https://solscan.io/tx/${broadcast.value.signature}`,
+            },
+            startTime,
+          );
+        } else {
+          outputTransactionResult(broadcast.value.signature);
+        }
       } catch (e) {
         const message = (e as Error).message || "Unknown SDK error";
         if (format === "json") {
@@ -1484,13 +1604,14 @@ function createPositionsClaimCommand(): Command {
       "Comma-separated NFT mint addresses (from positions list)",
     )
     .option("--dry-run", "Preview the claim without executing")
+    .option("--execute", "Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
 
       // Check execution mode
-      const mode = resolveExecutionMode(options);
+      const mode = safeResolveExecutionMode(options, format);
 
       // Resolve wallet address from global option
       const walletAddress = globalOptions.walletAddress;
@@ -1610,14 +1731,49 @@ function createPositionsClaimCommand(): Command {
           outputJson({ mode: "dry-run", entries: enrichedEntries }, startTime);
         } else {
           outputPositionClaimPreview(enrichedEntries);
-          console.log(chalk.yellow("\n  Remove --dry-run to generate the unsigned transaction(s)"));
+          console.log(chalk.yellow("\n  Remove --dry-run to emit an unsigned transaction; add --execute to sign + broadcast via Privy."));
         }
         return;
       }
 
-      // Default (execute): collect all unsigned transactions and output
+      // Collect all unsigned transactions; reused by both unsigned-tx and execute modes.
       const unsignedTransactions = entries.map((entry: { txPayload: string }) => entry.txPayload);
-      console.log(JSON.stringify({ unsignedTransactions }));
+
+      if (mode === "unsigned-tx") {
+        console.log(JSON.stringify({ unsignedTransactions }));
+        return;
+      }
+
+      // Default (execute): sign + broadcast each via Privy (sequential).
+      try {
+        const ctx = requirePrivyContext(walletAddress);
+        printPrivySignBanner();
+        const broadcast = await privyBroadcastMany(ctx, unsignedTransactions);
+        if (!broadcast.ok) {
+          if (format === "json") outputErrorJson(broadcast.error.toJSON());
+          else outputErrorTable(broadcast.error.toJSON());
+          process.exit(1);
+        }
+        if (format === "json") {
+          outputJson(broadcast.value, startTime);
+        } else {
+          outputMultiBroadcastResult(broadcast.value);
+        }
+        if (broadcast.value.failCount > 0) process.exit(1);
+      } catch (e) {
+        if (e instanceof ByrealError) {
+          if (format === "json") outputErrorJson(e.toJSON());
+          else outputErrorTable(e.toJSON());
+        } else {
+          const message = (e as Error).message || "Unknown error";
+          if (format === "json") {
+            outputErrorJson({ code: "UNKNOWN_ERROR", type: "SYSTEM", message, retryable: false });
+          } else {
+            console.error(chalk.red(`\nError: ${message}`));
+          }
+        }
+        process.exit(1);
+      }
     });
 }
 
@@ -1629,12 +1785,13 @@ function createPositionsClaimRewardsCommand(): Command {
   return new Command("claim-rewards")
     .description("Claim incentive rewards from positions")
     .option("--dry-run", "Preview unclaimed rewards without claiming")
+    .option("--execute", "Sign via Privy and submit to backend (default emits unsigned tx for external signers)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
 
-      const mode = resolveExecutionMode(options);
+      const mode = safeResolveExecutionMode(options, format);
 
       // Resolve wallet address from global option
       const walletAddress = globalOptions.walletAddress;
@@ -1708,7 +1865,7 @@ function createPositionsClaimRewardsCommand(): Command {
               console.log(chalk.gray("\n  No unclaimed incentive rewards.\n"));
             } else {
               console.log(
-                chalk.yellow("\n  Remove --dry-run to generate the unsigned transaction(s)"),
+                chalk.yellow("\n  Remove --dry-run to emit an unsigned transaction; add --execute to sign + broadcast via Privy."),
               );
             }
           }
@@ -1728,6 +1885,11 @@ function createPositionsClaimRewardsCommand(): Command {
 
         // Get unique position addresses
         const positionAddresses = [...new Set(allRewards.map((r) => r.positionAddress))];
+
+        // Fail fast: in execute mode, verify Privy is available BEFORE asking
+        // the backend to encode. Otherwise we waste an encode call and leave
+        // an orphan orderCode in the backend on misconfigured clients.
+        if (mode === "execute") requirePrivyContext(walletAddress);
 
         // Encode reward claim transactions
         const encodeResult = await api.encodeReward({
@@ -1757,15 +1919,56 @@ function createPositionsClaimRewardsCommand(): Command {
           return;
         }
 
-        // Default (execute): output encoded transactions
-        const txPayloads = rewardEncodeItems.map((item) => ({
-          poolAddress: item.poolAddress,
-          txPayload: item.txPayload,
-          txCode: item.txCode,
-          tokens: item.rewardClaimInfo,
-        }));
-        console.log(JSON.stringify({ orderCode, unsignedTransactions: txPayloads }));
+        if (mode === "unsigned-tx") {
+          // Legacy shape: emit per-pool { poolAddress, txPayload, txCode, tokens } so
+          // an external signer / submit-rewards command can complete the flow.
+          const txPayloads = rewardEncodeItems.map((item) => ({
+            poolAddress: item.poolAddress,
+            txPayload: item.txPayload,
+            txCode: item.txCode,
+            tokens: item.rewardClaimInfo,
+          }));
+          console.log(JSON.stringify({ orderCode, unsignedTransactions: txPayloads }));
+          return;
+        }
+
+        // Default (execute): atomic flow — encode → privySignMany → submitRewardOrder.
+        const ctx = requirePrivyContext(walletAddress);
+        printPrivySignBanner();
+        const signResult = await privySignMany(
+          ctx,
+          rewardEncodeItems.map((item) => item.txPayload),
+        );
+        if (!signResult.ok) {
+          if (format === "json") outputErrorJson(signResult.error.toJSON());
+          else outputErrorTable(signResult.error.toJSON());
+          process.exit(1);
+        }
+        const submitResult = await api.submitRewardOrder({
+          orderCode,
+          walletAddress,
+          signedTxPayload: rewardEncodeItems.map((item, i) => ({
+            txCode: item.txCode,
+            poolAddress: item.poolAddress,
+            signedTx: signResult.value.signedTxs[i].signedTx,
+          })),
+        });
+        if (!submitResult.ok) {
+          if (format === "json") outputErrorJson(submitResult.error);
+          else outputErrorTable(submitResult.error);
+          process.exit(1);
+        }
+        if (format === "json") {
+          outputJson(submitResult.value, startTime);
+        } else {
+          outputRewardOrderResult(submitResult.value);
+        }
       } catch (e) {
+        if (e instanceof ByrealError) {
+          if (format === "json") outputErrorJson(e.toJSON());
+          else outputErrorTable(e.toJSON());
+          process.exit(1);
+        }
         const message = (e as Error).message || "Unknown error";
         if (format === "json") {
           outputErrorJson({ code: "SDK_ERROR", type: "SYSTEM", message, retryable: false });
@@ -1788,12 +1991,13 @@ function createPositionsClaimBonusCommand(): Command {
   return new Command("claim-bonus")
     .description("Claim CopyFarmer bonus rewards")
     .option("--dry-run", "Preview claimable bonus without claiming")
+    .option("--execute", "Sign via Privy and submit to backend (default emits unsigned tx for external signers)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
 
-      const mode = resolveExecutionMode(options);
+      const mode = safeResolveExecutionMode(options, format);
 
       // Resolve wallet address from global option
       const walletAddress = globalOptions.walletAddress;
@@ -1859,7 +2063,7 @@ function createPositionsClaimBonusCommand(): Command {
             outputBonusPreview(overview, epochs);
             if (canClaim) {
               console.log(
-                chalk.yellow(`  Remove --dry-run to claim $${claimableEpoch!.totalBonusUsd} bonus\n`),
+                chalk.yellow(`  Remove --dry-run to emit an unsigned tx; add --execute to claim $${claimableEpoch!.totalBonusUsd} bonus via Privy.\n`),
               );
             } else {
               console.log(chalk.gray("  No bonus currently claimable.\n"));
@@ -1880,6 +2084,10 @@ function createPositionsClaimBonusCommand(): Command {
           }
           return;
         }
+
+        // Fail fast: in execute mode, verify Privy is available BEFORE asking
+        // the backend to encode (avoids wasting an encode call + orphan orderCode).
+        if (mode === "execute") requirePrivyContext(walletAddress);
 
         // Encode bonus claim transactions (type=2, empty positionAddresses)
         const encodeResult = await api.encodeReward({
@@ -1909,15 +2117,54 @@ function createPositionsClaimBonusCommand(): Command {
           return;
         }
 
-        // Default (execute): output encoded transactions
-        const txPayloads = rewardEncodeItems.map((item) => ({
-          poolAddress: item.poolAddress,
-          txPayload: item.txPayload,
-          txCode: item.txCode,
-          tokens: item.rewardClaimInfo,
-        }));
-        console.log(JSON.stringify({ orderCode, unsignedTransactions: txPayloads }));
+        if (mode === "unsigned-tx") {
+          const txPayloads = rewardEncodeItems.map((item) => ({
+            poolAddress: item.poolAddress,
+            txPayload: item.txPayload,
+            txCode: item.txCode,
+            tokens: item.rewardClaimInfo,
+          }));
+          console.log(JSON.stringify({ orderCode, unsignedTransactions: txPayloads }));
+          return;
+        }
+
+        // Default (execute): atomic flow — encode → privySignMany → submitRewardOrder.
+        const ctx = requirePrivyContext(walletAddress);
+        printPrivySignBanner();
+        const signResult = await privySignMany(
+          ctx,
+          rewardEncodeItems.map((item) => item.txPayload),
+        );
+        if (!signResult.ok) {
+          if (format === "json") outputErrorJson(signResult.error.toJSON());
+          else outputErrorTable(signResult.error.toJSON());
+          process.exit(1);
+        }
+        const submitResult = await api.submitRewardOrder({
+          orderCode,
+          walletAddress,
+          signedTxPayload: rewardEncodeItems.map((item, i) => ({
+            txCode: item.txCode,
+            poolAddress: item.poolAddress,
+            signedTx: signResult.value.signedTxs[i].signedTx,
+          })),
+        });
+        if (!submitResult.ok) {
+          if (format === "json") outputErrorJson(submitResult.error);
+          else outputErrorTable(submitResult.error);
+          process.exit(1);
+        }
+        if (format === "json") {
+          outputJson(submitResult.value, startTime);
+        } else {
+          outputRewardOrderResult(submitResult.value);
+        }
       } catch (e) {
+        if (e instanceof ByrealError) {
+          if (format === "json") outputErrorJson(e.toJSON());
+          else outputErrorTable(e.toJSON());
+          process.exit(1);
+        }
         const message = (e as Error).message || "Unknown error";
         if (format === "json") {
           outputErrorJson({ code: "SDK_ERROR", type: "SYSTEM", message, retryable: false });
@@ -2263,13 +2510,14 @@ function createCopyPositionCommand(): Command {
     .requiredOption("--amount-usd <usd>", "Investment amount in USD")
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--dry-run", "Preview the copy without executing")
+    .option("--execute", "Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)")
     .action(async (options, cmdObj: Command) => {
       const globalOptions = cmdObj.optsWithGlobals() as GlobalOptions;
       const format = globalOptions.output;
       const startTime = Date.now();
 
       // Check execution mode
-      const mode = resolveExecutionMode(options);
+      const mode = safeResolveExecutionMode(options, format);
 
       // Resolve wallet address from global option
       const walletAddress = globalOptions.walletAddress;
@@ -2504,7 +2752,7 @@ function createCopyPositionCommand(): Command {
               console.log(chalk.green("\n  Balance check: sufficient"));
               console.log(
                 chalk.yellow(
-                  "\n  Remove --dry-run to generate the unsigned transaction",
+                  "\n  Remove --dry-run to emit an unsigned transaction; add --execute to sign + broadcast via Privy.",
                 ),
               );
             }
@@ -2512,7 +2760,7 @@ function createCopyPositionCommand(): Command {
           return;
         }
 
-        // Default (execute): build transaction and output unsigned base64
+        // Build the unsigned transaction (used by both unsigned-tx and execute modes).
         const result = await chain.createPositionInstructions({
           userAddress: publicKey,
           poolInfo,
@@ -2524,7 +2772,32 @@ function createCopyPositionCommand(): Command {
           refererPosition: options.position,
         });
         const base64 = serializeTransaction(result.transaction);
-        console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+
+        if (mode === "unsigned-tx") {
+          console.log(JSON.stringify({ unsignedTransactions: [base64] }));
+          return;
+        }
+
+        // Default (execute): sign + broadcast via Privy.
+        const ctx = requirePrivyContext(walletAddress);
+        printPrivySignBanner();
+        const broadcast = await privyBroadcastOne(ctx, base64);
+        if (!broadcast.ok) {
+          if (format === "json") outputErrorJson(broadcast.error.toJSON());
+          else outputErrorTable(broadcast.error.toJSON());
+          process.exit(1);
+        }
+        if (format === "json") {
+          outputJson(
+            {
+              signature: broadcast.value.signature,
+              explorer: `https://solscan.io/tx/${broadcast.value.signature}`,
+            },
+            startTime,
+          );
+        } else {
+          outputTransactionResult(broadcast.value.signature);
+        }
       } catch (e) {
         const message = (e as Error).message || "Unknown SDK error";
         if (format === "json") {

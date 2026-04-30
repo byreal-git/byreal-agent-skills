@@ -109,6 +109,39 @@ export const CONFIG_DIR = "~/.config/byreal";
 export const CONFIG_FILE = "config.json";
 
 // ============================================
+// Privy Signing Service Configuration
+// ============================================
+
+// CAIP-2 chain id for Solana mainnet (only network this CLI targets).
+export const SOLANA_MAINNET_CAIP2 =
+  "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+
+// Default REST path prefix for the Privy proxy service.
+export const PRIVY_API_BASE_PATH_DEFAULT = "/byreal/api/privy-proxy/v1";
+
+// Env var overrides for Privy configuration (highest precedence).
+export const PRIVY_PROXY_URL_ENV = process.env.PRIVY_PROXY_URL;
+export const PRIVY_API_BASE_PATH_ENV = process.env.PRIVY_API_BASE_PATH;
+export const AGENT_TOKEN_ENV = process.env.AGENT_TOKEN;
+
+// Filesystem locations for Privy configuration.
+//
+// Resolution order is enforced in src/privy/config.ts:
+//   1. env vars (PRIVY_PROXY_URL, AGENT_TOKEN, ...)
+//   2. REALCLAW_CONFIG_PATH         — new multi-wallet format
+//   3. SKILL_AGENT_TOKEN_CONFIG_PATH — existing claw-managed setup (skill config)
+//   4. LEGACY_AGENT_TOKEN_PATH      — bare token file
+//   5. ~/.config/byreal/config.json#privy_proxy_url — byreal-cli own config
+export const REALCLAW_CONFIG_PATH = "~/.openclaw/realclaw-config.json";
+export const SKILL_AGENT_TOKEN_CONFIG_PATH =
+  "~/.openclaw/skills/agent-token/scripts/config.json";
+export const LEGACY_AGENT_TOKEN_PATH = "~/.openclaw/agent_token";
+
+// Audit tags sent on every signing request.
+export const PRIVY_STRATEGY_ID = "byreal_cli";
+export const PRIVY_STRATEGY_NAME = "Byreal CLI";
+
+// ============================================
 // Defaults
 // ============================================
 
