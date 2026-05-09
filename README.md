@@ -61,10 +61,10 @@ All commands support `-o json` for structured output.
 | `tokens list`             | List available tokens                          |
 | `swap execute`            | Preview or execute a token swap                |
 | `positions list`          | List positions (own wallet or any via --user)   |
-| `positions open`          | Open a new CLMM position                       |
-| `positions increase`      | Add liquidity to an existing position           |
-| `positions decrease`      | Partially remove liquidity from a position      |
-| `positions close`         | Close a position                               |
+| `positions open`          | Open a new CLMM position (Auto Swap supported) |
+| `positions increase`      | Add liquidity to an existing position (Auto Swap supported) |
+| `positions decrease`      | Partially remove liquidity from a position (Auto Swap supported) |
+| `positions close`         | Close a position (Auto Swap supported)         |
 | `positions claim`           | Claim trading fees                              |
 | `positions claim-rewards`   | Claim incentive rewards from positions           |
 | `positions claim-bonus`     | Claim CopyFarmer bonus rewards                  |
@@ -75,6 +75,38 @@ All commands support `-o json` for structured output.
 | `wallet balance`          | Show wallet balances                           |
 | `setup`                   | Interactive first-time setup                   |
 | `update check`            | Check for CLI updates                          |
+
+## Auto Swap (Zap)
+
+The `--auto-swap` flag lets you open / increase / decrease / close positions
+with a single token. The Byreal router-service computes the optimal split,
+runs an on-chain swap, and atomically deposits or withdraws liquidity in one
+transaction.
+
+```bash
+# Open a SOL/USDC position with only USDC; backend swaps half into SOL
+byreal-cli positions open \
+  --pool <POOL> --price-lower 140 --price-upper 180 \
+  --base MintB --amount 10 --auto-swap --confirm
+
+# Add liquidity using only the base token
+byreal-cli positions increase \
+  --nft-mint <NFT> --base MintA --amount 0.05 --auto-swap --confirm
+
+# Decrease 50% of liquidity, receive everything as USDC
+byreal-cli positions decrease \
+  --nft-mint <NFT> --percentage 50 \
+  --auto-swap --output-mint <USDC_MINT> --confirm
+
+# Close position, receive proceeds as USDC
+byreal-cli positions close \
+  --nft-mint <NFT> --auto-swap --output-mint <USDC_MINT> --confirm
+```
+
+Use `--dry-run` first to preview the swap quote (provider, price impact,
+estimated token A/B amounts) before sending. Quotes are HMAC-signed with a
+30s TTL — if a build-tx call fails because the quote expired, the CLI
+re-fetches the quote and retries once automatically.
 
 ## Update
 

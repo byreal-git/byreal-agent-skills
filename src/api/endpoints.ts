@@ -36,6 +36,16 @@ import type {
   RewardEncodeResult,
   RewardOrderParams,
   RewardOrderResult,
+  AutoSwapZapInOpenPositionQuoteRequest,
+  AutoSwapZapInOpenPositionBuildTxRequest,
+  AutoSwapZapInIncreaseLiquidityQuoteRequest,
+  AutoSwapZapInIncreaseLiquidityBuildTxRequest,
+  AutoSwapZapInQuoteResponse,
+  AutoSwapZapInBuildTxResponse,
+  AutoSwapZapOutQuoteRequest,
+  AutoSwapZapOutBuildTxRequest,
+  AutoSwapZapOutQuoteResponse,
+  AutoSwapZapOutBuildTxResponse,
 } from '../core/types.js';
 import type { ByrealError } from '../core/errors.js';
 
@@ -1131,6 +1141,125 @@ export async function submitRewardOrder(
   return { ok: true, value: data };
 }
 
+// ============================================
+// AutoSwap (Zap) API Functions
+// Backend contract: each flow runs as quote -> build-tx; build-tx returns the
+// base64-serialized transaction directly.
+//
+// Actual Router response shape (double-nested):
+//   { retCode, retMsg, result: { result: { retCode, retMsg },  // <- business code
+//                                quote, preview, quoteId, transaction, ... } }
+// See apps/web/src/api/ky.ts:206-242 handleRouterResponseData for reference.
+// ============================================
+
+interface RouterEnvelope<T> {
+  retCode?: number;
+  ret_code?: number;
+  retMsg?: string;
+  ret_msg?: string;
+  /** Business payload (contains a nested `result` that holds the inner status sub-object). */
+  result?: T;
+}
+
+/** Inspect the inner status sub-object's retCode; returns a ByrealError when a non-zero business code is present. */
+export function unwrapRouter<T extends { result?: { retCode?: number; retMsg?: string; ret_code?: number; ret_msg?: string } | null }>(
+  result: { ok: false; error: ByrealError } | { ok: true; value: RouterEnvelope<T> },
+  notFoundMsg: string,
+): Result<T, ByrealError> {
+  if (!result.ok) return result;
+  const envelope = result.value;
+  const outerCode = envelope.retCode ?? envelope.ret_code;
+  const outerMsg = envelope.retMsg ?? envelope.ret_msg;
+  if (typeof outerCode === 'number' && outerCode !== 0) {
+    return {
+      ok: false,
+      error: apiError(`${outerMsg ?? 'router error'} (code=${outerCode})`, outerCode),
+    };
+  }
+  if (outerCode === undefined) {
+    return { ok: false, error: apiError('Malformed router response: missing outer retCode') };
+  }
+
+  const payload = envelope.result;
+  if (!payload) {
+    return { ok: false, error: apiError(notFoundMsg) };
+  }
+  // Business code lives at payload.result.retCode (double-nested, matching frontend handleRouterResponseData).
+  const inner = payload.result;
+  const innerCode = inner?.retCode ?? inner?.ret_code;
+  const innerMsg = inner?.retMsg ?? inner?.ret_msg;
+  if (innerCode === undefined) {
+    return { ok: false, error: apiError('Malformed router response: missing inner result.retCode') };
+  }
+  if (typeof innerCode === 'number' && innerCode !== 0) {
+    return {
+      ok: false,
+      error: apiError(`${innerMsg ?? 'router error'} (code=${innerCode})`, innerCode),
+    };
+  }
+  return { ok: true, value: payload as T };
+}
+
+export async function quoteZapOpen(
+  payload: AutoSwapZapInOpenPositionQuoteRequest,
+): Promise<Result<AutoSwapZapInQuoteResponse, ByrealError>> {
+  const result = await apiClient.post<RouterEnvelope<AutoSwapZapInQuoteResponse>>(
+    API_ENDPOINTS.AUTOSWAP_ZAP_IN_OPEN_QUOTE,
+    payload as unknown as Record<string, unknown>,
+  );
+  return unwrapRouter<AutoSwapZapInQuoteResponse>(result, 'No autoswap zap-in open quote returned');
+}
+
+export async function buildTxZapOpen(
+  payload: AutoSwapZapInOpenPositionBuildTxRequest,
+): Promise<Result<AutoSwapZapInBuildTxResponse, ByrealError>> {
+  const result = await apiClient.post<RouterEnvelope<AutoSwapZapInBuildTxResponse>>(
+    API_ENDPOINTS.AUTOSWAP_ZAP_IN_OPEN_BUILD,
+    payload as unknown as Record<string, unknown>,
+  );
+  return unwrapRouter<AutoSwapZapInBuildTxResponse>(result, 'No autoswap zap-in open build-tx returned');
+}
+
+export async function quoteZapIncrease(
+  payload: AutoSwapZapInIncreaseLiquidityQuoteRequest,
+): Promise<Result<AutoSwapZapInQuoteResponse, ByrealError>> {
+  const result = await apiClient.post<RouterEnvelope<AutoSwapZapInQuoteResponse>>(
+    API_ENDPOINTS.AUTOSWAP_ZAP_IN_INC_QUOTE,
+    payload as unknown as Record<string, unknown>,
+  );
+  return unwrapRouter<AutoSwapZapInQuoteResponse>(result, 'No autoswap zap-in increase quote returned');
+}
+
+export async function buildTxZapIncrease(
+  payload: AutoSwapZapInIncreaseLiquidityBuildTxRequest,
+): Promise<Result<AutoSwapZapInBuildTxResponse, ByrealError>> {
+  const result = await apiClient.post<RouterEnvelope<AutoSwapZapInBuildTxResponse>>(
+    API_ENDPOINTS.AUTOSWAP_ZAP_IN_INC_BUILD,
+    payload as unknown as Record<string, unknown>,
+  );
+  return unwrapRouter<AutoSwapZapInBuildTxResponse>(result, 'No autoswap zap-in increase build-tx returned');
+}
+
+export async function quoteZapOut(
+  payload: AutoSwapZapOutQuoteRequest,
+): Promise<Result<AutoSwapZapOutQuoteResponse, ByrealError>> {
+  const result = await apiClient.post<RouterEnvelope<AutoSwapZapOutQuoteResponse>>(
+    API_ENDPOINTS.AUTOSWAP_ZAP_OUT_QUOTE,
+    payload as unknown as Record<string, unknown>,
+  );
+  return unwrapRouter<AutoSwapZapOutQuoteResponse>(result, 'No autoswap zap-out quote returned');
+}
+
+export async function buildTxZapOut(
+  payload: AutoSwapZapOutBuildTxRequest,
+): Promise<Result<AutoSwapZapOutBuildTxResponse, ByrealError>> {
+  const result = await apiClient.post<RouterEnvelope<AutoSwapZapOutBuildTxResponse>>(
+    API_ENDPOINTS.AUTOSWAP_ZAP_OUT_BUILD,
+    payload as unknown as Record<string, unknown>,
+  );
+  return unwrapRouter<AutoSwapZapOutBuildTxResponse>(result, 'No autoswap zap-out build-tx returned');
+}
+
 // Export all API functions
 export const api = {
   listPools,
@@ -1150,4 +1279,11 @@ export const api = {
   getProviderOverview,
   encodeReward,
   submitRewardOrder,
+  // AutoSwap (zap)
+  quoteZapOpen,
+  buildTxZapOpen,
+  quoteZapIncrease,
+  buildTxZapIncrease,
+  quoteZapOut,
+  buildTxZapOut,
 };

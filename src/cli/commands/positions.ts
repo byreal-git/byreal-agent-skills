@@ -48,6 +48,13 @@ import {
   formatUsd,
 } from "../output/formatters.js";
 import { trackEvent } from "../../core/telemetry.js";
+import {
+  runZapInOpen,
+  runZapInIncrease,
+  runZapOut,
+  getDefaultSlippageBps,
+  type ZapContext,
+} from "./positions-zap.js";
 
 // ============================================
 // positions list
@@ -153,12 +160,12 @@ const KNOWN_SYMBOLS: Record<string, string> = {
   Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ: "QQQx",
 };
 
-interface WalletBalanceSummary {
+export interface WalletBalanceSummary {
   sol: string;
   tokens: { mint: string; symbol: string; amount: string; decimals: number }[];
 }
 
-async function fetchWalletBalanceSummary(
+export async function fetchWalletBalanceSummary(
   owner: PublicKey,
 ): Promise<WalletBalanceSummary> {
   const connection = getConnection();
@@ -274,13 +281,37 @@ async function getTokenBalance(owner: PublicKey, mint: string): Promise<BN> {
   return total;
 }
 
-interface BalanceWarning {
+export interface BalanceWarning {
   token: string;
   symbol: string;
   mint: string;
   required: string;
   available: string;
   deficit: string;
+}
+
+/** Single-mint variant for zap-in (only one token to check). */
+export async function checkSingleMintBalance(
+  owner: PublicKey,
+  mint: string,
+  symbol: string,
+  decimals: number,
+  amount: BN,
+  tokenLabel: string = "input",
+): Promise<BalanceWarning[]> {
+  const balance = await getTokenBalance(owner, mint);
+  if (balance.gte(amount)) return [];
+  const deficit = amount.sub(balance);
+  return [
+    {
+      token: tokenLabel,
+      symbol,
+      mint,
+      required: rawToUi(amount.toString(), decimals),
+      available: rawToUi(balance.toString(), decimals),
+      deficit: rawToUi(deficit.toString(), decimals),
+    },
+  ];
 }
 
 async function checkBalanceSufficiency(
@@ -330,13 +361,13 @@ async function checkBalanceSufficiency(
 
 function createPositionsOpenCommand(): Command {
   return new Command("open")
-    .description("Open a new CLMM position")
+    .description("Open a new CLMM position. Add --auto-swap to deposit a single token; backend swaps the optimal portion into the other side.")
     .requiredOption("--pool <address>", "Pool address")
     .requiredOption("--price-lower <price>", "Lower price bound")
     .requiredOption("--price-upper <price>", "Upper price bound")
     .option(
       "--base <token>",
-      "Base token: MintA or MintB (required unless --amount-usd)",
+      "Base token: MintA or MintB (required unless --amount-usd; with --auto-swap, this is the single-token input)",
     )
     .option(
       "--amount <amount>",
@@ -344,10 +375,11 @@ function createPositionsOpenCommand(): Command {
     )
     .option(
       "--amount-usd <usd>",
-      "Investment amount in USD (auto-calculates token split, mutually exclusive with --amount)",
+      "Investment amount in USD (auto-calculates token split, mutually exclusive with --amount). Not supported with --auto-swap.",
     )
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--raw", "Amount is already in raw (smallest unit) format")
+    .option("--auto-swap", "Auto Swap mode: deposit only --base; backend swaps the optimal portion into the other side")
     .option("--dry-run", "Preview the position without opening")
     .option("--confirm", "Open the position")
     .option("--unsigned-tx", "Output unsigned transaction as JSON (no signing)")
@@ -400,6 +432,36 @@ function createPositionsOpenCommand(): Command {
       // Validate mutually exclusive options
       const useAmountUsd = !!options.amountUsd;
       const useTokenAmount = !!options.amount;
+      const useAutoSwap = !!options.autoSwap;
+
+      if (useAutoSwap && useAmountUsd) {
+        const err = {
+          code: "INVALID_PARAMS",
+          type: "VALIDATION" as const,
+          message: "--auto-swap does not support --amount-usd. Use --amount with --base instead.",
+          retryable: false,
+        };
+        if (format === "json") {
+          outputErrorJson(err);
+        } else {
+          outputErrorTable(err);
+        }
+        process.exit(1);
+      }
+      if (useAutoSwap && (!useTokenAmount || !options.base)) {
+        const err = {
+          code: "MISSING_PARAMS",
+          type: "VALIDATION" as const,
+          message: "--auto-swap requires --base and --amount (the single-token input).",
+          retryable: false,
+        };
+        if (format === "json") {
+          outputErrorJson(err);
+        } else {
+          outputErrorTable(err);
+        }
+        process.exit(1);
+      }
       if (useAmountUsd && useTokenAmount) {
         const err = {
           code: "INVALID_PARAMS",
@@ -472,6 +534,35 @@ function createPositionsOpenCommand(): Command {
 
         const tickLower = priceInTickLower.tick;
         const tickUpper = priceInTickUpper.tick;
+
+        // ────────────────────────────────────────────────
+        // Auto Swap branch — backend pickup of zap-in flow
+        // (decimals resolution lives inside runZapInOpen so --base can be
+        //  MintA / MintB / a pool mint address without surprising magnitudes)
+        // ────────────────────────────────────────────────
+        if (useAutoSwap) {
+          const slippageBps = getDefaultSlippageBps(options.slippage);
+          const ctx: ZapContext = {
+            format: format as ZapContext["format"],
+            mode: mode as ZapContext["mode"],
+            publicKey,
+            keypair,
+            startTime,
+          };
+          await runZapInOpen({
+            poolAddress: options.pool,
+            base: options.base,
+            amountUi: String(options.amount),
+            isRaw: !!options.raw,
+            tickLower,
+            tickUpper,
+            priceLowerUi: priceInTickLower.price.toString(),
+            priceUpperUi: priceInTickUpper.price.toString(),
+            slippageBps,
+            ctx,
+          });
+          return;
+        }
 
         // Fetch pool API info (symbols + prices) — needed by both paths
         let symbolA = "MintA";
@@ -790,11 +881,11 @@ function createPositionsOpenCommand(): Command {
 
 function createPositionsIncreaseCommand(): Command {
   return new Command("increase")
-    .description("Add liquidity to an existing position")
+    .description("Add liquidity to an existing position. Add --auto-swap to deposit a single token; backend swaps the optimal portion into the other side.")
     .requiredOption("--nft-mint <address>", "Position NFT mint address")
     .option(
       "--base <token>",
-      "Base token: MintA or MintB (required unless --amount-usd)",
+      "Base token: MintA or MintB (required unless --amount-usd; with --auto-swap, this is the single-token input)",
     )
     .option(
       "--amount <amount>",
@@ -802,10 +893,11 @@ function createPositionsIncreaseCommand(): Command {
     )
     .option(
       "--amount-usd <usd>",
-      "Investment amount in USD (auto-calculates token split, mutually exclusive with --amount)",
+      "Investment amount in USD (auto-calculates token split, mutually exclusive with --amount). Not supported with --auto-swap.",
     )
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--raw", "Amount is already in raw (smallest unit) format")
+    .option("--auto-swap", "Auto Swap mode: deposit only --base; backend swaps the optimal portion into the other side")
     .option("--dry-run", "Preview without executing")
     .option("--confirm", "Execute the increase")
     .option("--unsigned-tx", "Output unsigned transaction as JSON (no signing)")
@@ -858,6 +950,36 @@ function createPositionsIncreaseCommand(): Command {
       // Validate mutually exclusive options
       const useAmountUsd = !!options.amountUsd;
       const useTokenAmount = !!options.amount;
+      const useAutoSwap = !!options.autoSwap;
+
+      if (useAutoSwap && useAmountUsd) {
+        const err = {
+          code: "INVALID_PARAMS",
+          type: "VALIDATION" as const,
+          message: "--auto-swap does not support --amount-usd. Use --amount with --base instead.",
+          retryable: false,
+        };
+        if (format === "json") {
+          outputErrorJson(err);
+        } else {
+          outputErrorTable(err);
+        }
+        process.exit(1);
+      }
+      if (useAutoSwap && (!useTokenAmount || !options.base)) {
+        const err = {
+          code: "MISSING_PARAMS",
+          type: "VALIDATION" as const,
+          message: "--auto-swap requires --base and --amount (the single-token input).",
+          retryable: false,
+        };
+        if (format === "json") {
+          outputErrorJson(err);
+        } else {
+          outputErrorTable(err);
+        }
+        process.exit(1);
+      }
       if (useAmountUsd && useTokenAmount) {
         const err = {
           code: "INVALID_PARAMS",
@@ -935,6 +1057,37 @@ function createPositionsIncreaseCommand(): Command {
 
         const poolInfo = positionInfo.rawPoolInfo;
         const poolAddress = poolInfo.poolId.toBase58();
+
+        // ────────────────────────────────────────────────
+        // Auto Swap branch — backend zap-in increase flow
+        // (decimals resolution lives inside runZapInIncrease)
+        // ────────────────────────────────────────────────
+        if (useAutoSwap) {
+          const { getPdaPersonalPositionAddress } = await import("@byreal-io/byreal-clmm-sdk");
+          const { publicKey: personalPositionPk } = getPdaPersonalPositionAddress(
+            chain.programId,
+            nftMint,
+          );
+          const slippageBps = getDefaultSlippageBps(options.slippage);
+          const ctx: ZapContext = {
+            format: format as ZapContext["format"],
+            mode: mode as ZapContext["mode"],
+            publicKey,
+            keypair,
+            startTime,
+          };
+          await runZapInIncrease({
+            poolAddress,
+            personalPosition: personalPositionPk.toBase58(),
+            base: options.base,
+            amountUi: String(options.amount),
+            isRaw: !!options.raw,
+            slippageBps,
+            nftMint: options.nftMint,
+            ctx,
+          });
+          return;
+        }
 
         // Fetch pool API info (symbols + prices)
         let symbolA = "MintA";
@@ -1225,14 +1378,16 @@ function createPositionsIncreaseCommand(): Command {
 
 function createPositionsDecreaseCommand(): Command {
   return new Command("decrease")
-    .description("Remove part of the liquidity from a position (keeps position open)")
+    .description("Remove part of the liquidity from a position (keeps position open). Add --auto-swap with --output-mint to receive a single token.")
     .requiredOption("--nft-mint <address>", "Position NFT mint address")
     .option("--percentage <1-100>", "Percentage of liquidity to remove")
     .option(
       "--amount-usd <usd>",
-      "USD amount of liquidity to remove (mutually exclusive with --percentage)",
+      "USD amount of liquidity to remove (mutually exclusive with --percentage). Not supported with --auto-swap.",
     )
     .option("--slippage <bps>", "Slippage tolerance in basis points")
+    .option("--auto-swap", "Auto Swap mode: collapse both sides into a single token before sending to wallet (use with --output-mint)")
+    .option("--output-mint <address>", "With --auto-swap: target mint to receive (must be one of the pool tokens)")
     .option("--dry-run", "Preview without executing")
     .option("--confirm", "Execute the decrease")
     .option("--unsigned-tx", "Output unsigned transaction as JSON (no signing)")
@@ -1249,6 +1404,36 @@ function createPositionsDecreaseCommand(): Command {
       // Validate: must provide one of --percentage or --amount-usd
       const hasPercentage = options.percentage !== undefined;
       const hasAmountUsd = options.amountUsd !== undefined;
+      const useAutoSwap = !!options.autoSwap;
+
+      if (useAutoSwap && hasAmountUsd) {
+        const err = {
+          code: "INVALID_PARAMS",
+          type: "VALIDATION" as const,
+          message: "--auto-swap does not support --amount-usd. Use --percentage instead.",
+          retryable: false,
+        };
+        if (format === "json") {
+          outputErrorJson(err);
+        } else {
+          outputErrorTable(err);
+        }
+        process.exit(1);
+      }
+      if (useAutoSwap && !options.outputMint) {
+        const err = {
+          code: "MISSING_PARAMS",
+          type: "VALIDATION" as const,
+          message: "--auto-swap requires --output-mint <address> (target token to receive).",
+          retryable: false,
+        };
+        if (format === "json") {
+          outputErrorJson(err);
+        } else {
+          outputErrorTable(err);
+        }
+        process.exit(1);
+      }
       if (hasPercentage && hasAmountUsd) {
         const err = {
           code: "INVALID_PARAMS",
@@ -1456,6 +1641,38 @@ function createPositionsDecreaseCommand(): Command {
           ? parseInt(options.slippage, 10) / 10000
           : getSlippageBps() / 10000;
 
+        // ────────────────────────────────────────────────
+        // Auto Swap branch — backend zap-out (decrease) flow
+        // ────────────────────────────────────────────────
+        if (useAutoSwap) {
+          const { getPdaPersonalPositionAddress } = await import("@byreal-io/byreal-clmm-sdk");
+          const { publicKey: personalPositionPk } = getPdaPersonalPositionAddress(
+            chain.programId,
+            nftMint,
+          );
+          const slippageBps = getDefaultSlippageBps(options.slippage);
+          const ctx: ZapContext = {
+            format: format as ZapContext["format"],
+            mode: mode as ZapContext["mode"],
+            publicKey,
+            keypair,
+            startTime,
+          };
+          const isFull = percentage >= 100;
+          await runZapOut({
+            poolAddress,
+            personalPosition: personalPositionPk.toBase58(),
+            outputMint: options.outputMint,
+            closePosition: false, // decrease never burns NFT
+            ...(isFull ? {} : { liquidity: liquidityToDecrease.toString() }),
+            slippageBps,
+            nftMint: options.nftMint,
+            percentage: Math.round(percentage * 100) / 100,
+            ctx,
+          });
+          return;
+        }
+
         // Dry-run: show preview
         if (mode === "dry-run") {
           printDryRunBanner();
@@ -1585,9 +1802,11 @@ function createPositionsDecreaseCommand(): Command {
 
 function createPositionsCloseCommand(): Command {
   return new Command("close")
-    .description("Close a position (remove all liquidity)")
+    .description("Close a position (remove all liquidity, burn NFT). Add --auto-swap with --output-mint to receive a single token.")
     .requiredOption("--nft-mint <address>", "Position NFT mint address")
     .option("--slippage <bps>", "Slippage tolerance in basis points")
+    .option("--auto-swap", "Auto Swap mode: collapse both sides into a single token before sending to wallet (use with --output-mint)")
+    .option("--output-mint <address>", "With --auto-swap: target mint to receive (must be one of the pool tokens)")
     .option("--dry-run", "Preview the close without executing")
     .option("--confirm", "Close the position")
     .option("--unsigned-tx", "Output unsigned transaction as JSON (no signing)")
@@ -1600,6 +1819,22 @@ function createPositionsCloseCommand(): Command {
       // Check execution mode
       const mode = resolveExecutionMode(options);
       requireExecutionMode(mode, "positions close");
+
+      const useAutoSwap = !!options.autoSwap;
+      if (useAutoSwap && !options.outputMint) {
+        const err = {
+          code: "MISSING_PARAMS",
+          type: "VALIDATION" as const,
+          message: "--auto-swap requires --output-mint <address> (target token to receive).",
+          retryable: false,
+        };
+        if (format === "json") {
+          outputErrorJson(err);
+        } else {
+          outputErrorTable(err);
+        }
+        process.exit(1);
+      }
 
       // Resolve keypair or address based on mode
       let keypair: Keypair | undefined;
@@ -1673,6 +1908,35 @@ function createPositionsCloseCommand(): Command {
           symbolB = poolResult.value.token_b.symbol || symbolB;
           tokenAPriceUsd = poolResult.value.token_a.price_usd ?? 0;
           tokenBPriceUsd = poolResult.value.token_b.price_usd ?? 0;
+        }
+
+        // ────────────────────────────────────────────────
+        // Auto Swap branch — backend zap-out (close) flow
+        // ────────────────────────────────────────────────
+        if (useAutoSwap) {
+          const { getPdaPersonalPositionAddress } = await import("@byreal-io/byreal-clmm-sdk");
+          const { publicKey: personalPositionPk } = getPdaPersonalPositionAddress(
+            chain.programId,
+            nftMint,
+          );
+          const slippageBps = getDefaultSlippageBps(options.slippage);
+          const ctx: ZapContext = {
+            format: format as ZapContext["format"],
+            mode: mode as ZapContext["mode"],
+            publicKey,
+            keypair,
+            startTime,
+          };
+          await runZapOut({
+            poolAddress,
+            personalPosition: personalPositionPk.toBase58(),
+            outputMint: options.outputMint,
+            closePosition: true,
+            slippageBps,
+            nftMint: options.nftMint,
+            ctx,
+          });
+          return;
         }
 
         // Dry-run: show preview

@@ -132,11 +132,15 @@ Present on-chain data first, then external context, then synthesize how external
 | List positions | \`byreal-cli positions list\` |
 | Open position (USD) | \`byreal-cli positions open --pool <addr> --price-lower <p> --price-upper <p> --amount-usd <usd> --confirm\` |
 | Open position (token) | \`byreal-cli positions open --pool <addr> --price-lower <p> --price-upper <p> --base <token> --amount <amount> --confirm\` |
+| Open position (Auto Swap) | \`byreal-cli positions open --pool <addr> --price-lower <p> --price-upper <p> --base MintA --amount <amount> --auto-swap --confirm\` |
 | Increase liquidity | \`byreal-cli positions increase --nft-mint <addr> --base MintA --amount <amt> --confirm\` |
 | Increase liquidity (USD) | \`byreal-cli positions increase --nft-mint <addr> --amount-usd <usd> --confirm\` |
+| Increase liquidity (Auto Swap) | \`byreal-cli positions increase --nft-mint <addr> --base MintA --amount <amt> --auto-swap --confirm\` |
 | Decrease liquidity (%) | \`byreal-cli positions decrease --nft-mint <addr> --percentage <1-100> --confirm\` |
 | Decrease liquidity (USD) | \`byreal-cli positions decrease --nft-mint <addr> --amount-usd <usd> --confirm\` |
+| Decrease liquidity (Auto Swap) | \`byreal-cli positions decrease --nft-mint <addr> --percentage 50 --auto-swap --output-mint <mint> --confirm\` |
 | Close position | \`byreal-cli positions close --nft-mint <addr> --confirm\` |
+| Close position (Auto Swap) | \`byreal-cli positions close --nft-mint <addr> --auto-swap --output-mint <mint> --confirm\` |
 | Claim fees | \`byreal-cli positions claim --nft-mints <addrs> --confirm\` |
 | Claim incentive rewards | \`byreal-cli positions claim-rewards --confirm\` |
 | Claim copy bonus | \`byreal-cli positions claim-bonus --confirm\` |
@@ -169,6 +173,17 @@ For detailed parameter info on any command, run: \`byreal-cli catalog show <capa
 ### Position Lifecycle: decrease vs close
 - \`decrease --percentage 100\`: Removes all liquidity but **keeps the position NFT**. Can add liquidity again later with \`increase\`.
 - \`close\`: Removes all liquidity AND **burns the NFT**. Permanent.
+
+### Auto Swap (single-token mode)
+\`positions open / increase / decrease / close\` accept \`--auto-swap\`. The Byreal router-service handles the optimal split, runs an on-chain swap and the liquidity instruction in one tx.
+- **Open / Increase**: \`--auto-swap --base <MintA|MintB> --amount <ui>\`. Backend swaps the optimal portion into the other side.
+- **Decrease / Close**: \`--auto-swap --output-mint <mint>\` (must be one of the pool tokens). Backend collapses both sides into the chosen output token.
+- **Validation errors**:
+  - open/increase \`--auto-swap\` without \`--base\`/\`--amount\` → VALIDATION error
+  - open/increase \`--auto-swap\` with \`--amount-usd\` → VALIDATION error (use \`--amount\` instead)
+  - decrease/close \`--auto-swap\` without \`--output-mint\` → VALIDATION error
+- **Quote TTL**: Quotes are HMAC-signed with 30s TTL. CLI auto-retries once (re-fetching quote) on \`41319\` (quote expired) errors during build-tx.
+- **Telemetry**: Position events include \`auto_swap=true\`, \`zap_provider\`, \`zap_input_mint\` / \`zap_output_mint\`, and \`zap_price_impact_bps\` properties.
 
 ### Three Types of Position Earnings
 - **Trading fees** → \`positions claim\` (earned from swap activity in your range)

@@ -840,6 +840,7 @@ export function outputTransactionResult(title: string, data: {
   signature: string;
   confirmed: boolean;
   nftAddress?: string;
+  selectedProvider?: string;
 }): void {
   console.log(chalk.green.bold(`\n${title}\n`));
 
@@ -854,7 +855,148 @@ export function outputTransactionResult(title: string, data: {
     table.push(['NFT Address', chalk.gray(data.nftAddress)]);
   }
 
+  if (data.selectedProvider) {
+    table.push(['Swap Provider', chalk.white(data.selectedProvider)]);
+  }
+
   console.log(table.toString());
+}
+
+// ============================================
+// Auto Swap (Zap) Preview Formatters
+// ============================================
+
+function impactColor(level: 'ok' | 'warning' | 'blocked' | undefined): (s: string) => string {
+  if (level === 'blocked') return chalk.red.bold;
+  if (level === 'warning') return chalk.yellow;
+  return chalk.green;
+}
+
+export function outputZapInPreview(data: {
+  flow: 'open' | 'increase';
+  inputMint: string;
+  inputSymbol: string;
+  inputAmount: string;
+  inputAmountUsd: string;
+  estimatedTokenA: string;
+  estimatedTokenB: string;
+  symbolA: string;
+  symbolB: string;
+  estimatedTokenAUsd: string;
+  estimatedTokenBUsd: string;
+  totalUsd: string;
+  swapProvider: string;
+  swapInAmount: string;
+  swapOutAmount: string;
+  swapMinOutAmount: string;
+  priceImpactPct: string;
+  priceImpactBps: number;
+  impactLevel: 'ok' | 'warning' | 'blocked';
+  slippageBps: number;
+  quoteExpireAtMs?: number;
+  extras: Record<string, unknown>;
+}): void {
+  const heading = data.flow === 'open' ? 'Open Position with Auto Swap' : 'Increase Liquidity with Auto Swap';
+  console.log(chalk.cyan.bold(`\n${heading}\n`));
+
+  const table = createTable(['Field', 'Value']);
+
+  for (const [k, v] of Object.entries(data.extras)) {
+    if (v == null) continue;
+    table.push([toLabel(k), chalk.gray(String(v))]);
+  }
+
+  table.push(
+    ['Input', `${data.inputAmount} ${data.inputSymbol} (${data.inputAmountUsd})`],
+    ['Input Mint', chalk.gray(data.inputMint)],
+    ['→ Estimated Token A', `${data.estimatedTokenA} ${data.symbolA} (${data.estimatedTokenAUsd})`],
+    ['→ Estimated Token B', `${data.estimatedTokenB} ${data.symbolB} (${data.estimatedTokenBUsd})`],
+    ['Total Position Value', chalk.bold(data.totalUsd)],
+  );
+
+  table.push([chalk.cyan('Swap Quote'), '']);
+  table.push(
+    ['  Provider', chalk.white(data.swapProvider)],
+    ['  Swap In', data.swapInAmount],
+    ['  Expected Out', data.swapOutAmount],
+    ['  Min Out (slip-protected)', data.swapMinOutAmount],
+    ['  Price Impact', impactColor(data.impactLevel)(`${data.priceImpactPct}% (${data.priceImpactBps} bps, ${data.impactLevel.toUpperCase()})`)],
+    ['  Slippage', `${data.slippageBps} bps`],
+  );
+
+  if (data.quoteExpireAtMs) {
+    const remainingMs = data.quoteExpireAtMs - Date.now();
+    const remaining = remainingMs > 0 ? `${Math.floor(remainingMs / 1000)}s` : 'expired';
+    table.push(['Quote Expires In', remainingMs > 0 ? chalk.green(remaining) : chalk.red(remaining)]);
+  }
+
+  console.log(table.toString());
+}
+
+export function outputZapOutPreview(data: {
+  outputMint: string;
+  outputSymbol: string;
+  withdrawTokenA: string;
+  withdrawTokenB: string;
+  symbolA: string;
+  symbolB: string;
+  receiveOutputAmount: string;
+  swapProvider?: string;
+  swapInAmount?: string;
+  swapOutAmount?: string;
+  swapMinOutAmount?: string;
+  priceImpactPct?: string;
+  priceImpactBps?: number;
+  impactLevel?: 'ok' | 'warning' | 'blocked';
+  slippageBps: number;
+  quoteExpireAtMs?: number;
+  extras: Record<string, unknown>;
+}): void {
+  const closing = (data.extras.closePosition === true);
+  console.log(chalk.cyan.bold(`\n${closing ? 'Close Position' : 'Decrease Liquidity'} with Auto Swap\n`));
+
+  const table = createTable(['Field', 'Value']);
+
+  for (const [k, v] of Object.entries(data.extras)) {
+    if (v == null || k === 'closePosition') continue;
+    table.push([toLabel(k), chalk.gray(String(v))]);
+  }
+
+  table.push(
+    ['Withdraw Token A', `${data.withdrawTokenA} ${data.symbolA}`],
+    ['Withdraw Token B', `${data.withdrawTokenB} ${data.symbolB}`],
+    ['→ Receive', chalk.bold(`${data.receiveOutputAmount} ${data.outputSymbol}`)],
+    ['Output Mint', chalk.gray(data.outputMint)],
+  );
+
+  if (data.swapProvider) {
+    table.push([chalk.cyan('Swap Quote'), '']);
+    table.push(
+      ['  Provider', chalk.white(data.swapProvider)],
+      ['  Swap In', data.swapInAmount ?? '-'],
+      ['  Expected Out', data.swapOutAmount ?? '-'],
+      ['  Min Out (slip-protected)', data.swapMinOutAmount ?? '-'],
+      ['  Price Impact', impactColor(data.impactLevel)(`${data.priceImpactPct ?? '0'}% (${data.priceImpactBps ?? 0} bps, ${(data.impactLevel ?? 'ok').toUpperCase()})`)],
+    );
+  }
+
+  table.push(['Slippage', `${data.slippageBps} bps`]);
+
+  if (data.quoteExpireAtMs) {
+    const remainingMs = data.quoteExpireAtMs - Date.now();
+    const remaining = remainingMs > 0 ? `${Math.floor(remainingMs / 1000)}s` : 'expired';
+    table.push(['Quote Expires In', remainingMs > 0 ? chalk.green(remaining) : chalk.red(remaining)]);
+  }
+
+  console.log(table.toString());
+}
+
+function toLabel(key: string): string {
+  // poolAddress → Pool Address, nftMint → NFT Mint, tickLower → Tick Lower
+  return key
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/^./, (s) => s.toUpperCase())
+    .replace(/Nft/g, 'NFT');
 }
 
 // ============================================

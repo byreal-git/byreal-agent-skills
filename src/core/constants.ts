@@ -43,6 +43,14 @@ export const API_ENDPOINTS = {
   SWAP_EXECUTE_AMM: '/byreal/api/dex/v2/send-swap-tx',
   SWAP_EXECUTE_RFQ: '/byreal/api/rfq/v1/swap',
 
+  // AutoSwap (Zap) endpoints — mirror apps/web/src/api/endpoints/router.ts
+  AUTOSWAP_ZAP_IN_OPEN_QUOTE: '/byreal/api/router/v1/router-service/autoswap/zap-in/open-position/quote',
+  AUTOSWAP_ZAP_IN_OPEN_BUILD: '/byreal/api/router/v1/router-service/autoswap/zap-in/open-position/build-tx',
+  AUTOSWAP_ZAP_IN_INC_QUOTE: '/byreal/api/router/v1/router-service/autoswap/zap-in/increase-liquidity/quote',
+  AUTOSWAP_ZAP_IN_INC_BUILD: '/byreal/api/router/v1/router-service/autoswap/zap-in/increase-liquidity/build-tx',
+  AUTOSWAP_ZAP_OUT_QUOTE: '/byreal/api/router/v1/router-service/autoswap/zap-out/quote',
+  AUTOSWAP_ZAP_OUT_BUILD: '/byreal/api/router/v1/router-service/autoswap/zap-out/build-tx',
+
   // Position endpoints
   POSITIONS_LIST: '/byreal/api/dex/v2/position/list',
   FEE_ENCODE: '/byreal/api/dex/v2/incentive/encode-fee',
