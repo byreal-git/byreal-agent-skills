@@ -60,6 +60,14 @@ export const API_ENDPOINTS = {
 
   // Fee endpoints
   AUTO_FEE: "/byreal/api/dex/v2/main/auto-fee",
+
+  // AutoSwap (Zap) endpoints — mirror apps/web/src/api/endpoints/router.ts
+  AUTOSWAP_ZAP_IN_OPEN_QUOTE: "/byreal/api/router/v1/router-service/autoswap/zap-in/open-position/quote",
+  AUTOSWAP_ZAP_IN_OPEN_BUILD: "/byreal/api/router/v1/router-service/autoswap/zap-in/open-position/build-tx",
+  AUTOSWAP_ZAP_IN_INC_QUOTE: "/byreal/api/router/v1/router-service/autoswap/zap-in/increase-liquidity/quote",
+  AUTOSWAP_ZAP_IN_INC_BUILD: "/byreal/api/router/v1/router-service/autoswap/zap-in/increase-liquidity/build-tx",
+  AUTOSWAP_ZAP_OUT_QUOTE: "/byreal/api/router/v1/router-service/autoswap/zap-out/quote",
+  AUTOSWAP_ZAP_OUT_BUILD: "/byreal/api/router/v1/router-service/autoswap/zap-out/build-tx",
 } as const;
 
 // ============================================

@@ -41,6 +41,12 @@ import {
   privySignMany,
 } from "../../privy/index.js";
 import {
+  runZapInOpen,
+  runZapInIncrease,
+  runZapOut,
+  getDefaultSlippageBps,
+} from "./positions-zap.js";
+import {
   outputJson,
   outputErrorJson,
   outputErrorTable,
@@ -161,12 +167,12 @@ const KNOWN_SYMBOLS: Record<string, string> = {
   Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ: "QQQx",
 };
 
-interface WalletBalanceSummary {
+export interface WalletBalanceSummary {
   sol: string;
   tokens: { mint: string; symbol: string; amount: string; decimals: number }[];
 }
 
-async function fetchWalletBalanceSummary(
+export async function fetchWalletBalanceSummary(
   owner: PublicKey,
 ): Promise<WalletBalanceSummary> {
   const connection = getConnection();
@@ -282,13 +288,37 @@ async function getTokenBalance(owner: PublicKey, mint: string): Promise<BN> {
   return total;
 }
 
-interface BalanceWarning {
+export interface BalanceWarning {
   token: string;
   symbol: string;
   mint: string;
   required: string;
   available: string;
   deficit: string;
+}
+
+/** Single-mint variant for zap-in (only one token to check). */
+export async function checkSingleMintBalance(
+  owner: PublicKey,
+  mint: string,
+  symbol: string,
+  decimals: number,
+  amount: BN,
+  tokenLabel: string = "input",
+): Promise<BalanceWarning[]> {
+  const balance = await getTokenBalance(owner, mint);
+  if (balance.gte(amount)) return [];
+  const deficit = amount.sub(balance);
+  return [
+    {
+      token: tokenLabel,
+      symbol,
+      mint,
+      required: rawToUi(amount.toString(), decimals),
+      available: rawToUi(balance.toString(), decimals),
+      deficit: rawToUi(deficit.toString(), decimals),
+    },
+  ];
 }
 
 async function checkBalanceSufficiency(
@@ -356,6 +386,7 @@ function createPositionsOpenCommand(): Command {
     )
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--raw", "Amount is already in raw (smallest unit) format")
+    .option("--auto-swap", "Use Auto Swap (Zap In): convert single-token --base+--amount into the position's two-token split via Byreal router. Requires --execute (or --dry-run for preview).")
     .option("--dry-run", "Preview the position without opening")
     .option("--execute", "Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)")
     .action(async (options, cmdObj: Command) => {
@@ -378,6 +409,79 @@ function createPositionsOpenCommand(): Command {
         process.exit(1);
       }
       const publicKey = new PublicKey(walletAddress);
+
+      // ============================================
+      // --auto-swap path (early dispatch)
+      // ============================================
+      if (options.autoSwap) {
+        if (options.amountUsd) {
+          const err = {
+            code: "INVALID_PARAMS",
+            type: "VALIDATION" as const,
+            message: "--auto-swap is incompatible with --amount-usd. Provide --base and --amount instead.",
+            retryable: false,
+          };
+          if (format === "json") outputErrorJson(err);
+          else outputErrorTable(err);
+          process.exit(1);
+        }
+        if (!options.base || !options.amount) {
+          const err = {
+            code: "MISSING_PARAMS",
+            type: "VALIDATION" as const,
+            message: "--auto-swap requires --base and --amount (the single-token input).",
+            retryable: false,
+          };
+          if (format === "json") outputErrorJson(err);
+          else outputErrorTable(err);
+          process.exit(1);
+        }
+        if (mode === "unsigned-tx") {
+          const err = {
+            code: "UNSUPPORTED_MODE",
+            type: "VALIDATION" as const,
+            message: "--auto-swap requires --execute (or --dry-run for preview). The default unsigned-tx mode is not supported because Auto Swap binds quotes to backend-issued signers and cannot survive being handed to an external signer chain.",
+            retryable: false,
+          };
+          if (format === "json") outputErrorJson(err);
+          else outputErrorTable(err);
+          process.exit(1);
+        }
+
+        try {
+          const { getChain } = await import("../../sdk/init.js");
+          const { calculateTickAlignedPriceRange } = await import("../../sdk/calculate.js");
+          const chain = getChain();
+          const poolInfo = await chain.getRawPoolInfoByPoolId(options.pool);
+          const { priceInTickLower, priceInTickUpper } = calculateTickAlignedPriceRange({
+            tickSpacing: poolInfo.tickSpacing,
+            mintDecimalsA: poolInfo.mintDecimalsA,
+            mintDecimalsB: poolInfo.mintDecimalsB,
+            startPrice: options.priceLower,
+            endPrice: options.priceUpper,
+          });
+          await runZapInOpen({
+            poolAddress: options.pool,
+            base: options.base,
+            amountUi: options.amount,
+            isRaw: !!options.raw,
+            tickLower: priceInTickLower.tick,
+            tickUpper: priceInTickUpper.tick,
+            priceLowerUi: options.priceLower,
+            priceUpperUi: options.priceUpper,
+            slippageBps: getDefaultSlippageBps(options.slippage),
+            ctx: { format, mode, walletAddress, publicKey, startTime },
+          });
+          return;
+        } catch (e) {
+          if (e instanceof ByrealError) {
+            if (format === "json") outputErrorJson(e.toJSON());
+            else outputErrorTable(e.toJSON());
+            process.exit(1);
+          }
+          throw e;
+        }
+      }
 
       // Validate mutually exclusive options
       const useAmountUsd = !!options.amountUsd;
@@ -753,6 +857,7 @@ function createPositionsIncreaseCommand(): Command {
     )
     .option("--slippage <bps>", "Slippage tolerance in basis points")
     .option("--raw", "Amount is already in raw (smallest unit) format")
+    .option("--auto-swap", "Use Auto Swap (Zap In): convert single-token --base+--amount into the position's two-token split via Byreal router. Requires --execute (or --dry-run for preview).")
     .option("--dry-run", "Preview without executing")
     .option("--execute", "Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)")
     .action(async (options, cmdObj: Command) => {
@@ -775,6 +880,80 @@ function createPositionsIncreaseCommand(): Command {
         process.exit(1);
       }
       const publicKey = new PublicKey(walletAddress);
+
+      // ============================================
+      // --auto-swap path (early dispatch)
+      // ============================================
+      if (options.autoSwap) {
+        if (options.amountUsd) {
+          const err = {
+            code: "INVALID_PARAMS",
+            type: "VALIDATION" as const,
+            message: "--auto-swap is incompatible with --amount-usd. Provide --base and --amount instead.",
+            retryable: false,
+          };
+          if (format === "json") outputErrorJson(err);
+          else outputErrorTable(err);
+          process.exit(1);
+        }
+        if (!options.base || !options.amount) {
+          const err = {
+            code: "MISSING_PARAMS",
+            type: "VALIDATION" as const,
+            message: "--auto-swap requires --base and --amount (the single-token input).",
+            retryable: false,
+          };
+          if (format === "json") outputErrorJson(err);
+          else outputErrorTable(err);
+          process.exit(1);
+        }
+        if (mode === "unsigned-tx") {
+          const err = {
+            code: "UNSUPPORTED_MODE",
+            type: "VALIDATION" as const,
+            message: "--auto-swap requires --execute (or --dry-run for preview). The default unsigned-tx mode is not supported because Auto Swap binds quotes to backend-issued signers and cannot survive being handed to an external signer chain.",
+            retryable: false,
+          };
+          if (format === "json") outputErrorJson(err);
+          else outputErrorTable(err);
+          process.exit(1);
+        }
+        try {
+          const { getChain } = await import("../../sdk/init.js");
+          const { getPdaPersonalPositionAddress, BYREAL_CLMM_PROGRAM_ID } = await import("@byreal-io/byreal-clmm-sdk");
+          const chain = getChain();
+          const nftMint = new PublicKey(options.nftMint);
+          const positionInfo = await chain.getPositionInfoByNftMint(nftMint);
+          if (!positionInfo) {
+            const errMsg = `Position not found for NFT mint: ${options.nftMint}`;
+            if (format === "json") {
+              outputErrorJson({ code: "POSITION_NOT_FOUND", type: "BUSINESS", message: errMsg, retryable: false });
+            } else {
+              console.error(chalk.red(`\nError: ${errMsg}`));
+            }
+            process.exit(1);
+          }
+          const personalPosition = getPdaPersonalPositionAddress(BYREAL_CLMM_PROGRAM_ID, nftMint).publicKey.toBase58();
+          await runZapInIncrease({
+            poolAddress: positionInfo.rawPoolInfo.poolId.toBase58(),
+            personalPosition,
+            base: options.base,
+            amountUi: options.amount,
+            isRaw: !!options.raw,
+            slippageBps: getDefaultSlippageBps(options.slippage),
+            nftMint: options.nftMint,
+            ctx: { format, mode, walletAddress, publicKey, startTime },
+          });
+          return;
+        } catch (e) {
+          if (e instanceof ByrealError) {
+            if (format === "json") outputErrorJson(e.toJSON());
+            else outputErrorTable(e.toJSON());
+            process.exit(1);
+          }
+          throw e;
+        }
+      }
 
       // Validate mutually exclusive options
       const useAmountUsd = !!options.amountUsd;
@@ -1125,6 +1304,8 @@ function createPositionsDecreaseCommand(): Command {
       "USD amount of liquidity to remove (mutually exclusive with --percentage)",
     )
     .option("--slippage <bps>", "Slippage tolerance in basis points")
+    .option("--auto-swap", "Use Auto Swap (Zap Out): convert withdrawn dual-token output into a single --output-mint via Byreal router. Requires --execute (or --dry-run for preview).")
+    .option("--output-mint <address>", "Target token mint for --auto-swap (must be one of the pool's two mints)")
     .option("--dry-run", "Preview without executing")
     .option("--execute", "Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)")
     .action(async (options, cmdObj: Command) => {
@@ -1134,6 +1315,120 @@ function createPositionsDecreaseCommand(): Command {
 
       // Check execution mode
       const mode = safeResolveExecutionMode(options, format);
+
+      // ============================================
+      // --auto-swap path (early dispatch)
+      // ============================================
+      if (options.autoSwap) {
+        const walletAddressEarly = globalOptions.walletAddress;
+        if (!walletAddressEarly) {
+          const err = missingWalletAddressError();
+          if (format === "json") outputErrorJson(err.toJSON());
+          else outputErrorTable(err.toJSON());
+          process.exit(1);
+        }
+        if (options.amountUsd) {
+          const err = {
+            code: "INVALID_PARAMS",
+            type: "VALIDATION" as const,
+            message: "--auto-swap is incompatible with --amount-usd on decrease. Use --percentage.",
+            retryable: false,
+          };
+          if (format === "json") outputErrorJson(err);
+          else outputErrorTable(err);
+          process.exit(1);
+        }
+        if (!options.outputMint) {
+          const err = {
+            code: "MISSING_PARAMS",
+            type: "VALIDATION" as const,
+            message: "--auto-swap requires --output-mint <address> (target token to receive).",
+            retryable: false,
+          };
+          if (format === "json") outputErrorJson(err);
+          else outputErrorTable(err);
+          process.exit(1);
+        }
+        if (mode === "unsigned-tx") {
+          const err = {
+            code: "UNSUPPORTED_MODE",
+            type: "VALIDATION" as const,
+            message: "--auto-swap requires --execute (or --dry-run for preview). The default unsigned-tx mode is not supported because Auto Swap binds quotes to backend-issued signers and cannot survive being handed to an external signer chain.",
+            retryable: false,
+          };
+          if (format === "json") outputErrorJson(err);
+          else outputErrorTable(err);
+          process.exit(1);
+        }
+        try {
+          const { getChain } = await import("../../sdk/init.js");
+          const { getPdaPersonalPositionAddress, BYREAL_CLMM_PROGRAM_ID } = await import("@byreal-io/byreal-clmm-sdk");
+          const chain = getChain();
+          const nftMint = new PublicKey(options.nftMint);
+          const positionInfo = await chain.getPositionInfoByNftMint(nftMint);
+          if (!positionInfo) {
+            const errMsg = `Position not found for NFT mint: ${options.nftMint}`;
+            if (format === "json") {
+              outputErrorJson({ code: "POSITION_NOT_FOUND", type: "BUSINESS", message: errMsg, retryable: false });
+            } else {
+              console.error(chalk.red(`\nError: ${errMsg}`));
+            }
+            process.exit(1);
+          }
+          const publicKeyEarly = new PublicKey(walletAddressEarly);
+          const personalPosition = getPdaPersonalPositionAddress(BYREAL_CLMM_PROGRAM_ID, nftMint).publicKey.toBase58();
+
+          // Compute liquidity to remove from percentage if provided, else full position.
+          // Without --percentage we conservatively require it for auto-swap decrease.
+          if (!options.percentage) {
+            const err = {
+              code: "MISSING_PARAMS",
+              type: "VALIDATION" as const,
+              message: "--auto-swap decrease requires --percentage <1-100>.",
+              retryable: false,
+            };
+            if (format === "json") outputErrorJson(err);
+            else outputErrorTable(err);
+            process.exit(1);
+          }
+          const pct = parseFloat(options.percentage);
+          if (isNaN(pct) || pct < 1 || pct > 100) {
+            const err = {
+              code: "INVALID_PARAMS",
+              type: "VALIDATION" as const,
+              message: "--percentage must be a number between 1 and 100.",
+              retryable: false,
+            };
+            if (format === "json") outputErrorJson(err);
+            else outputErrorTable(err);
+            process.exit(1);
+          }
+          const rawLiquidity = positionInfo.rawPositionInfo.liquidity as BN;
+          const liquidityToRemove = rawLiquidity
+            .mul(new BN(Math.round(pct * 100)))
+            .div(new BN(10000))
+            .toString();
+          await runZapOut({
+            poolAddress: positionInfo.rawPoolInfo.poolId.toBase58(),
+            personalPosition,
+            outputMint: options.outputMint,
+            closePosition: false,
+            liquidity: liquidityToRemove,
+            slippageBps: getDefaultSlippageBps(options.slippage),
+            nftMint: options.nftMint,
+            percentage: pct,
+            ctx: { format, mode, walletAddress: walletAddressEarly, publicKey: publicKeyEarly, startTime },
+          });
+          return;
+        } catch (e) {
+          if (e instanceof ByrealError) {
+            if (format === "json") outputErrorJson(e.toJSON());
+            else outputErrorTable(e.toJSON());
+            process.exit(1);
+          }
+          throw e;
+        }
+      }
 
       // Validate: must provide one of --percentage or --amount-usd
       const hasPercentage = options.percentage !== undefined;
@@ -1434,6 +1729,8 @@ function createPositionsCloseCommand(): Command {
     .description("Close a position (remove all liquidity)")
     .requiredOption("--nft-mint <address>", "Position NFT mint address")
     .option("--slippage <bps>", "Slippage tolerance in basis points")
+    .option("--auto-swap", "Use Auto Swap (Zap Out): convert withdrawn dual-token output into a single --output-mint via Byreal router (preclaims pending incentives first). Requires --execute (or --dry-run for preview).")
+    .option("--output-mint <address>", "Target token mint for --auto-swap (must be one of the pool's two mints)")
     .option("--dry-run", "Preview the close without executing")
     .option("--execute", "Sign + broadcast on-chain via Privy (default emits unsigned tx for back-compat)")
     .action(async (options, cmdObj: Command) => {
@@ -1456,6 +1753,68 @@ function createPositionsCloseCommand(): Command {
         process.exit(1);
       }
       const publicKey = new PublicKey(walletAddress);
+
+      // ============================================
+      // --auto-swap path (early dispatch)
+      // ============================================
+      if (options.autoSwap) {
+        if (!options.outputMint) {
+          const err = {
+            code: "MISSING_PARAMS",
+            type: "VALIDATION" as const,
+            message: "--auto-swap requires --output-mint <address> (target token to receive).",
+            retryable: false,
+          };
+          if (format === "json") outputErrorJson(err);
+          else outputErrorTable(err);
+          process.exit(1);
+        }
+        if (mode === "unsigned-tx") {
+          const err = {
+            code: "UNSUPPORTED_MODE",
+            type: "VALIDATION" as const,
+            message: "--auto-swap requires --execute (or --dry-run for preview). The default unsigned-tx mode is not supported because Auto Swap binds quotes to backend-issued signers and cannot survive being handed to an external signer chain.",
+            retryable: false,
+          };
+          if (format === "json") outputErrorJson(err);
+          else outputErrorTable(err);
+          process.exit(1);
+        }
+        try {
+          const { getChain } = await import("../../sdk/init.js");
+          const { getPdaPersonalPositionAddress, BYREAL_CLMM_PROGRAM_ID } = await import("@byreal-io/byreal-clmm-sdk");
+          const chain = getChain();
+          const nftMint = new PublicKey(options.nftMint);
+          const positionInfo = await chain.getPositionInfoByNftMint(nftMint);
+          if (!positionInfo) {
+            const errMsg = `Position not found for NFT mint: ${options.nftMint}`;
+            if (format === "json") {
+              outputErrorJson({ code: "POSITION_NOT_FOUND", type: "BUSINESS", message: errMsg, retryable: false });
+            } else {
+              console.error(chalk.red(`\nError: ${errMsg}`));
+            }
+            process.exit(1);
+          }
+          const personalPosition = getPdaPersonalPositionAddress(BYREAL_CLMM_PROGRAM_ID, nftMint).publicKey.toBase58();
+          await runZapOut({
+            poolAddress: positionInfo.rawPoolInfo.poolId.toBase58(),
+            personalPosition,
+            outputMint: options.outputMint,
+            closePosition: true,
+            slippageBps: getDefaultSlippageBps(options.slippage),
+            nftMint: options.nftMint,
+            ctx: { format, mode, walletAddress, publicKey, startTime },
+          });
+          return;
+        } catch (e) {
+          if (e instanceof ByrealError) {
+            if (format === "json") outputErrorJson(e.toJSON());
+            else outputErrorTable(e.toJSON());
+            process.exit(1);
+          }
+          throw e;
+        }
+      }
 
       try {
         // Lazy-load SDK

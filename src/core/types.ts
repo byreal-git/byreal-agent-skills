@@ -501,3 +501,159 @@ export interface RewardOrderResult {
   claimTokenList: ClaimTokenItem[];
 }
 
+// ============================================
+// AutoSwap (Zap) Types
+// Mirrors apps/web/src/features/zap/types.ts (Router TRD v3 — Quote + Build-Tx two-phase flow).
+// ============================================
+
+/** Backend CommonResult — the inner result.status sub-object that carries business error codes. */
+export interface AutoswapCommonResult {
+  retCode: number;
+  retMsg?: string;
+  ret_code?: number;
+  ret_msg?: string;
+}
+
+/** Price impact severity. */
+export type AutoswapImpactLevel = "ok" | "warning" | "blocked";
+
+/** QuoteContext — HMAC-signed stateless context, 30s TTL */
+export interface AutoSwapQuoteContext {
+  flowType: string;
+  intent: Record<string, unknown>;
+  quoteRaw?: string | null;
+  swapInAmount: string;
+  expireAtMs: number;
+  provider?: string;
+  issuedAtMs?: number;
+  swapSlippageBps?: number;
+  poolPriceSlippageBps?: number;
+}
+
+/** Optional fee/broadcast fields shared by every build-tx request. */
+export interface AutoswapFeePayload {
+  broadcastMode?: string;
+  feeType?: string;
+  feeAmount?: string;
+  cuPrice?: string;
+  jitoTip?: string;
+}
+
+/** Swap quote view shared by Zap-In and Zap-Out. */
+export interface AutoswapSwapQuoteView {
+  provider: string;
+  swapInAmount: string;
+  expectedSwapOutAmount: string;
+  minSwapOutAmount: string;
+  priceImpactPct: string;
+  priceImpactBps: number;
+  impactLevel: AutoswapImpactLevel;
+}
+
+/** Zap-In: estimated token-A and token-B amounts after the swap. */
+export interface AutoswapZapInPreviewView {
+  estimatedToken0Amount: string;
+  estimatedToken1Amount: string;
+  note?: string;
+}
+
+/** Zap-Out: estimated withdrawn amounts and final received output. */
+export interface AutoswapZapOutQuoteView {
+  estimatedWithdrawToken0Amount: string;
+  estimatedWithdrawToken1Amount: string;
+  estimatedReceiveOutputAmount: string;
+  swapQuote?: AutoswapSwapQuoteView | null;
+}
+
+// --- Zap-In Open Position (Create) ---
+
+export interface AutoSwapZapInOpenPositionQuoteRequest {
+  poolAddress: string;
+  userPublicKey: string;
+  inputMint: string;
+  amount: string;
+  tickLowerIndex: number;
+  tickUpperIndex: number;
+  slippageBps: number;
+}
+
+export interface AutoSwapZapInOpenPositionBuildTxRequest extends AutoswapFeePayload {
+  quoteId: string;
+  quoteContext: AutoSwapQuoteContext;
+  positionNftMint: string;
+  copyPosition?: string;
+}
+
+/** Quote response (shared by Create and Increase). */
+export interface AutoSwapZapInQuoteResponse {
+  result?: AutoswapCommonResult | null;
+  provider?: string;
+  quote?: AutoswapSwapQuoteView | null;
+  preview?: AutoswapZapInPreviewView | null;
+  quoteId?: string;
+  quoteContext?: AutoSwapQuoteContext;
+  quoteExpireAtMs?: number;
+}
+
+/** Build-Tx response (shared by Create and Increase). */
+export interface AutoSwapZapInBuildTxResponse {
+  result?: AutoswapCommonResult | null;
+  transaction?: string | null;
+  networkFee?: string;
+  cu?: string;
+  selectedProvider?: string;
+  quote?: AutoswapSwapQuoteView | null;
+  preview?: AutoswapZapInPreviewView | null;
+}
+
+// --- Zap-In Increase Liquidity ---
+
+export interface AutoSwapZapInIncreaseLiquidityQuoteRequest {
+  poolAddress: string;
+  userPublicKey: string;
+  inputMint: string;
+  amount: string;
+  personalPosition: string;
+  slippageBps: number;
+}
+
+export interface AutoSwapZapInIncreaseLiquidityBuildTxRequest extends AutoswapFeePayload {
+  quoteId: string;
+  quoteContext: AutoSwapQuoteContext;
+}
+
+// --- Zap-Out (Decrease / Close) ---
+
+export interface AutoSwapZapOutQuoteRequest {
+  poolAddress: string;
+  userPublicKey: string;
+  personalPosition: string;
+  outputMint: string;
+  closePosition?: boolean;
+  liquidity?: string;
+  slippageBps: number;
+}
+
+export interface AutoSwapZapOutBuildTxRequest extends AutoswapFeePayload {
+  quoteId: string;
+  quoteContext: AutoSwapQuoteContext;
+}
+
+export interface AutoSwapZapOutQuoteResponse {
+  result?: AutoswapCommonResult | null;
+  provider?: string;
+  preview?: AutoswapZapOutQuoteView | null;
+  quoteId?: string;
+  quoteContext?: AutoSwapQuoteContext;
+  quoteExpireAtMs?: number;
+}
+
+export interface AutoSwapZapOutBuildTxResponse {
+  result?: AutoswapCommonResult | null;
+  transaction?: string | null;
+  networkFee?: string;
+  cu?: string;
+  selectedProvider?: string;
+  quote?: AutoswapSwapQuoteView | null;
+}
+

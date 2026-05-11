@@ -170,6 +170,10 @@ Present on-chain data first, then external context, then synthesize how external
 | Decrease liquidity (%) | \`byreal-cli positions decrease --nft-mint <addr> --percentage <1-100> --wallet-address <addr>\` |
 | Decrease liquidity (USD) | \`byreal-cli positions decrease --nft-mint <addr> --amount-usd <usd> --wallet-address <addr>\` |
 | Close position | \`byreal-cli positions close --nft-mint <addr> --wallet-address <addr>\` |
+| Open w/ Auto Swap (Zap-In) | \`byreal-cli positions open --pool <addr> --price-lower <p> --price-upper <p> --base <mint|MintA|MintB> --amount <amt> --auto-swap --execute --wallet-address <addr>\` |
+| Increase w/ Auto Swap (Zap-In) | \`byreal-cli positions increase --nft-mint <addr> --base <mint|MintA|MintB> --amount <amt> --auto-swap --execute --wallet-address <addr>\` |
+| Decrease w/ Auto Swap (Zap-Out) | \`byreal-cli positions decrease --nft-mint <addr> --percentage <1-100> --auto-swap --output-mint <mint> --execute --wallet-address <addr>\` |
+| Close w/ Auto Swap (Zap-Out + preclaim) | \`byreal-cli positions close --nft-mint <addr> --auto-swap --output-mint <mint> --execute --wallet-address <addr>\` |
 | Claim fees | \`byreal-cli positions claim --nft-mints <addrs> --wallet-address <addr>\` |
 | Claim incentive rewards | \`byreal-cli positions claim-rewards --wallet-address <addr>\` |
 | Claim copy bonus | \`byreal-cli positions claim-bonus --wallet-address <addr>\` |
@@ -282,6 +286,27 @@ When user wants to add more liquidity to an existing position or partially withd
 3. \`byreal-cli positions decrease --nft-mint <nft-mint> --percentage 50 --wallet-address <addr> -o json\` — emit unsigned tx (default). Add \`--execute\` to sign + broadcast via Privy.
 
 **Key distinction**: Use \`decrease\` to partially withdraw while keeping the position open. Use \`close\` to fully exit and burn the NFT.
+
+## Workflow: Auto Swap (Zap In / Zap Out)
+
+\`--auto-swap\` lets users open / add / remove / close positions using a **single token** instead of pre-splitting into the pool's two tokens. The Byreal router quotes + builds a transaction that swaps part of the input on Jupiter (or other aggregators) and atomically deposits/withdraws into the CLMM position.
+
+**Constraints unique to openclaw**: \`--auto-swap\` ONLY runs in two modes:
+- \`--dry-run\` — preview the quote (no signing, no Privy needed)
+- \`--execute\` — sign + broadcast via Privy proxy
+
+The default \`unsigned-tx\` mode is rejected (\`code: UNSUPPORTED_MODE\`) because Auto Swap quotes are bound to backend-issued signers and have a 30s TTL — they cannot be handed off to an external signer chain.
+
+**Zap-In (open / increase)**:
+1. \`positions open --pool <id> --price-lower <p> --price-upper <p> --base <mint|MintA|MintB> --amount <amt> --auto-swap --dry-run -o json\` — preview the split + swap quote (priceImpact, slippage, expiry).
+2. Drop \`--dry-run\` and add \`--execute\`: \`positions open ... --auto-swap --execute -o json\` — Privy signs + broadcasts. Response contains \`signature\`, \`nftAddress\`, \`autoSwap: true\`, \`selectedProvider\`.
+
+**Zap-Out (decrease / close)**:
+1. \`positions close --nft-mint <addr> --auto-swap --output-mint <mint> --dry-run -o json\` — preview withdrawn amounts + final \`receiveOutputAmount\`. \`unclaimedIncentives\` reports any pending incentive rewards that will be preclaimed.
+2. \`positions close ... --auto-swap --output-mint <mint> --execute -o json\` — runs preclaim (if needed) and zap-out as two sequential mainnet-beta tx; response contains \`signature\` + \`incentivePreclaim.signatures\`.
+3. For partial: \`positions decrease ... --percentage <1-100> --auto-swap --output-mint <mint> --execute\`.
+
+\`--output-mint\` must equal one of the pool's two mints (validated by both CLI and backend).
 
 ## Workflow: Copy a Top Position
 

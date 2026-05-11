@@ -125,10 +125,10 @@ If Privy is not configured, `--execute` fails fast with `PRIVY_NOT_CONFIGURED` a
 | `tokens list`             | List available tokens                          |
 | `swap execute`            | Preview or execute a token swap                |
 | `positions list`          | List positions (own wallet or any via --user)   |
-| `positions open`          | Open a new CLMM position                       |
-| `positions increase`      | Add liquidity to an existing position           |
-| `positions decrease`      | Partially remove liquidity from a position      |
-| `positions close`         | Close a position                               |
+| `positions open`          | Open a new CLMM position (supports `--auto-swap` Zap-In with `--execute`) |
+| `positions increase`      | Add liquidity to an existing position (supports `--auto-swap` Zap-In with `--execute`) |
+| `positions decrease`      | Partially remove liquidity from a position (supports `--auto-swap` Zap-Out with `--execute`) |
+| `positions close`         | Close a position (supports `--auto-swap` Zap-Out + incentive preclaim with `--execute`) |
 | `positions claim`           | Claim trading fees                              |
 | `positions claim-rewards`   | Claim incentive rewards from positions           |
 | `positions claim-bonus`     | Claim CopyFarmer bonus rewards                  |
