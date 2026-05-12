@@ -1,0 +1,45 @@
+README.md
+  0b618b47cebc4664 128-131
+tests/zap/preclaim.test.ts
+  0b618b47cebc4664 1-237
+tests/zap/openclaw-modes.test.ts
+  0b618b47cebc4664 1-336
+src/cli/commands/positions.ts
+  0b618b47cebc4664 44-48,170,175,291,300-321,389,413-484,860,884-956,1307-1308,1319-1431,1732-1733,1757-1817
+src/api/endpoints.ts
+  0b618b47cebc4664 37-46,1094-1212,1230-1235
+src/cli/commands/skill.ts
+  0b618b47cebc4664 173-176,290-310
+src/core/types.ts
+  0b618b47cebc4664 504-659
+src/cli/output/formatters.ts
+  0b618b47cebc4664 1164-1299
+src/cli/commands/incentive-preclaim.ts
+  0b618b47cebc4664 1-220
+src/cli/commands/catalog.ts
+  0b618b47cebc4664 180,188,190,193,195,201,207,209,212,214,220,226-227,229-230,232,238,245-246,248
+src/cli/commands/positions-zap.ts
+  0b618b47cebc4664 1-912
+src/core/constants.ts
+  0b618b47cebc4664 63-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.23-bit.2+50d84e3",
+  "base_commit_sha": "5fd67efc0eb11da3c894685c2f423ab2d4961378",
+  "prompts": {
+    "0b618b47cebc4664": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3c233e3d-f8fe-4e84-b113-aa55caf1df16",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "er.wang <er.wang@lunarax.io>",
+      "messages": [],
+      "total_additions": 2614,
+      "total_deletions": 80,
+      "accepted_lines": 2551,
+      "overriden_lines": 0
+    }
+  }
+}
