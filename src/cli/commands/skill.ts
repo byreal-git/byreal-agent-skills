@@ -198,6 +198,19 @@ For detailed parameter info on any command, run: \`byreal-cli catalog show <capa
 ### Balance Check on Dry-run
 \`positions open --dry-run\` and \`positions increase --dry-run\` automatically check wallet balance. If insufficient, response includes \`balanceWarnings\` (deficit) and \`walletBalances\` (all available tokens) — no need to run \`wallet balance\` separately.
 
+**Important caveat:** the dry-run balance check does NOT subtract the SOL fee/rent buffer (see "SOL Buffer for CLMM Position Ops" below). When SOL is one of the deposit tokens, dry-run reporting "sufficient" is necessary-but-not-sufficient — always size the SOL leg against \`sol_balance − buffer\`, not the full balance.
+
+### SOL Buffer for CLMM Position Ops
+Opening or increasing a CLMM position consumes SOL **on top of** the SOL you deposit, to pay for account rent + tx + priority fee. The dry-run balance check does not deduct this for you — you must size the deposit yourself.
+
+| Operation                  | Reserve at least | What the buffer pays for                                            |
+| -------------------------- | ---------------- | ------------------------------------------------------------------- |
+| \`positions open\`         | **0.03 SOL**     | Position NFT mint + position account rent + tick-array init + fees  |
+| \`positions increase\`     | **0.01 SOL**     | Tx + priority fee only (no new accounts)                            |
+| \`swap execute\`           | **0.01 SOL**     | Tx + priority fee (+ ATA creation if first time for output mint)    |
+
+When SOL is one of the deposit tokens, compute \`usable_sol = sol_balance − buffer\` and size the SOL leg against \`usable_sol\`. For \`--amount-usd\`, cap so the SOL leg's USD value ≤ \`usable_sol × sol_price\`. **Never put 100% of SOL into a position.**
+
 ### Config Keys
 Supported keys for \`config get/set\`: keypair_path, rpc_url, cluster, defaults.slippage_bps, defaults.priority_fee_micro_lamports, defaults.require_confirmation, defaults.auto_confirm_threshold_usd
 
@@ -213,11 +226,12 @@ When the user asks about investment opportunities, potential pools, or yield far
 
 1. **Analyze pool**: \`byreal-cli pools analyze <pool-id> -o json\`
 2. **Choose range** from rangeAnalysis (Conservative ±30%, Balanced ±15%, Aggressive ±5%)
-3. **Preview**:
+3. **Reserve SOL buffer FIRST**: read SOL balance, compute \`usable_sol = sol_balance − 0.03\`. If the pool's token pair includes SOL, size the SOL leg against \`usable_sol\`, never against the full balance. For \`--amount-usd\`, cap so the SOL leg ≤ \`usable_sol × sol_price\`. (See "SOL Buffer for CLMM Position Ops".)
+4. **Preview**:
    - USD budget: \`positions open --pool <id> --price-lower <p> --price-upper <p> --amount-usd <usd> --dry-run -o json\`
    - Token amount: \`positions open --pool <id> --price-lower <p> --price-upper <p> --base MintA --amount <amt> --dry-run -o json\`
-4. **If insufficient balance**: dry-run response includes \`balanceWarnings\` (deficit) + \`walletBalances\` (all tokens). Pick a swap source from ANY token in the wallet (prefer highest USD balance, stablecoins/SOL for lower slippage), swap to cover the deficit. **Wait 3-5 seconds** after swap before re-running dry-run (RPC propagation delay).
-5. **Execute**: replace \`--dry-run\` with \`--confirm\`
+5. **If insufficient balance**: dry-run response includes \`balanceWarnings\` (deficit) + \`walletBalances\` (all tokens). Pick a swap source from ANY token in the wallet (prefer highest USD balance, stablecoins/SOL for lower slippage), swap to cover the deficit. **Wait 3-5 seconds** after swap before re-running dry-run (RPC propagation delay). **Do not swap repeatedly — recompute the position math first** (see "Position Math Sanity Check" in Troubleshooting).
+6. **Execute**: replace \`--dry-run\` with \`--confirm\`
 
 ## Workflow: Increase/Decrease Liquidity
 
@@ -225,9 +239,10 @@ When user wants to add more liquidity to an existing position or partially withd
 
 **Increase liquidity**:
 1. \`byreal-cli positions list -o json\` — find the position's NFT mint address
-2. \`byreal-cli positions increase --nft-mint <nft-mint> --amount-usd <usd> --dry-run -o json\` — preview (includes balance check)
-3. If insufficient balance → swap to get required tokens (see "Insufficient Balance" workflow)
-4. \`byreal-cli positions increase --nft-mint <nft-mint> --amount-usd <usd> --confirm -o json\` — execute
+2. Reserve **0.01 SOL** buffer; if the pool includes SOL, size the SOL leg against \`sol_balance − 0.01\`.
+3. \`byreal-cli positions increase --nft-mint <nft-mint> --amount-usd <usd> --dry-run -o json\` — preview (includes balance check; remember it does NOT deduct the SOL buffer)
+4. If insufficient balance → swap to get required tokens (see "Insufficient Balance" workflow). Re-run dry-run after the swap settles — don't assume the prior deficit number still applies.
+5. \`byreal-cli positions increase --nft-mint <nft-mint> --amount-usd <usd> --confirm -o json\` — execute
 
 **Decrease liquidity** (partial withdrawal):
 1. \`byreal-cli positions list -o json\` — find the position's NFT mint address
@@ -291,8 +306,13 @@ Always read error message carefully — it usually contains the specific cause.
 
 ## Position Troubleshooting
 
-1. **Check balance**: \`--dry-run\` reports \`balanceWarnings\` with exact deficit. Use the swap workflow to cover it, wait 3-5s, then retry.
-2. **Slippage exceeded**: Price moved during execution. Increase \`--slippage\` (e.g., 200-300 bps) or re-run \`--dry-run\` to get updated prices.
+1. **Insufficient balance** (dry-run): \`deficit\` is the **slippage-padded upper bound** (non-base leg uses \`otherAmountMax = otherAmount × (1 + slippage)\`), not the exact amount that will be consumed. Before swapping, **first try a tighter \`--slippage\` and re-run dry-run** — the warning often disappears. If you still must swap, do not over-swap the full \`deficit\`; re-run dry-run after the swap settles.
+2. **Insufficient funds at \`--confirm\` despite dry-run "sufficient"**: this is often a missing SOL buffer, not a stale RPC / cache / indexer issue. The dry-run check does NOT deduct the ~0.03 SOL needed for new-position rent + fees (see "SOL Buffer for CLMM Position Ops"). Resize the SOL leg against \`sol_balance − 0.03\` and retry. **Do not** start swapping to "balance" the wallet before doing this math.
+3. **Position Math Sanity Check** (before any swap to "cover a deficit"): for a CLMM position at current price \`p\`, lower \`pL\`, upper \`pU\`, the deposit split is **not 50/50**. Required amounts: \`USDC ∝ √p − √pL\`, \`SOL ∝ (√pU − √p) / (√p · √pU)\`. Always recompute from a fresh \`--dry-run\` after any swap; do not assume the previous deficit number still applies.
+4. **Slippage exceeded**: Price moved during execution. Increase \`--slippage\` (e.g., 200-300 bps) or re-run \`--dry-run\` to get updated prices.
+
+### What confirmed execution actually does (don't misdiagnose)
+\`--confirm\` builds, signs, and broadcasts the transaction against live chain state. If confirmed execution returns "insufficient funds", treat it as a real on-chain shortfall (often the SOL buffer — see Position Troubleshooting #2), not as stale cached balance. RPC nodes can lag by **seconds** after a fresh swap, not minutes — if a retry is needed, one 3-5s wait is enough. If three retries still fail, **stop** and re-run the math; do not keep retrying.
 `;
 
 // ============================================
