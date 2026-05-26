@@ -91,6 +91,7 @@ byreal-cli catalog show dex.pool.list
 | defi.rent.reclaim | Close empty accounts to reclaim SOL rent |
 | defi.sweep.execute | Consolidate dust tokens into USDC |
 | defi.dflow.swap | Swap tokens via DFlow order-flow aggregator |
+| defi.aggregator.swap | Best-of-three aggregator routing (Jupiter / Titan / DFlow) — auto-picks highest output |
 
 ## Global Options
 
@@ -169,6 +170,8 @@ Present on-chain data first, then external context, then synthesize how external
 | Rent reclaim execute | \`byreal-cli rent reclaim --wallet-address <addr>\` |
 | DFlow swap preview | \`byreal-cli dflow swap --input-mint <mint> --output-mint <mint> --amount <amt> --dry-run --wallet-address <addr>\` |
 | DFlow swap execute | \`byreal-cli dflow swap --input-mint <mint> --output-mint <mint> --amount <amt> --wallet-address <addr>\` |
+| Aggregator best-of-3 (preview) | \`byreal-cli aggregator swap --input-mint <mint> --output-mint <mint> --amount <amt> --dry-run --wallet-address <addr>\` |
+| Aggregator best-of-3 (execute) | \`byreal-cli aggregator swap --input-mint <mint> --output-mint <mint> --amount <amt> --wallet-address <addr>\` |
 | Sweep dust preview | \`byreal-cli sweep execute --dry-run --wallet-address <addr>\` |
 | Sweep dust execute | \`byreal-cli sweep execute --wallet-address <addr>\` |
 
@@ -286,12 +289,32 @@ When user asks vague questions like "有什么仓位可以 copy？", "最近有�
 
 ## Swap Routing Priority
 
-Default to \`byreal-cli swap execute\`. Fall back to \`jup swap\` / \`dflow swap\` only if Byreal returns no route, or the user names an aggregator explicitly.
+1. **Byreal native pool**: Default to \`byreal-cli swap execute\` whenever both tokens are on a Byreal CLMM pool — best fees, in-house router.
+2. **Off-Byreal pair**: Use \`byreal-cli aggregator swap\` — fans out to Jupiter / Titan / DFlow in parallel and picks the highest-output route automatically.
+3. **Single aggregator (explicit user request)**: Use \`jup swap\` / \`titan swap\` / \`dflow swap\` only when the user names a specific aggregator, or for debugging.
 
-## Workflow: Jupiter / DFlow Swap
+## Workflow: Aggregator Swap (Best-of-Three)
+
+\`\`\`
+byreal-cli aggregator swap --input-mint <mint> --output-mint <mint> --amount <amt> [--dry-run] --wallet-address <addr>
+\`\`\`
+
+Behavior:
+- Quotes Jupiter / Titan / DFlow in parallel (8s timeout each, configurable via \`--quote-timeout-ms\`).
+- Skips any aggregator that errors / times out / returns no route.
+- Rejects any quote whose \`priceImpactPct\` exceeds \`--max-price-impact-pct\` (default 1%). Titan does not surface price impact in its RFQ schema, so it is exempt from this gate.
+- Picks max(\`outAmount\`) among survivors; tie-break is jup > titan > dflow.
+- \`--dry-run\` returns just the comparison (\`chosen\`, \`considered[]\`, \`skipped[]\`) without generating the tx.
+- \`--prefer <jup|titan|dflow>\` skips comparison and forces one aggregator (still subject to the price-impact gate).
+- \`--include jup,dflow\` restricts the comparison to a subset.
+
+JSON output (execute mode) carries \`{ unsignedTransactions: [base64], chosen, considered, skipped, ... }\`. Hard-fails with \`NO_ROUTE\` (or \`PREFER_FAILED\` when \`--prefer\` is set) if every aggregator skips.
+
+## Workflow: Single-Aggregator Swap (Manual)
 
 \`\`\`
 byreal-cli jup swap   --input-mint <mint> --output-mint <mint> --amount <amt> [--dry-run] --wallet-address <addr>
+byreal-cli titan swap --input-mint <mint> --output-mint <mint> --amount <amt> [--dry-run] --wallet-address <addr>
 byreal-cli dflow swap --input-mint <mint> --output-mint <mint> --amount <amt> [--dry-run] --wallet-address <addr>
 \`\`\`
 

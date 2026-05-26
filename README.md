@@ -33,6 +33,7 @@ npm install -g @byreal-io/byreal-cli-realclaw
 - **Kamino** — Deposit and withdraw tokens on Kamino Lend for idle yield.
 - **Rent Reclaim** — Close empty SPL token accounts to recover SOL rent.
 - **DFlow** — Swap tokens via DFlow order-flow aggregator with MEV protection.
+- **Aggregator (best-of-three)** — Auto-routes to Jupiter / Titan / DFlow in parallel, picks the highest-output quote, returns one unsigned transaction.
 - **Token Sweep** — Consolidate dust tokens into USDC (or any target) via Jupiter swap + rent reclaim.
 - **Config** — Configure RPC URL, slippage tolerance, priority fees.
 
@@ -93,6 +94,7 @@ All commands support `-o json` for structured output.
 | `rent reclaim`            | Close empty token accounts to recover SOL rent   |
 | `sweep execute`           | Consolidate dust tokens into target token        |
 | `dflow swap`              | Swap tokens via DFlow order-flow aggregator       |
+| `aggregator swap`         | Best-of-three routing across Jupiter / Titan / DFlow |
 | `update check`            | Check for CLI updates                          |
 
 ## Update
