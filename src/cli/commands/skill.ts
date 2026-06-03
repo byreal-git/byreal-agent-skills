@@ -216,6 +216,9 @@ Present on-chain data first, then external context, then synthesize how external
 | Polymarket portfolio | \`byreal-cli polymarket portfolio read [--evm-wallet-address <addr>]\` |
 | Polymarket balance | \`byreal-cli polymarket funding balance [--evm-wallet-address <addr>]\` |
 | Polymarket order preview | \`byreal-cli polymarket order preview --token-id <id> --side buy --amount <usd>\` |
+| Polymarket deposit preview | \`byreal-cli polymarket funding deposit-preview --amount <usdc>\` |
+| Polymarket withdraw preview | \`byreal-cli polymarket funding withdraw-preview --amount <usdc> --recipient <solana>\` |
+| Polymarket transfer status | \`byreal-cli polymarket funding status --type <deposit\|withdraw>\` |
 
 ## Workflow: Polymarket Discovery (Phase A)
 
@@ -236,6 +239,7 @@ Notes:
 - \`portfolio read\` / \`funding balance\` return public fields only in Phase A (positions/value/pnl). \`cash_available_usdc\` and \`active_orders\` are \`null\` with \`partial: true\` until Phase B (CLOB L2 auth).
 - EVM address resolves from \`--evm-wallet-address\` or a \`type:"evm"\` wallet in realclaw-config.json.
 - \`order preview\` is **read-only** local computation (no signing): it re-reads the live CLOB book, sweeps it for the market worst-price, applies the absolute slippage buffer (Δ = slippage_bps/10000, default 0.01 — a probability point, NOT a relative %; BUY worst+Δ ceil-to-tick, SELL worst−Δ floor-to-tick), and returns an immutable snapshot with \`quoted_at\`/\`expires_at\`. Market orders are FOK. Get \`token_id\` from \`event detail\` (\`yes_token_id\`/\`no_token_id\`). \`order place\` (which round-trips this snapshot, re-quotes, and enforces \`PREVIEW_EXPIRED\`) is Phase B.
+- \`funding deposit-preview\` / \`withdraw-preview\` are **read-only** previews (quote + deposit address + min, from \`bridge/supported-assets\`); P0 supports **Solana USDC ⇄ Polygon** only. The actual transfers — deposit (construct Solana SPL tx → Privy sign → \`/bridge/deposit/submit\`) and withdraw submit — are Phase B. \`funding status\` reads \`/bridge/orders\` (COMPLETED/FAILED terminal). All four resolve the proxy wallet first, so they need a deployed proxy (Phase B) for the happy path.
 
 ## Command Notes
 

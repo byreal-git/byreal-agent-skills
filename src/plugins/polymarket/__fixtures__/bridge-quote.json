@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "ret_code": 0,
+  "data": {
+    "quoteId": "q_demo_0001",
+    "fromAmount": "20",
+    "toAmount": "19.94",
+    "estTimeMs": 60000,
+    "fee": { "bridgeFee": "0.06", "feeToken": "USDC" }
+  }
+}

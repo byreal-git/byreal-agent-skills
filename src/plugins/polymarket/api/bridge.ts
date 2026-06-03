@@ -10,12 +10,12 @@ import { pmGet, type PmGetOptions, type PmQueryParams } from './gateway.js';
 import { unwrapBusiness, type PmEnvelope } from './envelope.js';
 
 export interface BridgeSupportedAsset {
-  chainId: number;
+  chainId: string; // bridge chain id (Solana = "1151111081099710")
   tokenAddress: string;
   symbol: string;
   decimals: number;
-  minDeposit?: string;
-  minWithdraw?: string;
+  minDepositAmount?: string;
+  minWithdrawAmount?: string;
 }
 
 export interface BridgeQuote {

@@ -1,0 +1,8 @@
+{
+  "success": true,
+  "ret_code": 0,
+  "data": [
+    { "orderId": "ord_dep_1", "type": "deposit", "status": "COMPLETED", "fromAmount": "20", "toAmount": "19.94", "createTime": 1780000000000 },
+    { "orderId": "ord_dep_2", "type": "deposit", "status": "PROCESSING", "fromAmount": "50", "createTime": 1780000100000 }
+  ]
+}

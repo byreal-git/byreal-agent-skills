@@ -17,6 +17,7 @@ import type { EventListItem, EventDetail } from './lib/event-view.js';
 import type { Portfolio, FundingBalance } from './lib/portfolio-view.js';
 import type { EventCandidate } from './lib/whitelist.js';
 import type { OrderPreview } from './lib/order-view.js';
+import type { DepositPreview, WithdrawPreview, TransferStatus } from './lib/funding-view.js';
 
 /**
  * Transient stub for subcommands not yet wired in the current checkpoint.
@@ -193,6 +194,49 @@ export function renderOrderPreview(o: OrderPreview): void {
   console.error(
     chalk.gray('\n  [preview] round-trip this snapshot to order.place (Phase B); it re-quotes + checks PREVIEW_EXPIRED.'),
   );
+}
+
+export function renderDepositPreview(p: DepositPreview): void {
+  console.log(chalk.cyan.bold('\n  Deposit Preview — Solana USDC → Polymarket\n'));
+  const table = new Table({ chars: TABLE_CHARS });
+  table.push(
+    [chalk.gray('From'), `${p.from.amount} ${p.from.token} (solana)`],
+    [chalk.gray('To proxy wallet'), `${p.to.proxy_wallet} (polygon ${p.to.token})`],
+    [chalk.gray('Min deposit'), p.min_deposit ?? '-'],
+    [chalk.gray('Meets minimum'), String(p.meets_minimum)],
+    [chalk.gray('Deposit address'), p.deposit_address ?? 'n/a (quote/address unavailable)'],
+    [chalk.gray('Quote → amount'), p.quote.to_amount ?? '-'],
+    [chalk.gray('Est. time (ms)'), p.quote.est_time_ms != null ? String(p.quote.est_time_ms) : '-'],
+  );
+  console.log(table.toString());
+  console.error(chalk.gray(`\n  ${p.note}`));
+}
+
+export function renderWithdrawPreview(p: WithdrawPreview): void {
+  console.log(chalk.cyan.bold('\n  Withdraw Preview — Polymarket → Solana USDC\n'));
+  const table = new Table({ chars: TABLE_CHARS });
+  table.push(
+    [chalk.gray('From proxy wallet'), `${p.from.proxy_wallet} (polygon)`],
+    [chalk.gray('To recipient'), `${p.to.recipient} (solana ${p.to.token})`],
+    [chalk.gray('Min withdraw'), p.min_withdraw ?? '-'],
+    [chalk.gray('Meets minimum'), String(p.meets_minimum)],
+    [chalk.gray('Quote → amount'), p.quote.to_amount ?? '-'],
+  );
+  console.log(table.toString());
+  console.error(chalk.gray(`\n  ${p.note}`));
+}
+
+export function renderTransferStatus(s: TransferStatus): void {
+  console.log(chalk.cyan.bold(`\n  Transfer Status — ${s.type} (${s.count})\n`));
+  const table = new Table({
+    head: [chalk.cyan.bold('Order ID'), chalk.cyan.bold('Type'), chalk.cyan.bold('Status'), chalk.cyan.bold('From'), chalk.cyan.bold('To')],
+    chars: TABLE_CHARS,
+  });
+  for (const o of s.orders) {
+    table.push([o.order_id ?? '-', o.type ?? '-', o.status ?? '-', o.from_amount ?? '-', o.to_amount ?? '-']);
+  }
+  console.log(table.toString());
+  console.error(chalk.gray(`\n  ${s.note}`));
 }
 
 export function renderFundingBalance(b: FundingBalance): void {

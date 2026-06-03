@@ -107,6 +107,44 @@ const capabilities: Capability[] = [
       { name: 'evm-wallet-address', type: 'string', required: false, description: 'EVM EOA (defaults to realclaw-config evm wallet)' },
     ],
   },
+  {
+    id: 'pm.funding.deposit.preview',
+    name: 'Polymarket Deposit Preview',
+    description: 'Preview a Solana USDC → Polymarket deposit (read-only; submit is Phase B)',
+    category: 'query',
+    auth_required: false,
+    command: 'byreal-cli polymarket funding deposit-preview --amount <usdc>',
+    params: [
+      { name: 'amount', type: 'string', required: true, description: 'Amount in USDC (UI)' },
+      { name: 'evm-wallet-address', type: 'string', required: false, description: 'EVM EOA (proxy wallet target)' },
+    ],
+  },
+  {
+    id: 'pm.funding.withdraw.preview',
+    name: 'Polymarket Withdraw Preview',
+    description: 'Preview a Polymarket → Solana USDC withdraw (read-only; submit is Phase B)',
+    category: 'query',
+    auth_required: false,
+    command: 'byreal-cli polymarket funding withdraw-preview --amount <usdc> --recipient <solanaAddr>',
+    params: [
+      { name: 'amount', type: 'string', required: true, description: 'Amount in USDC (UI)' },
+      { name: 'recipient', type: 'string', required: true, description: 'Destination Solana wallet' },
+      { name: 'evm-wallet-address', type: 'string', required: false, description: 'EVM EOA (proxy wallet source)' },
+    ],
+  },
+  {
+    id: 'pm.transfer.status',
+    name: 'Polymarket Transfer Status',
+    description: 'Read deposit/withdraw bridge transfer status',
+    category: 'query',
+    auth_required: false,
+    command: 'byreal-cli polymarket funding status --type <deposit|withdraw>',
+    params: [
+      { name: 'type', type: 'string', required: true, description: 'deposit | withdraw', enum: ['deposit', 'withdraw'] },
+      { name: 'order-id', type: 'string', required: false, description: 'Bridge order id (optional)' },
+      { name: 'evm-wallet-address', type: 'string', required: false, description: 'EVM EOA / proxy wallet' },
+    ],
+  },
 ];
 
 export const polymarketPlugin: DefiPlugin = {
