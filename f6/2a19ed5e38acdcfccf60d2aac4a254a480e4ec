@@ -1,0 +1,46 @@
+src/plugins/polymarket/lib/whitelist.test.ts
+  ca1430c8bb493c97 2-3,9,80-99
+src/plugins/polymarket/lib/whitelist-cache.test.ts
+  ca1430c8bb493c97 1-58
+src/plugins/polymarket/formatters.ts
+  ca1430c8bb493c97 18,162-173
+src/plugins/polymarket/index.ts
+  ca1430c8bb493c97 57-68
+src/cli/commands/skill.ts
+  ca1430c8bb493c97 214,227,233
+src/plugins/polymarket/lib/whitelist.ts
+  ca1430c8bb493c97 97-110
+src/plugins/polymarket/lib/whitelist-cache.ts
+  ca1430c8bb493c97 1-153
+src/plugins/polymarket/__fixtures__/public-search-nba.json
+  ca1430c8bb493c97 1-24
+src/plugins/polymarket/commands/event.ts
+  ca1430c8bb493c97 7-8,11,13-14,21,67-74,102-103,105-130
+README.md
+  ca1430c8bb493c97 151
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.6+68f331d",
+  "base_commit_sha": "f62a19ed5e38acdcfccf60d2aac4a254a480e4ec",
+  "prompts": {
+    "ca1430c8bb493c97": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "baff8cd1-a0fe-4b92-9541-1585e53392af",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 349,
+      "total_deletions": 9,
+      "accepted_lines": 345,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
