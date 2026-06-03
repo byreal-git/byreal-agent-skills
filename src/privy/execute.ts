@@ -9,7 +9,7 @@
  */
 
 import chalk from 'chalk';
-import { SOLANA_MAINNET_CAIP2 } from '../core/constants.js';
+import { SOLANA_MAINNET_CAIP2, POLYGON_MAINNET_CAIP2 } from '../core/constants.js';
 import { ok } from '../core/types.js';
 import type { Result } from '../core/types.js';
 import {
@@ -17,9 +17,14 @@ import {
   privyWalletNotFoundError,
   type ByrealError,
 } from '../core/errors.js';
-import { loadAgentToken, loadPrivyConfig, loadRealclawConfig } from './config.js';
-import { signTransaction, signAndBroadcast } from './client.js';
-import type { PrivyContext } from './types.js';
+import {
+  loadAgentToken,
+  loadPrivyConfig,
+  loadRealclawConfig,
+  loadEvmWallet,
+} from './config.js';
+import { signTransaction, signAndBroadcast, signEvmTypedData } from './client.js';
+import type { PrivyContext, Eip712TypedData } from './types.js';
 
 // ============================================
 // Context Resolution
@@ -59,6 +64,69 @@ export function requirePrivyContext(walletAddress?: string): PrivyContext {
   const ctx = getPrivyContext(walletAddress);
   if (!ctx) throw privyNotConfiguredError();
   return ctx;
+}
+
+// ============================================
+// EVM (Polygon / Polymarket) Context
+// ============================================
+
+/** EVM signing context: adds the resolved EOA address used as X-Wallet-Address. */
+export interface EvmPrivyContext extends PrivyContext {
+  /** The EVM EOA (Polygon) address that signs the typed data. */
+  address: string;
+}
+
+/**
+ * Resolve an EVM PrivyContext (token + config + caip2=eip155:137 + EOA address).
+ * Returns null when there is no Privy proxy configured at all.
+ *
+ * If a realclaw-config.json has EVM wallets but none match `evmAddress`,
+ * throws PRIVY_WALLET_NOT_FOUND so the caller can surface a precise error.
+ */
+export function getEvmPrivyContext(evmAddress?: string): EvmPrivyContext | null {
+  const config = loadPrivyConfig();
+  if (!config) return null;
+
+  const wallet = loadEvmWallet(evmAddress);
+  if (!wallet) {
+    if (evmAddress) {
+      const realclaw = loadRealclawConfig();
+      const hasEvmWallets = realclaw?.wallets?.some((w) => w.type === 'evm') ?? false;
+      if (hasEvmWallets) {
+        throw privyWalletNotFoundError(evmAddress);
+      }
+    }
+    return null;
+  }
+
+  return {
+    token: wallet.token,
+    config,
+    caip2: POLYGON_MAINNET_CAIP2,
+    address: wallet.address,
+  };
+}
+
+/** Same as getEvmPrivyContext but throws PRIVY_NOT_CONFIGURED on null. */
+export function requireEvmPrivyContext(evmAddress?: string): EvmPrivyContext {
+  const ctx = getEvmPrivyContext(evmAddress);
+  if (!ctx) throw privyNotConfiguredError();
+  return ctx;
+}
+
+/**
+ * Sign an EIP-712 typed-data payload via the Privy proxy using the EVM context.
+ * Returns the hex signature. (Phase A: helper only — real order-signing E2E is
+ * Phase B once the backend agent-token auth lands.)
+ */
+export async function privySignEvmTypedData(
+  ctx: EvmPrivyContext,
+  typedData: Eip712TypedData,
+): Promise<Result<string, ByrealError>> {
+  if (process.env.DEBUG) {
+    console.error(chalk.gray('[DEBUG] Privy: signing EVM typed-data...'));
+  }
+  return signEvmTypedData(ctx.token, ctx.config, ctx.address, ctx.caip2, typedData);
 }
 
 // ============================================

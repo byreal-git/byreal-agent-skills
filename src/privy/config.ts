@@ -158,6 +158,47 @@ export function loadAgentToken(walletAddress?: string): string | null {
 }
 
 // ============================================
+// EVM (Polygon / Polymarket) Wallet Resolution
+// ============================================
+
+/**
+ * Resolve the EVM (Polygon) wallet from realclaw-config.json.
+ *
+ * Unlike the Solana path, the EVM EOA address is hex and compared
+ * case-insensitively. Returns `{ address, token }` or null.
+ *
+ * Priority:
+ *   1. realclaw-config.json wallets[] with type=evm, prefer matching address
+ *   2. (no legacy single-file fallback — the legacy agent_token is Solana-scoped)
+ *
+ * If `evmAddress` is provided but no type=evm wallet matches it, returns null
+ * (caller raises a precise error rather than silently using the wrong wallet).
+ */
+export function loadEvmWallet(
+  evmAddress?: string,
+): { address: string; token: string } | null {
+  const realclaw = loadRealclawConfig();
+  const evmWallets = realclaw?.wallets?.filter((w) => w.type === 'evm') ?? [];
+  if (evmWallets.length === 0) return null;
+
+  if (evmAddress) {
+    const target = evmAddress.toLowerCase();
+    const match = evmWallets.find((w) => w.address.toLowerCase() === target);
+    return match ? { address: match.address, token: match.token } : null;
+  }
+
+  const first = evmWallets[0];
+  return { address: first.address, token: first.token };
+}
+
+/** Resolve just the agent token for the EVM wallet (env override honored). */
+export function loadEvmAgentToken(evmAddress?: string): string | null {
+  const envToken = AGENT_TOKEN_ENV?.trim();
+  if (envToken) return envToken;
+  return loadEvmWallet(evmAddress)?.token ?? null;
+}
+
+// ============================================
 // Privy Proxy Config Resolution
 // ============================================
 

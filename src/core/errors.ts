@@ -50,6 +50,25 @@ export const ErrorCodes = {
   TRANSACTION_TIMEOUT: 'TRANSACTION_TIMEOUT',
   SDK_ERROR: 'SDK_ERROR',
   UNKNOWN_ERROR: 'UNKNOWN_ERROR',
+
+  // Polymarket errors (PRD §7) — see docs/polymarket-cli/05
+  CATEGORY_NOT_FOUND: 'CATEGORY_NOT_FOUND',
+  NO_VISIBLE_CATEGORIES: 'NO_VISIBLE_CATEGORIES',
+  EVENT_NOT_FOUND: 'EVENT_NOT_FOUND',
+  EVENT_NOT_TRADABLE: 'EVENT_NOT_TRADABLE',
+  NO_TRADABLE_EVENTS: 'NO_TRADABLE_EVENTS',
+  NO_VISIBLE_EVENTS: 'NO_VISIBLE_EVENTS',
+  MARKET_NOT_FOUND: 'MARKET_NOT_FOUND',
+  NO_MATCH: 'NO_MATCH',
+  EVENT_SEARCH_UNAVAILABLE: 'EVENT_SEARCH_UNAVAILABLE',
+  PROXY_WALLET_UNAVAILABLE: 'PROXY_WALLET_UNAVAILABLE',
+  PORTFOLIO_UNAVAILABLE: 'PORTFOLIO_UNAVAILABLE',
+  PREVIEW_EXPIRED: 'PREVIEW_EXPIRED',
+  OUTCOME_AMBIGUOUS: 'OUTCOME_AMBIGUOUS',
+  TRADING_NOT_READY: 'TRADING_NOT_READY',
+  UNSUPPORTED_ASSET: 'UNSUPPORTED_ASSET',
+  UNSUPPORTED_NETWORK: 'UNSUPPORTED_NETWORK',
+  SOURCE_UNAVAILABLE: 'SOURCE_UNAVAILABLE',
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
@@ -416,6 +435,197 @@ export function conflictingFlagsError(flagA: string, flagB: string): ByrealError
       },
     ],
     retryable: false,
+  });
+}
+
+// ============================================
+// Polymarket Error Factories (PRD §7)
+// ============================================
+//
+// PRD §7 defines an error shape with `safe_user_message` and
+// `user_action_required`. We carry those inside `details` rather than changing
+// the global ByrealError/CliError shape, so other commands are unaffected and
+// the Skill layer can still pick them up from the structured JSON.
+
+function pmDetails(
+  safeUserMessage: string,
+  userActionRequired: boolean,
+  extra?: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    safe_user_message: safeUserMessage,
+    user_action_required: userActionRequired,
+    ...extra,
+  };
+}
+
+export function categoryNotFoundError(categoryId: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.CATEGORY_NOT_FOUND,
+    type: 'BUSINESS',
+    message: `Category not found or not visible: ${categoryId}`,
+    details: pmDetails('没找到这个分类。', true, { category_id: categoryId }),
+    suggestions: [
+      {
+        action: 'list',
+        description: 'List the currently visible Polymarket categories',
+        command: 'byreal-cli polymarket category list -o json',
+      },
+    ],
+    retryable: false,
+  });
+}
+
+export function noVisibleCategoriesError(): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.NO_VISIBLE_CATEGORIES,
+    type: 'BUSINESS',
+    message: 'No visible Polymarket categories are currently configured.',
+    details: pmDetails('当前没有可展示的预测市场分类。', false),
+    retryable: false,
+  });
+}
+
+export function eventNotFoundError(eventId: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.EVENT_NOT_FOUND,
+    type: 'BUSINESS',
+    message: `Event not found or not in the Byreal whitelist: ${eventId}`,
+    details: pmDetails('没找到这个市场。', true, { event_id: eventId }),
+    retryable: false,
+  });
+}
+
+export function eventNotTradableError(eventId: string, reason: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.EVENT_NOT_TRADABLE,
+    type: 'BUSINESS',
+    message: `Event ${eventId} is not tradable: ${reason}`,
+    details: pmDetails('这个市场当前不可交易。', false, { event_id: eventId, reason }),
+    retryable: false,
+  });
+}
+
+export function noTradableEventsError(categoryId?: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.NO_TRADABLE_EVENTS,
+    type: 'BUSINESS',
+    message: categoryId
+      ? `No tradable events under category ${categoryId}.`
+      : 'No tradable events in range.',
+    details: pmDetails('这个范围内当前没有可交易的市场。', false, { category_id: categoryId }),
+    retryable: false,
+  });
+}
+
+export function marketNotFoundError(marketId: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.MARKET_NOT_FOUND,
+    type: 'BUSINESS',
+    message: `Market not found: ${marketId}`,
+    details: pmDetails('没找到这个 market。', true, { market_id: marketId }),
+    retryable: false,
+  });
+}
+
+export function noMatchError(query: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.NO_MATCH,
+    type: 'BUSINESS',
+    message: `No whitelisted event matched the query: ${query}`,
+    details: pmDetails(
+      '在当前可搜索范围内没有匹配的市场（不代表该议题不存在）。',
+      true,
+      { query },
+    ),
+    retryable: false,
+  });
+}
+
+export function eventSearchUnavailableError(reason: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.EVENT_SEARCH_UNAVAILABLE,
+    type: 'NETWORK',
+    message: `Polymarket event search is unavailable: ${reason}`,
+    details: pmDetails('市场搜索暂时不可用，请稍后再试。', false, { reason }),
+    retryable: true,
+  });
+}
+
+export function previewExpiredError(reason: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.PREVIEW_EXPIRED,
+    type: 'BUSINESS',
+    message: `Order preview has expired: ${reason}`,
+    details: pmDetails('报价已过期，请重新预览后再确认。', true, { reason }),
+    suggestions: [
+      {
+        action: 're-preview',
+        description: 'Re-run order preview to refresh the quote, then confirm again',
+        command: 'byreal-cli polymarket order preview ...',
+      },
+    ],
+    retryable: true,
+  });
+}
+
+export function proxyWalletUnavailableError(eoa?: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.PROXY_WALLET_UNAVAILABLE,
+    type: 'BUSINESS',
+    message: 'Unable to resolve the Polymarket proxy wallet.',
+    details: pmDetails('无法确认你的 Polymarket 代理钱包。', true, { eoa }),
+    retryable: false,
+  });
+}
+
+export function portfolioUnavailableError(reason: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.PORTFOLIO_UNAVAILABLE,
+    type: 'NETWORK',
+    message: `Portfolio data source unavailable: ${reason}`,
+    details: pmDetails('持仓数据暂时不可用，请稍后再试。', false, { reason }),
+    retryable: true,
+  });
+}
+
+export function tradingNotReadyError(reason: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.TRADING_NOT_READY,
+    type: 'BUSINESS',
+    message: `Trading readiness check failed: ${reason}`,
+    details: pmDetails('账户尚未就绪，无法交易。', true, { reason }),
+    retryable: false,
+  });
+}
+
+export function unsupportedAssetError(asset: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.UNSUPPORTED_ASSET,
+    type: 'VALIDATION',
+    message: `Unsupported asset: ${asset}. P0 supports Solana USDC only.`,
+    details: pmDetails('暂不支持该资产，目前仅支持 Solana USDC。', true, { asset }),
+    retryable: false,
+  });
+}
+
+export function unsupportedNetworkError(network: string): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.UNSUPPORTED_NETWORK,
+    type: 'VALIDATION',
+    message: `Unsupported network: ${network}.`,
+    details: pmDetails('暂不支持该网络。', true, { network }),
+    retryable: false,
+  });
+}
+
+export function sourceUnavailableError(message: string, retryable = true): ByrealError {
+  return new ByrealError({
+    code: ErrorCodes.SOURCE_UNAVAILABLE,
+    type: 'NETWORK',
+    message: `Data source unavailable: ${message}`,
+    details: pmDetails('数据源暂时不可用，请稍后再试。', false, { reason: message }),
+    retryable,
   });
 }
 

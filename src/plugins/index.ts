@@ -9,6 +9,7 @@ import { rentPlugin } from './rent/index.js';
 import { consolidatePlugin } from './consolidate/index.js';
 import { titanPlugin } from './titan/index.js';
 import { dflowPlugin } from './dflow/index.js';
+import { polymarketPlugin } from './polymarket/index.js';
 
 export const plugins: DefiPlugin[] = [
   jupiterPlugin,
@@ -17,4 +18,5 @@ export const plugins: DefiPlugin[] = [
   consolidatePlugin,
   titanPlugin,
   dflowPlugin,
+  polymarketPlugin,
 ];

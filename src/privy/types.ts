@@ -98,6 +98,41 @@ export type SignSolanaTransactionResponse =
   | SignOnlyResponse;
 
 // ============================================
+// EVM typed-data signing (Polymarket order signing)
+// ============================================
+
+/** EIP-712 typed data payload (domain/types/primaryType/message). */
+export interface Eip712TypedData {
+  domain: Record<string, unknown>;
+  types: Record<string, unknown>;
+  primaryType: string;
+  message: Record<string, unknown>;
+}
+
+export interface SignEvmTypedDataRequest {
+  /** CAIP-2 chain id, e.g. "eip155:137" for Polygon. */
+  caip2: string;
+  /** The EIP-712 typed data to sign. */
+  typedData: Eip712TypedData;
+  strategyId?: string;
+  strategyName?: string;
+}
+
+/**
+ * Response from POST /sign/evm-typed-data. The proxy returns the signature
+ * either flat (`{ signature }`) or nested under `data` depending on mode;
+ * the client checks both.
+ */
+export interface SignEvmTypedDataResponseInner {
+  signature?: string;
+}
+
+export interface SignEvmTypedDataResponse {
+  signature?: string;
+  data?: SignEvmTypedDataResponseInner;
+}
+
+// ============================================
 // Response Envelopes (direct + BGW)
 // ============================================
 

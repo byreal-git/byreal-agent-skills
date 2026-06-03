@@ -8,7 +8,12 @@
  * Both functions return Result<T, ByrealError> and never throw.
  */
 
-import { DEFAULTS, PRIVY_STRATEGY_ID, PRIVY_STRATEGY_NAME } from '../core/constants.js';
+import {
+  DEFAULTS,
+  PRIVY_STRATEGY_ID,
+  PRIVY_STRATEGY_NAME,
+  SIGN_EVM_TYPED_DATA_PATH,
+} from '../core/constants.js';
 import { ok, err } from '../core/types.js';
 import type { Result } from '../core/types.js';
 import type { ByrealError } from '../core/errors.js';
@@ -25,6 +30,9 @@ import {
   type SignSolanaTransactionRequest,
   type SignBroadcastResponse,
   type SignOnlyResponse,
+  type SignEvmTypedDataRequest,
+  type SignEvmTypedDataResponse,
+  type Eip712TypedData,
   type PrivyEnvelope,
   unwrapEnvelope,
 } from './types.js';
@@ -42,6 +50,7 @@ async function privyPost<T>(
   config: PrivyConfig,
   path: string,
   body: Record<string, unknown>,
+  extraHeaders?: Record<string, string>,
 ): Promise<Result<T, ByrealError>> {
   const url = `${config.proxyUrl}${config.apiBasePath}${path}`;
 
@@ -57,6 +66,7 @@ async function privyPost<T>(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
         'User-Agent': 'byreal-cli',
+        ...extraHeaders,
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(SIGN_TIMEOUT_MS),
@@ -155,6 +165,48 @@ export async function signTransaction(
   if (flat) return ok(flat);
 
   return err(privyUpstreamError('No signed_transaction in Privy response'));
+}
+
+/**
+ * Sign an EIP-712 typed-data payload via the Privy proxy (Polymarket order
+ * signing). Returns the hex signature.
+ *
+ * Headers: Authorization: Bearer <token>  (agent-token branch, see
+ * agent-wallet-privy-proxy-server sign_auth.rs) + X-Wallet-Address: <EOA>,
+ * matching the backend PrivyProxyHttpClient convention. The agent-token vs
+ * X-Privy-Access-Token header detail is verified during Phase B integration;
+ * Phase A only ships + unit-tests the request shape (no real signature).
+ *
+ * Body: { caip2, typedData, strategyId, strategyName }.
+ */
+export async function signEvmTypedData(
+  token: string,
+  config: PrivyConfig,
+  walletAddress: string,
+  caip2: string,
+  typedData: Eip712TypedData,
+): Promise<Result<string, ByrealError>> {
+  const body: SignEvmTypedDataRequest = {
+    caip2,
+    typedData,
+    strategyId: PRIVY_STRATEGY_ID,
+    strategyName: PRIVY_STRATEGY_NAME,
+  };
+
+  const result = await privyPost<SignEvmTypedDataResponse>(
+    token,
+    config,
+    SIGN_EVM_TYPED_DATA_PATH,
+    body as unknown as Record<string, unknown>,
+    { 'X-Wallet-Address': walletAddress },
+  );
+  if (!result.ok) return result;
+
+  const sig = result.value.signature ?? result.value.data?.signature;
+  if (!sig) {
+    return err(privyUpstreamError('No signature in Privy typed-data response'));
+  }
+  return ok(sig);
 }
 
 /** Sign + broadcast a Solana transaction; returns the on-chain tx hash. */

@@ -150,6 +150,26 @@ export const PRIVY_STRATEGY_ID = "byreal_cli";
 export const PRIVY_STRATEGY_NAME = "Byreal CLI";
 
 // ============================================
+// Polymarket (EVM / Polygon) — added for the polymarket plugin
+// ============================================
+
+// CAIP-2 chain id for Polygon mainnet (Polymarket runs on Polygon).
+export const POLYGON_MAINNET_CAIP2 = "eip155:137";
+
+// Privy proxy path for signing EIP-712 typed data (order signing).
+// Same proxy + apiBasePath as Solana; only the terminal path differs.
+export const SIGN_EVM_TYPED_DATA_PATH = "/sign/evm-typed-data";
+
+// Byreal Polymarket gateway. Production (api2.byreal.io) has NOT deployed the
+// PM gateway yet — every /byreal/api/gw/pm/* prefix 404s there — so the default
+// is the test host the frontend uses. Override with PM_GATEWAY_HOST.
+// See docs/polymarket-cli/02-backend-gateway.md.
+export const PM_GATEWAY_HOST_DEFAULT =
+  process.env.PM_GATEWAY_HOST ?? "https://api2.sbu-test-5.bybit.com";
+// Common context-path prefix; concrete clients append /v1 | /clob | /gamma.
+export const PM_GATEWAY_BASE_PATH = "/byreal/api/gw/pm";
+
+// ============================================
 // Defaults
 // ============================================
 
