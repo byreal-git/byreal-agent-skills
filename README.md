@@ -152,6 +152,7 @@ If Privy is not configured, `--execute` fails fast with `PRIVY_NOT_CONFIGURED` a
 | `polymarket event detail`   | Polymarket: event detail (compact/full, neg-risk) |
 | `polymarket portfolio read` | Polymarket: positions / value / pnl (public)     |
 | `polymarket funding balance`| Polymarket: available balance (public)           |
+| `polymarket order preview`  | Polymarket: order preview (book-sweep + slippage + freshness) |
 | `update check`            | Check for CLI updates                          |
 
 ## Update

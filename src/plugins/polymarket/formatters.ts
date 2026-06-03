@@ -16,6 +16,7 @@ import type { CategoryListItem } from './lib/category-view.js';
 import type { EventListItem, EventDetail } from './lib/event-view.js';
 import type { Portfolio, FundingBalance } from './lib/portfolio-view.js';
 import type { EventCandidate } from './lib/whitelist.js';
+import type { OrderPreview } from './lib/order-view.js';
 
 /**
  * Transient stub for subcommands not yet wired in the current checkpoint.
@@ -169,6 +170,29 @@ export function renderEventSearch(d: { query: string; events: EventCandidate[] }
     table.push([e.event_id, e.title, e.volume ?? '-', e.endDate ?? '-']);
   }
   console.log(table.toString());
+}
+
+export function renderOrderPreview(o: OrderPreview): void {
+  const s = o.preview;
+  console.log(chalk.cyan.bold(`\n  Order Preview — ${s.side.toUpperCase()} ${s.order_type}\n`));
+  const table = new Table({ chars: TABLE_CHARS });
+  table.push(
+    [chalk.gray('Token ID'), s.token_id],
+    [chalk.gray('Side / Type'), `${s.side} / ${s.order_type}`],
+    [chalk.gray(s.side === 'buy' ? 'Amount (USD)' : 'Size (shares)'), s.amount ?? s.size ?? '-'],
+    [chalk.gray('Book Worst Price'), String(s.book_worst_price)],
+    [chalk.gray('Signed Worst Price'), String(s.signed_worst_price)],
+    [chalk.gray('Avg Price'), String(s.avg_price)],
+    [chalk.gray('Slippage (bps abs)'), `${s.slippage_bps} (Δ=${s.slippage_bps / 10000})`],
+    [chalk.gray('Tick / negRisk'), `${s.tick_size} / ${s.neg_risk}`],
+    [chalk.gray('Quoted / Expires'), `${s.quoted_at} / ${s.expires_at}`],
+    [chalk.gray('Fully Fills'), String(o.fully_fills)],
+  );
+  console.log(table.toString());
+  if (o.warning) console.log(chalk.yellow(`\n  ⚠ ${o.warning}`));
+  console.error(
+    chalk.gray('\n  [preview] round-trip this snapshot to order.place (Phase B); it re-quotes + checks PREVIEW_EXPIRED.'),
+  );
 }
 
 export function renderFundingBalance(b: FundingBalance): void {

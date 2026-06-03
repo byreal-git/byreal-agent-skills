@@ -80,6 +80,23 @@ const capabilities: Capability[] = [
     ],
   },
   {
+    id: 'pm.order.preview',
+    name: 'Polymarket Order Preview',
+    description: 'Local order preview: book-sweep worstPrice + absolute slippage + freshness snapshot (read-only)',
+    category: 'query',
+    auth_required: false,
+    command: 'byreal-cli polymarket order preview --token-id <id> --side <buy|sell> --amount <usd>',
+    params: [
+      { name: 'token-id', type: 'string', required: true, description: 'CLOB outcome token id (asset_id)' },
+      { name: 'side', type: 'string', required: true, description: 'buy | sell', enum: ['buy', 'sell'] },
+      { name: 'amount', type: 'string', required: false, description: 'BUY: USD to spend (market)' },
+      { name: 'size', type: 'string', required: false, description: 'SELL: shares, or limit size' },
+      { name: 'order-type', type: 'string', required: false, description: 'market (FOK) | limit (GTC)', default: 'market', enum: ['market', 'limit'] },
+      { name: 'price', type: 'string', required: false, description: 'Limit price (limit only)' },
+      { name: 'slippage-bps', type: 'integer', required: false, description: 'Absolute Δ market slippage (default 100=0.01)' },
+    ],
+  },
+  {
     id: 'pm.funding.balance',
     name: 'Polymarket Funding Balance',
     description: 'Read Polymarket available balance (public parts)',

@@ -215,6 +215,7 @@ Present on-chain data first, then external context, then synthesize how external
 | Polymarket event detail | \`byreal-cli polymarket event detail --event-id <id> [--market-id <id>] [--full]\` |
 | Polymarket portfolio | \`byreal-cli polymarket portfolio read [--evm-wallet-address <addr>]\` |
 | Polymarket balance | \`byreal-cli polymarket funding balance [--evm-wallet-address <addr>]\` |
+| Polymarket order preview | \`byreal-cli polymarket order preview --token-id <id> --side buy --amount <usd>\` |
 
 ## Workflow: Polymarket Discovery (Phase A)
 
@@ -234,6 +235,7 @@ Notes:
 - \`event detail\` is neg-risk aware: it hides \`negRiskOther\` placeholders, sorts candidates by YES probability, and reports \`market_count\`/\`markets_returned\`/\`markets_truncated\`.
 - \`portfolio read\` / \`funding balance\` return public fields only in Phase A (positions/value/pnl). \`cash_available_usdc\` and \`active_orders\` are \`null\` with \`partial: true\` until Phase B (CLOB L2 auth).
 - EVM address resolves from \`--evm-wallet-address\` or a \`type:"evm"\` wallet in realclaw-config.json.
+- \`order preview\` is **read-only** local computation (no signing): it re-reads the live CLOB book, sweeps it for the market worst-price, applies the absolute slippage buffer (Δ = slippage_bps/10000, default 0.01 — a probability point, NOT a relative %; BUY worst+Δ ceil-to-tick, SELL worst−Δ floor-to-tick), and returns an immutable snapshot with \`quoted_at\`/\`expires_at\`. Market orders are FOK. Get \`token_id\` from \`event detail\` (\`yes_token_id\`/\`no_token_id\`). \`order place\` (which round-trips this snapshot, re-quotes, and enforces \`PREVIEW_EXPIRED\`) is Phase B.
 
 ## Command Notes
 
