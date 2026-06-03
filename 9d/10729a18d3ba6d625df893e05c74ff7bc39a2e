@@ -1,0 +1,52 @@
+src/plugins/polymarket/index.ts
+  ca1430c8bb493c97 110-147
+src/plugins/polymarket/lib/funding-view.ts
+  ca1430c8bb493c97 1-136
+src/plugins/polymarket/__fixtures__/bridge-supported-assets.json
+  ca1430c8bb493c97 1
+src/plugins/polymarket/lib/deposit-tx.ts
+  ca1430c8bb493c97 1-86
+src/plugins/polymarket/api/bridge.ts
+  ca1430c8bb493c97 13,17-18
+src/plugins/polymarket/lib/deposit-tx.test.ts
+  ca1430c8bb493c97 1-79
+src/plugins/polymarket/lib/funding-view.test.ts
+  ca1430c8bb493c97 1-88
+src/plugins/polymarket/__fixtures__/bridge-quote.json
+  ca1430c8bb493c97 1-11
+src/plugins/polymarket/commands/funding.ts
+  ca1430c8bb493c97 3,5,8-27,51,53-54,56-94,99,101-103,105-135,144,146-164
+README.md
+  ca1430c8bb493c97 156-158
+src/cli/commands/skill.ts
+  ca1430c8bb493c97 219-221,242
+src/plugins/polymarket/formatters.ts
+  ca1430c8bb493c97 20,199-241
+src/plugins/polymarket/__fixtures__/bridge-orders.json
+  ca1430c8bb493c97 1-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.6+68f331d",
+  "base_commit_sha": "9d10729a18d3ba6d625df893e05c74ff7bc39a2e",
+  "prompts": {
+    "ca1430c8bb493c97": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "baff8cd1-a0fe-4b92-9541-1585e53392af",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 620,
+      "total_deletions": 14,
+      "accepted_lines": 620,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
