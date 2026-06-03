@@ -19,26 +19,6 @@ import type { EventCandidate } from './lib/whitelist.js';
 import type { OrderPreview } from './lib/order-view.js';
 import type { DepositPreview, WithdrawPreview, TransferStatus } from './lib/funding-view.js';
 
-/**
- * Transient stub for subcommands not yet wired in the current checkpoint.
- * Replaced by the real handler when each command lands (C2–C5).
- */
-export function emitNotImplemented(format: OutputFormat, command: string): never {
-  const message = `polymarket ${command} is not implemented yet (Phase A build in progress)`;
-  if (format === 'json') {
-    console.log(
-      JSON.stringify(
-        { success: false, error: { code: 'NOT_IMPLEMENTED', type: 'SYSTEM', message, retryable: false } },
-        null,
-        2,
-      ),
-    );
-  } else {
-    console.error(chalk.yellow(`\n${message}\n`));
-  }
-  process.exit(1);
-}
-
 /** Validate an EVM (Polygon) EOA address shape. Never calls new PublicKey(). */
 export function isEvmAddress(addr: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(addr);
