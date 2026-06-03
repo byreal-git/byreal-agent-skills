@@ -1,0 +1,24 @@
+{
+ "events": [
+  {
+   "id": "27830",
+   "title": "2026 NBA Champion",
+   "slug": "2026-nba-champion",
+   "volume": 407677864.477107,
+   "liquidity": 647751.62531,
+   "endDate": "2026-07-01T00:00:00Z",
+   "description": "This market is to predict the winner of the 2025–26 NBA Finals."
+  },
+  {
+   "id": "478277",
+   "title": "NBA: 2027 Champion",
+   "slug": "nba-2027-champion",
+   "volume": 693720.341075,
+   "liquidity": 1809930.56284,
+   "endDate": "2027-07-01T00:00:00Z",
+   "description": "This market will resolve to \"Yes\" if the listed team is determined as the champi"
+  }
+ ],
+ "tags": [],
+ "profiles": []
+}

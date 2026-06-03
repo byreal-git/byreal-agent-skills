@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
   buildSet,
   normalizeToParentEvents,
   intersect,
   sortByVolumeDescAndLimit,
+  buildSearchCandidates,
   type CategoyDataRecord,
 } from './whitelist.js';
 
@@ -72,5 +75,25 @@ describe('sortByVolumeDescAndLimit', () => {
       { event_id: 'c', title: 'c', volume: '50' },
     ];
     expect(sortByVolumeDescAndLimit(c, 2).map((x) => x.event_id)).toEqual(['b', 'c']);
+  });
+});
+
+describe('buildSearchCandidates (real public-search fixture)', () => {
+  it('drops a real non-whitelisted hit (478277) when only 27830 is whitelisted', () => {
+    const res = JSON.parse(
+      fs.readFileSync(path.join(__dirname, '..', '__fixtures__', 'public-search-nba.json'), 'utf-8'),
+    );
+    // fixture has events 27830 (2026 NBA Champion) + 478277 (NBA: 2027 Champion)
+    const whitelist = buildSet([{ eventId: '27830', dataStatus: 0 }]);
+    const out = buildSearchCandidates(res, whitelist, 10);
+    expect(out.map((c) => c.event_id)).toEqual(['27830']);
+    expect(out.find((c) => c.event_id === '478277')).toBeUndefined();
+  });
+
+  it('returns [] (→ NO_MATCH at command layer) when nothing is whitelisted', () => {
+    const res = JSON.parse(
+      fs.readFileSync(path.join(__dirname, '..', '__fixtures__', 'public-search-nba.json'), 'utf-8'),
+    );
+    expect(buildSearchCandidates(res, buildSet([]), 10)).toEqual([]);
   });
 });

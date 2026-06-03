@@ -94,3 +94,17 @@ export function sortByVolumeDescAndLimit(
   };
   return [...candidates].sort((a, b) => vol(b) - vol(a)).slice(0, limit);
 }
+
+/**
+ * Full search composition: normalize public-search → intersect whitelist
+ * (the hard "never outside whitelist" guard) → volume_desc → limit.
+ */
+export function buildSearchCandidates(
+  publicSearchRes: { events?: unknown[] },
+  whitelist: WhitelistSet,
+  limit: number,
+): EventCandidate[] {
+  const normalized = normalizeToParentEvents(publicSearchRes as { events?: never[] });
+  const whitelisted = intersect(normalized, whitelist);
+  return sortByVolumeDescAndLimit(whitelisted, limit);
+}

@@ -211,6 +211,7 @@ Present on-chain data first, then external context, then synthesize how external
 | Sweep dust execute | \`byreal-cli sweep execute --wallet-address <addr>\` |
 | Polymarket categories | \`byreal-cli polymarket category list\` |
 | Polymarket events in category | \`byreal-cli polymarket event list --category-id <id>\` |
+| Polymarket search events | \`byreal-cli polymarket event search --query "<title-like english>"\` |
 | Polymarket event detail | \`byreal-cli polymarket event detail --event-id <id> [--market-id <id>] [--full]\` |
 | Polymarket portfolio | \`byreal-cli polymarket portfolio read [--evm-wallet-address <addr>]\` |
 | Polymarket balance | \`byreal-cli polymarket funding balance [--evm-wallet-address <addr>]\` |
@@ -223,11 +224,13 @@ Polymarket runs on Polygon; the plugin reaches it through the Byreal gateway (no
 # Browse categories, then events under one, then a specific event's markets
 byreal-cli polymarket category list -o json
 byreal-cli polymarket event list --category-id <id> -o json
+byreal-cli polymarket event search --query "FIFA World Cup Group A Winner" -o json   # title-like English query
 byreal-cli polymarket event detail --event-id <id> -o json          # compact (top-5 markets)
 byreal-cli polymarket event detail --event-id <id> --market-id <id> -o json   # expand one + related_markets
 \`\`\`
 
 Notes:
+- \`event search\` takes a **title-like English query** (the Skill rewrites the user's words first; never pass raw user phrasing or specific option names). It runs Gamma public-search through the gateway and intersects with the Byreal whitelist, so it never returns events outside the whitelist; empty → \`NO_MATCH\`, source down → \`EVENT_SEARCH_UNAVAILABLE\`.
 - \`event detail\` is neg-risk aware: it hides \`negRiskOther\` placeholders, sorts candidates by YES probability, and reports \`market_count\`/\`markets_returned\`/\`markets_truncated\`.
 - \`portfolio read\` / \`funding balance\` return public fields only in Phase A (positions/value/pnl). \`cash_available_usdc\` and \`active_orders\` are \`null\` with \`partial: true\` until Phase B (CLOB L2 auth).
 - EVM address resolves from \`--evm-wallet-address\` or a \`type:"evm"\` wallet in realclaw-config.json.

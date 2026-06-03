@@ -148,6 +148,7 @@ If Privy is not configured, `--execute` fails fast with `PRIVY_NOT_CONFIGURED` a
 | `dflow swap`              | Swap tokens via DFlow order-flow aggregator       |
 | `polymarket category list`  | Polymarket: list configured categories (Phase A) |
 | `polymarket event list`     | Polymarket: list active events under a category  |
+| `polymarket event search`   | Polymarket: search whitelisted events (Gamma ∩ whitelist) |
 | `polymarket event detail`   | Polymarket: event detail (compact/full, neg-risk) |
 | `polymarket portfolio read` | Polymarket: positions / value / pnl (public)     |
 | `polymarket funding balance`| Polymarket: available balance (public)           |

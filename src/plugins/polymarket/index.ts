@@ -54,6 +54,19 @@ const capabilities: Capability[] = [
     ],
   },
   {
+    id: 'pm.event.search',
+    name: 'Polymarket Event Search',
+    description: 'Search whitelisted events by title-like query (Gamma public-search ∩ whitelist)',
+    category: 'query',
+    auth_required: false,
+    command: 'byreal-cli polymarket event search --query <q>',
+    params: [
+      { name: 'query', type: 'string', required: true, description: 'Title-like English query (rewritten by Skill)' },
+      { name: 'limit', type: 'integer', required: false, description: 'Max candidates (default 10)' },
+      { name: 'refresh-whitelist', type: 'boolean', required: false, description: 'Force-rebuild the whitelist cache' },
+    ],
+  },
+  {
     id: 'pm.portfolio.read',
     name: 'Polymarket Portfolio Read',
     description: 'Read positions / value / pnl (public parts; L2 cash/orders are Phase B)',

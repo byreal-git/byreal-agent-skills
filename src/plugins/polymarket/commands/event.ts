@@ -4,17 +4,21 @@ import {
   noTradableEventsError,
   eventNotFoundError,
   eventNotTradableError,
+  noMatchError,
+  eventSearchUnavailableError,
 } from '../../../core/errors.js';
 import { getPmData } from '../api/categoy.js';
-import { getEvent } from '../api/gamma.js';
+import { getEvent, publicSearch } from '../api/gamma.js';
 import { buildEventList, buildEventDetail } from '../lib/event-view.js';
+import { buildSearchCandidates } from '../lib/whitelist.js';
+import { getWhitelistSet, peekWhitelistCache } from '../lib/whitelist-cache.js';
 import { getPmConfig } from '../config.js';
 import {
   outputPmError,
   outputPmSuccess,
   renderEventList,
   renderEventDetail,
-  emitNotImplemented,
+  renderEventSearch,
 } from '../formatters.js';
 
 export function createEventCommand(): Command {
@@ -60,6 +64,14 @@ export function createEventCommand(): Command {
           : {},
       );
 
+      // Opportunistic whitelist guard: if a whitelist cache is already warm
+      // (built by a prior list/search), enforce membership; never trigger a
+      // full multi-call build just to validate one detail lookup.
+      const cached = peekWhitelistCache(Date.now(), pm.whitelistCacheTtlSeconds);
+      if (cached && !cached.ids.has(String(options.eventId))) {
+        outputPmError(output, eventNotFoundError(options.eventId));
+      }
+
       const r = await getEvent(options.eventId);
       if (!r.ok) outputPmError(output, r.error);
       if (!r.value || !r.value.id) outputPmError(output, eventNotFoundError(options.eventId));
@@ -87,9 +99,35 @@ export function createEventCommand(): Command {
     .description('Search whitelisted events by title-like query')
     .requiredOption('--query <q>', 'Title-like English query (rewritten by Skill)')
     .option('--limit <n>', 'Max candidates (default 10)')
-    .action((_options, cmdObj: Command) => {
+    .option('--refresh-whitelist', 'Force-rebuild the whitelist cache')
+    .action(async (options, cmdObj: Command) => {
       const { output } = cmdObj.optsWithGlobals() as GlobalOptions;
-      emitNotImplemented(output, 'event search');
+      const startTime = Date.now();
+      const pm = getPmConfig();
+      const limit = options.limit ? parseInt(options.limit, 10) : 10;
+
+      // 1. whitelist set (cached, TTL 10min)
+      const wlR = await getWhitelistSet({
+        nowMs: Date.now(),
+        ttlSec: pm.whitelistCacheTtlSeconds,
+        forceRefresh: !!options.refreshWhitelist,
+      });
+      if (!wlR.ok) outputPmError(output, eventSearchUnavailableError(wlR.error.message));
+
+      // 2. Gamma public-search via gateway (geo-proxy), over-fetch x3
+      const searchR = await publicSearch({
+        q: options.query,
+        events_status: 'active',
+        sort: 'volume',
+        limit_per_type: Math.max(limit * 3, 10),
+      });
+      if (!searchR.ok) outputPmError(output, eventSearchUnavailableError(searchR.error.message));
+
+      // 3. normalize → intersect whitelist (hard guard) → volume_desc → limit
+      const events = buildSearchCandidates(searchR.value, wlR.value, limit);
+      if (events.length === 0) outputPmError(output, noMatchError(options.query));
+
+      outputPmSuccess(output, { query: options.query, events }, renderEventSearch, startTime);
     });
 
   return cmd;

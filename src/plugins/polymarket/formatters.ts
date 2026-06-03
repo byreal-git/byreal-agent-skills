@@ -15,6 +15,7 @@ import type { ByrealError } from '../../core/errors.js';
 import type { CategoryListItem } from './lib/category-view.js';
 import type { EventListItem, EventDetail } from './lib/event-view.js';
 import type { Portfolio, FundingBalance } from './lib/portfolio-view.js';
+import type { EventCandidate } from './lib/whitelist.js';
 
 /**
  * Transient stub for subcommands not yet wired in the current checkpoint.
@@ -156,6 +157,18 @@ export function renderPortfolio(p: Portfolio): void {
   }
   console.log(table.toString());
   if (p.partial) console.log(chalk.gray(`\n  partial: ${p.partial_reason ?? 'some fields require Phase B'}`));
+}
+
+export function renderEventSearch(d: { query: string; events: EventCandidate[] }): void {
+  console.log(chalk.cyan.bold(`\n  Polymarket Search: "${d.query}"  (${d.events.length} whitelisted)\n`));
+  const table = new Table({
+    head: [chalk.cyan.bold('Event ID'), chalk.cyan.bold('Title'), chalk.cyan.bold('Volume'), chalk.cyan.bold('End Date')],
+    chars: TABLE_CHARS,
+  });
+  for (const e of d.events) {
+    table.push([e.event_id, e.title, e.volume ?? '-', e.endDate ?? '-']);
+  }
+  console.log(table.toString());
 }
 
 export function renderFundingBalance(b: FundingBalance): void {
