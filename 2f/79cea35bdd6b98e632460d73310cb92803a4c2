@@ -1,0 +1,122 @@
+src/privy/config.ts
+  ca1430c8bb493c97 161-200
+src/privy/types.ts
+  ca1430c8bb493c97 101-134
+src/core/constants.ts
+  ca1430c8bb493c97 153-172
+src/plugins/polymarket/config.ts
+  ca1430c8bb493c97 1-80
+src/plugins/polymarket/api/gateway.test.ts
+  ca1430c8bb493c97 1-69
+src/plugins/polymarket/api/gateway.ts
+  ca1430c8bb493c97 1-91
+src/plugins/polymarket/commands/order.ts
+  ca1430c8bb493c97 1-25
+src/plugins/polymarket/commands/funding.ts
+  ca1430c8bb493c97 1-49
+src/plugins/polymarket/types.ts
+  ca1430c8bb493c97 1-12
+src/plugins/polymarket/commands/event.ts
+  ca1430c8bb493c97 1-40
+src/privy/client.ts
+  ca1430c8bb493c97 11-16,33-35,53,69,170-211
+src/plugins/index.ts
+  ca1430c8bb493c97 12,21
+src/privy/client.evm.test.ts
+  ca1430c8bb493c97 1-92
+src/plugins/polymarket/config.test.ts
+  ca1430c8bb493c97 1-42
+src/plugins/polymarket/index.ts
+  ca1430c8bb493c97 1-37
+src/plugins/polymarket/formatters.ts
+  ca1430c8bb493c97 1-35
+src/core/errors.ts
+  ca1430c8bb493c97 53-71,441-631
+src/plugins/polymarket/commands/portfolio.ts
+  ca1430c8bb493c97 1-20
+src/privy/config.evm.test.ts
+  ca1430c8bb493c97 1-91
+src/privy/execute.ts
+  ca1430c8bb493c97 12,20-27,69-131
+src/plugins/polymarket/commands/category.ts
+  ca1430c8bb493c97 1-17
+src/core/errors.polymarket.test.ts
+  ca1430c8bb493c97 1-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.6+68f331d",
+  "base_commit_sha": "2f79cea35bdd6b98e632460d73310cb92803a4c2",
+  "prompts": {
+    "17987a35ffc67aa6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc46082d-0d35-4289-90b9-faf70b85a8e9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 3322,
+      "total_deletions": 46,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "250fcbb6ea0cbc70": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2c9067e-4b66-48a0-b7a7-93a5fa2d61da",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 46,
+      "total_deletions": 11,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "2da3450b3f753c04": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aee97a56-bd6b-4dfd-add9-83a56f864b62",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 857,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "309114f8644eec2d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f9bee2a-2402-41af-b02b-7497120017ce",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 57,
+      "total_deletions": 2,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "ca1430c8bb493c97": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "baff8cd1-a0fe-4b92-9541-1585e53392af",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 1207,
+      "total_deletions": 7,
+      "accepted_lines": 1205,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
