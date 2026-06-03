@@ -1,0 +1,56 @@
+src/plugins/polymarket/lib/order-view.test.ts
+  ca1430c8bb493c97 1-112
+src/cli/commands/skill.ts
+  ca1430c8bb493c97 218,238
+src/plugins/polymarket/lib/freshness.test.ts
+  ca1430c8bb493c97 1-61
+src/plugins/polymarket/lib/book-sweep.ts
+  ca1430c8bb493c97 1-83
+README.md
+  ca1430c8bb493c97 155
+src/plugins/polymarket/lib/book-sweep.test.ts
+  ca1430c8bb493c97 1-72
+src/plugins/polymarket/lib/slippage.ts
+  ca1430c8bb493c97 1-49
+src/plugins/polymarket/__fixtures__/clob-book-spurs.json
+  ca1430c8bb493c97 1-134
+src/plugins/polymarket/__fixtures__/clob-market-spurs.json
+  ca1430c8bb493c97 1
+src/plugins/polymarket/commands/order.ts
+  ca1430c8bb493c97 3-7,14,19,21,23,25-58
+src/plugins/polymarket/index.ts
+  ca1430c8bb493c97 83-98
+src/plugins/polymarket/lib/order-view.ts
+  ca1430c8bb493c97 1-135
+src/plugins/polymarket/lib/slippage.test.ts
+  ca1430c8bb493c97 1-50
+src/plugins/polymarket/lib/freshness.ts
+  ca1430c8bb493c97 1-66
+src/plugins/polymarket/formatters.ts
+  ca1430c8bb493c97 19,175-197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.6+68f331d",
+  "base_commit_sha": "b7f92e3265ee14c194e30d1a75d7a3927afa1f1b",
+  "prompts": {
+    "ca1430c8bb493c97": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "baff8cd1-a0fe-4b92-9541-1585e53392af",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 862,
+      "total_deletions": 18,
+      "accepted_lines": 850,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
