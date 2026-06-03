@@ -24,7 +24,7 @@ import type { Result } from '../../../core/types.js';
 import type { ByrealError } from '../../../core/errors.js';
 import { apiError, sourceUnavailableError } from '../../../core/errors.js';
 
-export type PmBase = 'v1' | 'clob' | 'gamma';
+export type PmBase = 'v1' | 'clob' | 'gamma' | 'data';
 
 export type PmQueryParams = Record<string, string | number | boolean | undefined>;
 

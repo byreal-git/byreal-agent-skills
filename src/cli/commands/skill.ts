@@ -91,6 +91,13 @@ byreal-cli catalog show dex.pool.list
 | defi.rent.reclaim | Close empty accounts to reclaim SOL rent |
 | defi.sweep.execute | Consolidate dust tokens into USDC |
 | defi.dflow.swap | Swap tokens via DFlow order-flow aggregator |
+| pm.category.list | Polymarket: list Byreal-configured categories |
+| pm.event.list | Polymarket: list active tradable events under a category |
+| pm.event.detail | Polymarket: event detail (compact/full, neg-risk, related_markets) |
+| pm.portfolio.read | Polymarket: positions / value / pnl (public; L2 cash/orders are Phase B) |
+| pm.funding.balance | Polymarket: available balance (public parts) |
+
+> Polymarket plugin is in **Phase A** (auth-free discovery + local previews). Trading writes (order place/cancel), funding execute, and L2 reads land in Phase B. See docs/polymarket-cli/07.
 
 ## Global Options
 
@@ -202,6 +209,28 @@ Present on-chain data first, then external context, then synthesize how external
 | DFlow swap execute | \`byreal-cli dflow swap --input-mint <mint> --output-mint <mint> --amount <amt> --wallet-address <addr>\` |
 | Sweep dust preview | \`byreal-cli sweep execute --dry-run --wallet-address <addr>\` |
 | Sweep dust execute | \`byreal-cli sweep execute --wallet-address <addr>\` |
+| Polymarket categories | \`byreal-cli polymarket category list\` |
+| Polymarket events in category | \`byreal-cli polymarket event list --category-id <id>\` |
+| Polymarket event detail | \`byreal-cli polymarket event detail --event-id <id> [--market-id <id>] [--full]\` |
+| Polymarket portfolio | \`byreal-cli polymarket portfolio read [--evm-wallet-address <addr>]\` |
+| Polymarket balance | \`byreal-cli polymarket funding balance [--evm-wallet-address <addr>]\` |
+
+## Workflow: Polymarket Discovery (Phase A)
+
+Polymarket runs on Polygon; the plugin reaches it through the Byreal gateway (no direct connection). Phase A is read-only discovery + local order preview — no signing.
+
+\`\`\`
+# Browse categories, then events under one, then a specific event's markets
+byreal-cli polymarket category list -o json
+byreal-cli polymarket event list --category-id <id> -o json
+byreal-cli polymarket event detail --event-id <id> -o json          # compact (top-5 markets)
+byreal-cli polymarket event detail --event-id <id> --market-id <id> -o json   # expand one + related_markets
+\`\`\`
+
+Notes:
+- \`event detail\` is neg-risk aware: it hides \`negRiskOther\` placeholders, sorts candidates by YES probability, and reports \`market_count\`/\`markets_returned\`/\`markets_truncated\`.
+- \`portfolio read\` / \`funding balance\` return public fields only in Phase A (positions/value/pnl). \`cash_available_usdc\` and \`active_orders\` are \`null\` with \`partial: true\` until Phase B (CLOB L2 auth).
+- EVM address resolves from \`--evm-wallet-address\` or a \`type:"evm"\` wallet in realclaw-config.json.
 
 ## Command Notes
 

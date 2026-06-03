@@ -1,0 +1,40 @@
+[
+  {
+    "proxyWallet": "0xPROXY0000000000000000000000000000000001",
+    "asset": "102227184035967850089766981958743064457339118173548431660886438726896222843254",
+    "conditionId": "0xb6b3d7a2037b3faa7e1306d741840d453432902d73cc9a146a035e40271eae73",
+    "size": 125.0,
+    "avgPrice": 0.16,
+    "initialValue": 20.0,
+    "currentValue": 23.75,
+    "cashPnl": 3.75,
+    "percentPnl": 18.75,
+    "curPrice": 0.19,
+    "redeemable": false,
+    "title": "Will the San Antonio Spurs win the 2026 NBA Finals?",
+    "eventSlug": "2026-nba-champion",
+    "outcome": "Yes",
+    "outcomeIndex": 0,
+    "endDate": "2026-07-01",
+    "negativeRisk": true
+  },
+  {
+    "proxyWallet": "0xPROXY0000000000000000000000000000000001",
+    "asset": "55555555555555555555555555555555555555555555555555555555555555555555",
+    "conditionId": "0xabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcab",
+    "size": 50.0,
+    "avgPrice": 0.40,
+    "initialValue": 20.0,
+    "currentValue": 16.0,
+    "cashPnl": -4.0,
+    "percentPnl": -20.0,
+    "curPrice": 0.32,
+    "redeemable": false,
+    "title": "Will the New York Knicks win the 2026 NBA Finals?",
+    "eventSlug": "2026-nba-champion",
+    "outcome": "Yes",
+    "outcomeIndex": 0,
+    "endDate": "2026-07-01",
+    "negativeRisk": true
+  }
+]

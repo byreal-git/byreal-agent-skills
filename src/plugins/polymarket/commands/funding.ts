@@ -1,6 +1,9 @@
 import { Command } from 'commander';
 import type { GlobalOptions } from '../../../core/types.js';
-import { emitNotImplemented } from '../formatters.js';
+import { getValue } from '../api/data.js';
+import { resolveProxy } from '../account.js';
+import { buildFundingBalance } from '../lib/portfolio-view.js';
+import { outputPmError, outputPmSuccess, renderFundingBalance, emitNotImplemented } from '../formatters.js';
 
 export function createFundingCommand(): Command {
   const cmd = new Command('funding').description('Polymarket funding (deposit / withdraw / status)');
@@ -9,9 +12,17 @@ export function createFundingCommand(): Command {
     .command('balance')
     .description('Read Polymarket available balance (public parts)')
     .option('--evm-wallet-address <addr>', 'EVM EOA (defaults to realclaw-config evm wallet)')
-    .action((_options, cmdObj: Command) => {
+    .action(async (options, cmdObj: Command) => {
       const { output } = cmdObj.optsWithGlobals() as GlobalOptions;
-      emitNotImplemented(output, 'funding balance');
+      const startTime = Date.now();
+
+      const proxyR = await resolveProxy(options.evmWalletAddress);
+      if (!proxyR.ok) outputPmError(output, proxyR.error);
+      const { proxyAddress } = proxyR.value;
+
+      const valR = await getValue(proxyAddress);
+      const value = valR.ok ? valR.value : null;
+      outputPmSuccess(output, buildFundingBalance(value, proxyAddress), renderFundingBalance, startTime);
     });
 
   cmd

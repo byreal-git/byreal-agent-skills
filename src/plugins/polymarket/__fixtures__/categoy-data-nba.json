@@ -1,0 +1,89 @@
+{
+ "success": true,
+ "version": "v2.0.0",
+ "timestamp": 1780480538831,
+ "ret_code": 0,
+ "ret_msg": null,
+ "args": null,
+ "data": {
+  "total": 8,
+  "pageNum": 1,
+  "pageSize": 100,
+  "records": [
+   {
+    "id": 1935,
+    "categoryId": 1,
+    "eventId": "452420",
+    "eventSlug": "2026-nba-draft-4th-overall-pick",
+    "eventTitle": "2026 NBA Draft: 4th Overall Pick",
+    "env": 2,
+    "dataStatus": 0
+   },
+   {
+    "id": 1934,
+    "categoryId": 1,
+    "eventId": "452422",
+    "eventSlug": "2026-nba-draft-5th-overall-pick",
+    "eventTitle": "2026 NBA Draft: 5th Overall Pick",
+    "env": 2,
+    "dataStatus": 0
+   },
+   {
+    "id": 1933,
+    "categoryId": 1,
+    "eventId": "452412",
+    "eventSlug": "2026-nba-draft-3rd-overall-pick",
+    "eventTitle": "2026 NBA Draft: 3rd Overall Pick",
+    "env": 2,
+    "dataStatus": 0
+   },
+   {
+    "id": 1932,
+    "categoryId": 1,
+    "eventId": "506675",
+    "eventSlug": "nba-next-mavericks-head-coach",
+    "eventTitle": "NBA: Next Mavericks Head Coach",
+    "env": 2,
+    "dataStatus": 0
+   },
+   {
+    "id": 1931,
+    "categoryId": 1,
+    "eventId": "531028",
+    "eventSlug": "nba-playoffs-will-president-trump-attend-the-nba-finals",
+    "eventTitle": "Will President Trump attend the NBA Finals?",
+    "env": 2,
+    "dataStatus": 0
+   },
+   {
+    "id": 1930,
+    "categoryId": 1,
+    "eventId": "506667",
+    "eventSlug": "nba-next-bulls-head-coach",
+    "eventTitle": "NBA: Next Bulls Head Coach",
+    "env": 2,
+    "dataStatus": 0
+   },
+   {
+    "id": 1929,
+    "categoryId": 1,
+    "eventId": "482753",
+    "eventSlug": "nba-will-anthony-davis-be-traded-by-next-season",
+    "eventTitle": "NBA: Will Anthony Davis be traded by next season?",
+    "env": 2,
+    "dataStatus": 0
+   },
+   {
+    "id": 1928,
+    "categoryId": 1,
+    "eventId": "499275",
+    "eventSlug": "nba-2k27-cover-athlete",
+    "eventTitle": "NBA 2K27: Cover Athlete",
+    "env": 2,
+    "dataStatus": 0
+   }
+  ],
+  "current": 1,
+  "pages": 1
+ }
+}
