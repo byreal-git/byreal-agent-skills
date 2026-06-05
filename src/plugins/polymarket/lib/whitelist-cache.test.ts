@@ -6,9 +6,14 @@ import {
   flattenCategoryIds,
   serializeSet,
   deserializeSet,
+  buildWhitelistFromGateway,
+  type WhitelistGatewayDeps,
 } from './whitelist-cache.js';
 import { buildSet } from './whitelist.js';
-import type { CategoryNode } from '../api/categoy.js';
+import { ok, err } from '../../../core/types.js';
+import { sourceUnavailableError } from '../../../core/errors.js';
+import type { CategoryNode, PageResult } from '../api/categoy.js';
+import type { CategoyDataRecord } from './whitelist.js';
 
 describe('isCacheFresh', () => {
   it('fresh within TTL, stale past it (injected clock)', () => {
@@ -54,5 +59,61 @@ describe('serialize/deserialize round-trip', () => {
   it('deserialize returns null on garbage', () => {
     expect(deserializeSet('not json')).toBeNull();
     expect(deserializeSet('{"ids":"x"}')).toBeNull();
+  });
+});
+
+describe('buildWhitelistFromGateway completeness (injected gateway)', () => {
+  const tree: CategoryNode[] = [
+    { id: 1, parentId: 0, categoryName: 'NBA' },
+    { id: 2, parentId: 0, categoryName: 'EPL' },
+  ];
+  const page = (records: CategoyDataRecord[]): PageResult<CategoyDataRecord> => ({
+    total: records.length, pageNum: 1, pageSize: 100, records, pages: 1,
+  });
+  const recOf = (eventId: string): CategoyDataRecord => ({ eventId, dataStatus: 0, categoryId: 1 });
+
+  it('all categories OK → complete=true, full union', async () => {
+    const deps: WhitelistGatewayDeps = {
+      getCategoryTree: async () => ok(tree),
+      getCategoyData: async (categoryId) =>
+        ok(page([recOf(categoryId === 1 ? 'nba1' : 'epl1')])),
+    };
+    const r = await buildWhitelistFromGateway(undefined, deps);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.complete).toBe(true);
+    expect([...r.value.set.ids].sort()).toEqual(['epl1', 'nba1']);
+  });
+
+  it('one category fails after retries → complete=false, partial set (other category kept)', async () => {
+    const deps: WhitelistGatewayDeps = {
+      getCategoryTree: async () => ok(tree),
+      getCategoyData: async (categoryId) =>
+        categoryId === 1 ? ok(page([recOf('nba1')])) : err(sourceUnavailableError('boom')),
+    };
+    const r = await buildWhitelistFromGateway(undefined, deps);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.complete).toBe(false); // ← the fix: incomplete is signaled
+    expect(r.value.set.ids.has('nba1')).toBe(true); // best-effort: kept what worked
+    expect(r.value.set.ids.has('epl1')).toBe(false);
+  });
+
+  it('a category that fails once then succeeds is retried → complete=true', async () => {
+    let nbaCalls = 0;
+    const deps: WhitelistGatewayDeps = {
+      getCategoryTree: async () => ok(tree),
+      getCategoyData: async (categoryId) => {
+        if (categoryId === 1) {
+          nbaCalls++;
+          return nbaCalls === 1 ? err(sourceUnavailableError('blip')) : ok(page([recOf('nba1')]));
+        }
+        return ok(page([recOf('epl1')]));
+      },
+    };
+    const r = await buildWhitelistFromGateway(undefined, deps);
+    expect(r.ok && r.value.complete).toBe(true);
+    expect(r.ok && r.value.set.ids.has('nba1')).toBe(true);
+    expect(nbaCalls).toBeGreaterThanOrEqual(2); // retried
   });
 });

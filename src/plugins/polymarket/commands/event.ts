@@ -113,6 +113,7 @@ export function createEventCommand(): Command {
         forceRefresh: !!options.refreshWhitelist,
       });
       if (!wlR.ok) outputPmError(output, eventSearchUnavailableError(wlR.error.message));
+      const { set: whitelist, complete: whitelistComplete } = wlR.value;
 
       // 2. Gamma public-search via gateway (geo-proxy), over-fetch x3
       const searchR = await publicSearch({
@@ -124,8 +125,17 @@ export function createEventCommand(): Command {
       if (!searchR.ok) outputPmError(output, eventSearchUnavailableError(searchR.error.message));
 
       // 3. normalize → intersect whitelist (hard guard) → volume_desc → limit
-      const events = buildSearchCandidates(searchR.value, wlR.value, limit);
-      if (events.length === 0) outputPmError(output, noMatchError(options.query));
+      const events = buildSearchCandidates(searchR.value, whitelist, limit);
+      if (events.length === 0) {
+        // Only claim NO_MATCH when the whitelist is known-complete. If a category
+        // fetch failed (partial build), an empty intersection might be a false
+        // negative — surface a retryable EVENT_SEARCH_UNAVAILABLE instead.
+        if (whitelistComplete) outputPmError(output, noMatchError(options.query));
+        outputPmError(
+          output,
+          eventSearchUnavailableError('whitelist build was incomplete (a category failed); retry'),
+        );
+      }
 
       outputPmSuccess(output, { query: options.query, events }, renderEventSearch, startTime);
     });
