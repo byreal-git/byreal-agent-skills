@@ -26,7 +26,11 @@ describe('signEvmTypedData', () => {
     });
   }
 
-  it('POSTs to /sign/evm-typed-data with Authorization + X-Wallet-Address + caip2 body', async () => {
+  // Contract (see signEvmTypedData doc): the CLI's agent token (oc_at_) must go
+  // through the proxy's `Authorization` agent-token branch — NOT
+  // `X-Privy-Access-Token` (the JWT branch, which the gateway uses and which
+  // would reject our non-JWT token). This asserts that contract, not a guess.
+  it('POSTs to /sign/evm-typed-data with Authorization (agent-token branch) + X-Wallet-Address + caip2 body', async () => {
     stubFetch(200, { success: true, retCode: 0, data: { signature: '0xdeadbeef' } });
 
     const r = await signEvmTypedData(
@@ -44,6 +48,8 @@ describe('signEvmTypedData', () => {
     const headers = calls[0].init.headers as Record<string, string>;
     expect(headers['Authorization']).toBe('Bearer oc_at_tok');
     expect(headers['X-Wallet-Address']).toBe('0xEOA');
+    // The agent token must NOT be sent on the JWT header (would be rejected).
+    expect(headers['X-Privy-Access-Token']).toBeUndefined();
     const body = JSON.parse(calls[0].init.body as string);
     expect(body.caip2).toBe('eip155:137');
     expect(body.typedData).toEqual(TYPED);

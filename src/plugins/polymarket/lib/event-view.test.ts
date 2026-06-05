@@ -67,6 +67,30 @@ describe('buildEventDetail (real neg-risk event 27830)', () => {
     expect(d.markets_returned).toBe(2);
     expect(d.markets_truncated).toBe(false);
   });
+
+  it('related_markets uses the SELECTED market group, not the event group (multi-group)', () => {
+    // Synthetic event with TWO neg-risk groups; event-level id = G1.
+    // Selecting a G2 market must return only the other G2 market — event-level
+    // grouping would wrongly return the G1 markets (or nothing).
+    const tradable = {
+      active: true, closed: false, archived: false, acceptingOrders: true,
+      enableOrderBook: true, negRisk: true, negRiskOther: false,
+      outcomes: '["Yes","No"]', outcomePrices: '["0.5","0.5"]', clobTokenIds: '["y","n"]',
+    };
+    const multi: RawEvent = {
+      id: 'E', negRisk: true, negRiskMarketID: 'G1',
+      markets: [
+        { id: 'a', groupItemTitle: 'A', negRiskMarketID: 'G1', ...tradable },
+        { id: 'b', groupItemTitle: 'B', negRiskMarketID: 'G1', ...tradable },
+        { id: 'c', groupItemTitle: 'C', negRiskMarketID: 'G2', ...tradable },
+        { id: 'd', groupItemTitle: 'D', negRiskMarketID: 'G2', ...tradable },
+      ],
+    };
+    const detail = buildEventDetail(multi, { marketId: 'c', compactN: 5 });
+    expect(detail.markets_returned).toBe(1);
+    expect(detail.markets[0].market_id).toBe('c');
+    expect(detail.markets[0].related_markets.map((r) => r.market_id)).toEqual(['d']);
+  });
 });
 
 describe('buildCategoryList (real tree fixture)', () => {

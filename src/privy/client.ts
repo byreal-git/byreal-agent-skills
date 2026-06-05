@@ -171,11 +171,22 @@ export async function signTransaction(
  * Sign an EIP-712 typed-data payload via the Privy proxy (Polymarket order
  * signing). Returns the hex signature.
  *
- * Headers: Authorization: Bearer <token>  (agent-token branch, see
- * agent-wallet-privy-proxy-server sign_auth.rs) + X-Wallet-Address: <EOA>,
- * matching the backend PrivyProxyHttpClient convention. The agent-token vs
- * X-Privy-Access-Token header detail is verified during Phase B integration;
- * Phase A only ships + unit-tests the request shape (no real signature).
+ * Headers: `Authorization: Bearer <token>` + `X-Wallet-Address: <EOA>`.
+ *
+ * ⚠️ Header choice is deliberate — do NOT switch to `X-Privy-Access-Token`:
+ *   - The proxy's /sign/evm-typed-data has TWO auth branches (sign_auth.rs):
+ *     `Authorization` = agent-token branch (accepts oc_at_ DB tokens);
+ *     `X-Privy-Access-Token` = JWT branch (verify_access_token = jsonwebtoken
+ *     decode, expects a real Privy JWT).
+ *   - The CLI holds an AGENT TOKEN (oc_at_, SHA256-hashed DB token), which is
+ *     NOT a JWT and would be REJECTED by the X-Privy-Access-Token/JWT branch.
+ *   - The gateway's PrivyProxyHttpClient uses X-Privy-Access-Token because it
+ *     forwards a server-side JWT — that is the backend path, not the CLI path.
+ *   - The existing, working Solana signing path already sends agent tokens via
+ *     `Authorization: Bearer` to the same proxy/middleware (see privyPost),
+ *     so this is the proven branch for our token.
+ * Final confirmation (incl. typed-data signing policy grant) is a Phase B
+ * integration item; Phase A ships + unit-tests the request SHAPE (no real sig).
  *
  * Body: { caip2, typedData, strategyId, strategyName }.
  */
