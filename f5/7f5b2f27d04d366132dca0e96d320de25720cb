@@ -1,0 +1,34 @@
+src/plugins/polymarket/lib/whitelist-cache.ts
+  ca1430c8bb493c97 110-146,149-151,156,159-166,173,181-182,185-197,200,203,205,207-208
+scripts/polymarket-live-smoke.mjs
+  ca1430c8bb493c97 43-65,95-96,98,106-107,110-124,127-129,132-146,148,151,153-156
+src/plugins/polymarket/lib/whitelist-cache.test.ts
+  ca1430c8bb493c97 9-10,13-16,64-119
+src/plugins/polymarket/commands/event.ts
+  ca1430c8bb493c97 116,128-138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.6+68f331d",
+  "base_commit_sha": "f57f5b2f27d04d366132dca0e96d320de25720cb",
+  "prompts": {
+    "ca1430c8bb493c97": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "baff8cd1-a0fe-4b92-9541-1585e53392af",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 211,
+      "total_deletions": 36,
+      "accepted_lines": 211,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
