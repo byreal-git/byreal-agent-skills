@@ -1,0 +1,34 @@
+src/plugins/polymarket/lib/event-view.ts
+  ca1430c8bb493c97 130-135
+src/plugins/polymarket/lib/event-view.test.ts
+  ca1430c8bb493c97 70-93
+src/privy/client.evm.test.ts
+  ca1430c8bb493c97 29-33,51-52
+src/privy/client.ts
+  ca1430c8bb493c97 174-189
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.6+68f331d",
+  "base_commit_sha": "21b235f748536cc5d7c270f8c83f37aa6bf54519",
+  "prompts": {
+    "ca1430c8bb493c97": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "baff8cd1-a0fe-4b92-9541-1585e53392af",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 53,
+      "total_deletions": 7,
+      "accepted_lines": 53,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
