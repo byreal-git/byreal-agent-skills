@@ -20,6 +20,26 @@ import type { OrderPreview } from './lib/order-view.js';
 import type { DepositPreview, WithdrawPreview, TransferStatus } from './lib/funding-view.js';
 import type { ReadinessVerdict } from './types.js';
 
+/** Loose view covering both the dry-run preview and the executed OrderPlaceResult. */
+export interface OrderPlaceView {
+  mode?: string;
+  orderID?: string;
+  outcome?: string;
+  status?: string | null;
+  side: string;
+  signed_price?: string | number;
+  size?: string;
+  amount?: string;
+  book_worst_price?: number;
+  avg_price?: number;
+  fully_fills?: boolean;
+  warning?: string;
+  taking_amount?: string;
+  making_amount?: string;
+  transaction_hashes?: string[];
+  readiness?: ReadinessVerdict | null;
+}
+
 /** Validate an EVM (Polygon) EOA address shape. Never calls new PublicKey(). */
 export function isEvmAddress(addr: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(addr);
@@ -233,6 +253,39 @@ export function renderTransferStatus(s: TransferStatus): void {
   }
   console.log(table.toString());
   console.error(chalk.gray(`\n  ${s.note}`));
+}
+
+export function renderOrderPlace(d: OrderPlaceView): void {
+  const heading = d.mode === 'dry-run' ? 'Order Place (dry-run)' : 'Order Placed';
+  console.log(chalk.cyan.bold(`\n  ${heading} — ${d.side}\n`));
+  const table = new Table({ chars: TABLE_CHARS });
+  if (d.orderID) table.push([chalk.gray('Order ID'), d.orderID]);
+  if (d.outcome) {
+    const c = d.outcome === 'settled' ? chalk.green : chalk.yellow;
+    table.push([chalk.gray('Outcome'), c(d.outcome)]);
+  }
+  if (d.status != null) table.push([chalk.gray('Status'), String(d.status)]);
+  if (d.amount !== undefined) table.push([chalk.gray('Amount (USD)'), d.amount]);
+  if (d.size !== undefined) table.push([chalk.gray('Size (shares)'), d.size]);
+  if (d.signed_price !== undefined) table.push([chalk.gray('Signed Price'), String(d.signed_price)]);
+  if (d.book_worst_price !== undefined) table.push([chalk.gray('Book Worst Price'), String(d.book_worst_price)]);
+  if (d.avg_price !== undefined) table.push([chalk.gray('Avg Price'), String(d.avg_price)]);
+  if (d.fully_fills !== undefined) table.push([chalk.gray('Fully Fills'), String(d.fully_fills)]);
+  if (d.taking_amount !== undefined) table.push([chalk.gray('Taking Amount'), d.taking_amount]);
+  if (d.making_amount !== undefined) table.push([chalk.gray('Making Amount'), d.making_amount]);
+  console.log(table.toString());
+  if (d.transaction_hashes?.length) {
+    // On-chain identifiers — shown in full (never truncated; CLAUDE.md).
+    console.log(chalk.gray(`\n  tx: ${d.transaction_hashes.join(', ')}`));
+  }
+  if (d.readiness) {
+    const rdy = d.readiness.ready ? chalk.green('READY') : chalk.red('NOT READY');
+    console.log(chalk.gray(`\n  readiness: ${rdy}${d.readiness.blocking_reason ? ' — ' + d.readiness.blocking_reason : ''}`));
+  }
+  if (d.warning) console.log(chalk.yellow(`\n  ⚠ ${d.warning}`));
+  if (d.outcome === 'pending') {
+    console.error(chalk.gray('\n  [pending] not confirmed within poll budget; re-check via `order status` / data/order/{id}.'));
+  }
 }
 
 export function renderAccountReadiness(v: ReadinessVerdict): void {

@@ -118,3 +118,17 @@ export interface ReadinessVerdict {
   proxy_address: string | null;
   blocking_reason?: string;
 }
+
+/** Result of an executed order placement (execute mode). */
+export interface OrderPlaceResult {
+  orderID: string;
+  status: string | null;
+  /** settled = reached a terminal status within the poll budget; pending = timed out (re-check via order status). */
+  outcome: 'settled' | 'pending';
+  side: OrderSide;
+  signed_price: string;
+  size: string;
+  taking_amount?: string;
+  making_amount?: string;
+  transaction_hashes?: string[];
+}

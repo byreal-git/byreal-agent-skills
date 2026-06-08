@@ -21,3 +21,20 @@ export function getBalanceAllowance(
     headers: { Authorization: `Bearer ${auth.token}`, 'x-evm-address': auth.evmAddress },
   });
 }
+
+/**
+ * GET /clob/balance-allowance/update — triggers a backend balance/allowance cache
+ * refresh (docs/03). Used after a 400 insufficient-balance to re-sync before one
+ * retry. Returns are ignored (the call is the side effect).
+ */
+export function syncBalanceAllowance(
+  assetType: 'COLLATERAL' | 'CONDITIONAL',
+  tokenId: string | undefined,
+  auth: PmWriteAuth,
+): Promise<Result<unknown, ByrealError>> {
+  const params: Record<string, string> = { asset_type: assetType, signature_type: 'POLY_1271' };
+  if (assetType === 'CONDITIONAL' && tokenId) params.token_id = tokenId;
+  return pmGet<unknown>('clob', '/balance-allowance/update', params, {
+    headers: { Authorization: `Bearer ${auth.token}`, 'x-evm-address': auth.evmAddress },
+  });
+}
