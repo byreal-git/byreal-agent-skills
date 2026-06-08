@@ -213,6 +213,7 @@ export function createFundingCommand(): Command {
       const submitBody = {
         quoteId: quote.quoteId,
         signedTransaction: '', // filled after signing (execute) — placeholder for unsigned-tx echo
+        walletAddress: proxyAddress, // deposit-wallet lookup key (proxy); omitting → 40904
         fromChainId: SOLANA_BRIDGE_CHAIN_ID,
         fromTokenAddress: USDC_SOLANA_MINT,
         toChainId: POLYGON_CHAIN_ID,

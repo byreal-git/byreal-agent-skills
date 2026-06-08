@@ -92,6 +92,8 @@ export async function getOrders(
 export interface BridgeDepositSubmitReq {
   quoteId: string;
   signedTransaction: string; // base64 signed Solana V0 tx
+  /** Proxy/deposit wallet (Polygon) — the deposit-wallet lookup key; omitting it → 40904. */
+  walletAddress: string;
   fromChainId: string;
   fromTokenAddress: string;
   toChainId: string;
