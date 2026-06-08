@@ -2,6 +2,7 @@
  * Byreal CLI - AI-friendly CLI for Byreal CLMM DEX on Solana
  */
 
+import net from 'node:net';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { VERSION, CLI_NAME, LOGO, EXPERIMENTAL_WARNING } from './core/constants.js';
@@ -18,6 +19,30 @@ import { createUpdateCommand } from './cli/commands/update.js';
 import { createStatsCommand } from './cli/commands/stats.js';
 import { printUpdateNotice } from './core/update-check.js';
 import { plugins } from './plugins/index.js';
+
+// ============================================
+// Network tuning (Happy Eyeballs)
+// ============================================
+//
+// Node's global fetch/undici uses `autoSelectFamilyAttemptTimeout` = 250ms by
+// default. When a host resolves to several addresses — e.g. an /etc/hosts IPv4
+// entry plus an unroutable IPv6 that macOS synthesizes (NAT64/DNS64) because the
+// hosts file has no IPv6 line — Node abandons an in-flight-but-slow IPv4 connect
+// at 250ms and falls onto the dead IPv6, hanging until the overall connect
+// timeout (UND_ERR_CONNECT_TIMEOUT). VPN-routed internal test hosts handshake in
+// ~450ms, past 250ms, so they fail intermittently while curl (which keeps both
+// attempts racing and never abandons the first) succeeds. Widening the window
+// lets a slow-but-working address win. Override via env; set <=0 to skip.
+const connectAttemptTimeoutMs = Math.floor(
+  Number(process.env.BYREAL_CONNECT_ATTEMPT_TIMEOUT_MS ?? 2000),
+);
+if (
+  Number.isFinite(connectAttemptTimeoutMs) &&
+  connectAttemptTimeoutMs > 0 &&
+  typeof net.setDefaultAutoSelectFamilyAttemptTimeout === 'function'
+) {
+  net.setDefaultAutoSelectFamilyAttemptTimeout(connectAttemptTimeoutMs);
+}
 
 // ============================================
 // Main Program

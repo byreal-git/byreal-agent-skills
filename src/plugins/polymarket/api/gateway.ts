@@ -71,7 +71,13 @@ export async function pmGet<T>(
       return err(sourceUnavailableError(`request timed out: GET ${url}`, true));
     }
     const msg = (e as Error)?.message ?? 'network error';
-    return err(sourceUnavailableError(`${msg}: GET ${url}`, true));
+    // `fetch` collapses connect/DNS/TLS failures into a bare "fetch failed";
+    // the actionable detail (e.g. ConnectTimeoutError + attempted addresses)
+    // lives on `.cause`. Surface it so these are diagnosable from the message.
+    const cause = (e as Error)?.cause;
+    const detail =
+      cause instanceof Error ? ` (${cause.name}: ${cause.message})` : '';
+    return err(sourceUnavailableError(`${msg}${detail}: GET ${url}`, true));
   }
 
   if (!res.ok) {
