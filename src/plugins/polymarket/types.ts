@@ -95,12 +95,26 @@ export interface OrderResponse {
   [k: string]: unknown;
 }
 
-/** Raw GET /clob/data/order/{id} (OpenOrder). */
+/** Raw GET /clob/data/order/{id} or an entry of /clob/data/orders (OpenOrder). */
 export interface OpenOrder {
   id?: string;
   status?: string;
-  size_matched?: string;
+  market?: string;
+  asset_id?: string;
+  side?: string;
+  price?: string;
   original_size?: string;
+  size_matched?: string;
+  outcome?: string;
+  order_type?: string;
+  created_at?: string | number;
+  [k: string]: unknown;
+}
+
+/** Raw DELETE /clob/order or /clob/cancel-all response. */
+export interface CancelResponse {
+  canceled?: string[];
+  not_canceled?: Record<string, string>;
   [k: string]: unknown;
 }
 

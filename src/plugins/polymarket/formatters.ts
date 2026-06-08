@@ -18,7 +18,8 @@ import type { Portfolio, FundingBalance } from './lib/portfolio-view.js';
 import type { EventCandidate } from './lib/whitelist.js';
 import type { OrderPreview } from './lib/order-view.js';
 import type { DepositPreview, WithdrawPreview, TransferStatus } from './lib/funding-view.js';
-import type { ReadinessVerdict } from './types.js';
+import type { ReadinessVerdict, OpenOrder } from './types.js';
+import type { CancelTarget } from './lib/cancel-view.js';
 
 /** Loose view covering both the dry-run preview and the executed OrderPlaceResult. */
 export interface OrderPlaceView {
@@ -253,6 +254,80 @@ export function renderTransferStatus(s: TransferStatus): void {
   }
   console.log(table.toString());
   console.error(chalk.gray(`\n  ${s.note}`));
+}
+
+export function renderActiveOrders(d: { orders: OpenOrder[] }): void {
+  console.log(chalk.cyan.bold(`\n  Active Orders (${d.orders.length})\n`));
+  const table = new Table({
+    head: [
+      chalk.cyan.bold('Order ID'),
+      chalk.cyan.bold('Side'),
+      chalk.cyan.bold('Price'),
+      chalk.cyan.bold('Size'),
+      chalk.cyan.bold('Matched'),
+      chalk.cyan.bold('Status'),
+      chalk.cyan.bold('Asset ID'),
+    ],
+    chars: TABLE_CHARS,
+  });
+  for (const o of d.orders) {
+    // Order/asset ids shown in full (on-chain handles; CLAUDE.md).
+    table.push([
+      o.id ?? '-',
+      o.side ?? '-',
+      o.price ?? '-',
+      o.original_size ?? '-',
+      o.size_matched ?? '-',
+      o.status ?? '-',
+      o.asset_id ?? '-',
+    ]);
+  }
+  console.log(table.toString());
+}
+
+export function renderOrderStatusView(o: OpenOrder): void {
+  console.log(chalk.cyan.bold('\n  Order Status\n'));
+  const table = new Table({ chars: TABLE_CHARS });
+  table.push(
+    [chalk.gray('Order ID'), o.id ?? '-'],
+    [chalk.gray('Status'), o.status ?? '-'],
+    [chalk.gray('Side'), o.side ?? '-'],
+    [chalk.gray('Price'), o.price ?? '-'],
+    [chalk.gray('Original Size'), o.original_size ?? '-'],
+    [chalk.gray('Size Matched'), o.size_matched ?? '-'],
+    [chalk.gray('Asset ID'), o.asset_id ?? '-'],
+  );
+  console.log(table.toString());
+}
+
+export interface CancelResultView {
+  mode?: string;
+  targets?: CancelTarget[];
+  count?: number;
+  canceled?: string[];
+  failed?: Array<{ order_id: string; error: string }>;
+  canceled_count?: number;
+  failed_count?: number;
+}
+
+export function renderCancelResult(d: CancelResultView): void {
+  if (d.mode === 'execute') {
+    console.log(chalk.cyan.bold(`\n  Cancel — ${chalk.green(String(d.canceled_count ?? 0))} canceled, ${chalk.red(String(d.failed_count ?? 0))} failed\n`));
+    if (d.canceled?.length) console.log(chalk.gray('  canceled: ' + d.canceled.join(', ')));
+    if (d.failed?.length) {
+      for (const f of d.failed) console.log(chalk.yellow(`  not canceled: ${f.order_id} — ${f.error}`));
+    }
+    return;
+  }
+  console.log(chalk.cyan.bold(`\n  Cancel Preview — ${d.count ?? 0} order(s) would be canceled\n`));
+  const table = new Table({
+    head: [chalk.cyan.bold('Order ID'), chalk.cyan.bold('Side'), chalk.cyan.bold('Price'), chalk.cyan.bold('Remaining'), chalk.cyan.bold('Asset ID')],
+    chars: TABLE_CHARS,
+  });
+  for (const t of d.targets ?? []) {
+    table.push([t.order_id, t.side ?? '-', t.price ?? '-', t.remaining ?? '-', t.asset_id ?? '-']);
+  }
+  console.log(table.toString());
 }
 
 export function renderOrderPlace(d: OrderPlaceView): void {

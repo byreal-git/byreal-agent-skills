@@ -15,7 +15,8 @@ import {
 } from '../../../privy/execute.js';
 import { getBook } from '../api/clob.js';
 import { encodeOrder } from '../api/market.js';
-import { submitOrder, getOrderStatus } from '../api/order.js';
+import { submitOrder, getOrderStatus, getActiveOrders, cancelOrder, cancelAll } from '../api/order.js';
+import { selectCancelTargets } from '../lib/cancel-view.js';
 import { syncBalanceAllowance } from '../api/clob-account.js';
 import { buildOrderPreview } from '../lib/order-view.js';
 import { validate as validateFreshness, type PreviewSnapshot } from '../lib/freshness.js';
@@ -28,7 +29,22 @@ import {
   outputPmSuccess,
   renderOrderPreview,
   renderOrderPlace,
+  renderActiveOrders,
+  renderOrderStatusView,
+  renderCancelResult,
 } from '../formatters.js';
+
+/** Resolve the EVM write-auth (token + EOA) for L2 order reads/cancels. */
+function resolveOrderAuth(
+  evmWalletAddress: string | undefined,
+): { token: string; evmAddress: string } | { error: ByrealError } {
+  try {
+    const ctx = requireEvmPrivyContext(evmWalletAddress);
+    return { token: ctx.token, evmAddress: ctx.address };
+  } catch (e) {
+    return { error: e as ByrealError };
+  }
+}
 
 export function createOrderCommand(): Command {
   const cmd = new Command('order').description('Polymarket orders (preview + place; cancel/active are next milestone)');
@@ -274,6 +290,110 @@ export function createOrderCommand(): Command {
       if (!placeR.ok) outputPmError(output, placeR.error);
 
       outputPmSuccess(output, placeR.value, renderOrderPlace, startTime);
+    });
+
+  cmd
+    .command('active')
+    .description('List active (open) orders (L2)')
+    .option('--market <conditionId>', 'Filter by market conditionId')
+    .option('--asset-id <tokenId>', 'Filter by outcome token id')
+    .option('--evm-wallet-address <0x>', 'EVM EOA (defaults to realclaw-config evm wallet)')
+    .action(async (options, cmdObj: Command) => {
+      const { output } = cmdObj.optsWithGlobals() as GlobalOptions;
+      const startTime = Date.now();
+      const auth = resolveOrderAuth(options.evmWalletAddress);
+      if ('error' in auth) outputPmError(output, auth.error);
+      const params: Record<string, string> = {};
+      if (options.market) params.market = options.market;
+      if (options.assetId) params.asset_id = options.assetId;
+      const r = await getActiveOrders(params, auth);
+      if (!r.ok) outputPmError(output, r.error);
+      outputPmSuccess(output, { orders: r.value }, renderActiveOrders, startTime);
+    });
+
+  cmd
+    .command('status')
+    .description('Read a single order status (L2)')
+    .requiredOption('--order-id <id>', 'CLOB order id')
+    .option('--evm-wallet-address <0x>', 'EVM EOA (defaults to realclaw-config evm wallet)')
+    .action(async (options, cmdObj: Command) => {
+      const { output } = cmdObj.optsWithGlobals() as GlobalOptions;
+      const startTime = Date.now();
+      const auth = resolveOrderAuth(options.evmWalletAddress);
+      if ('error' in auth) outputPmError(output, auth.error);
+      const r = await getOrderStatus(options.orderId, auth);
+      if (!r.ok) outputPmError(output, r.error);
+      outputPmSuccess(output, r.value, renderOrderStatusView, startTime);
+    });
+
+  cmd
+    .command('cancel')
+    .description('Cancel open orders: --dry-run previews the target set; --execute cancels')
+    .option('--order-id <id>', 'Cancel a specific order id')
+    .option('--all', 'Cancel ALL open orders')
+    .option('--market <conditionId>', 'Filter target set by market')
+    .option('--asset-id <tokenId>', 'Filter target set by outcome token id')
+    .option('--evm-wallet-address <0x>', 'EVM EOA (defaults to realclaw-config evm wallet)')
+    .option('--execute', 'Cancel the orders (write)')
+    .option('--dry-run', 'Preview the orders that would be canceled; no write')
+    .action(async (options, cmdObj: Command) => {
+      const { output } = cmdObj.optsWithGlobals() as GlobalOptions;
+      const startTime = Date.now();
+      const mode = safeResolveExecutionMode(options, output);
+      const auth = resolveOrderAuth(options.evmWalletAddress);
+      if ('error' in auth) outputPmError(output, auth.error);
+
+      // Lock the target set from the current active orders.
+      const activeR = await getActiveOrders(
+        options.market ? { market: options.market } : {},
+        auth,
+      );
+      if (!activeR.ok) outputPmError(output, activeR.error);
+      const targets = selectCancelTargets(activeR.value, {
+        orderId: options.orderId,
+        market: options.market,
+        assetId: options.assetId,
+        all: options.all,
+      });
+
+      if (mode !== 'execute') {
+        if (mode === 'dry-run') printDryRunBanner();
+        outputPmSuccess(
+          output,
+          { mode, targets, count: targets.length },
+          renderCancelResult,
+          startTime,
+        );
+        return;
+      }
+
+      printPrivySignBanner();
+      if (targets.length === 0) {
+        outputPmError(output, validationError('no matching open orders to cancel', 'order-id'));
+      }
+
+      // --all → /cancel-all; otherwise delete each target id.
+      const canceled: string[] = [];
+      const failed: Array<{ order_id: string; error: string }> = [];
+      if (options.all && !options.orderId) {
+        const r = await cancelAll(auth);
+        if (!r.ok) outputPmError(output, r.error);
+        canceled.push(...(r.value.canceled ?? targets.map((t) => t.order_id)));
+        for (const [id, msg] of Object.entries(r.value.not_canceled ?? {})) failed.push({ order_id: id, error: msg });
+      } else {
+        for (const t of targets) {
+          const r = await cancelOrder(t.order_id, auth);
+          if (r.ok && !(r.value.not_canceled && r.value.not_canceled[t.order_id])) canceled.push(t.order_id);
+          else failed.push({ order_id: t.order_id, error: r.ok ? (r.value.not_canceled?.[t.order_id] ?? 'not canceled') : r.error.message });
+        }
+      }
+
+      outputPmSuccess(
+        output,
+        { mode: 'execute', canceled, failed, canceled_count: canceled.length, failed_count: failed.length },
+        renderCancelResult,
+        startTime,
+      );
     });
 
   return cmd;
