@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { pmGet } from './gateway.js';
+import { pmGet, pmWrite } from './gateway.js';
 
 describe('pmGet', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -65,5 +65,68 @@ describe('pmGet', () => {
     const r = await pmGet('gamma', '/events/1', undefined, { host: 'https://gw.test' });
     expect(r.ok).toBe(false);
     expect(!r.ok && r.error.code).toBe('SOURCE_UNAVAILABLE');
+  });
+});
+
+describe('pmWrite', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const auth = { token: 'oc_at_test', evmAddress: '0xAbC' };
+
+  function stub(status: number, body: unknown, capture?: { url?: string; init?: RequestInit }) {
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      if (capture) {
+        capture.url = url;
+        capture.init = init;
+      }
+      return new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+  }
+
+  it('injects Authorization Bearer + x-evm-address + POST; returns RAW body (no envelope unwrap)', async () => {
+    const cap: { url?: string; init?: RequestInit } = {};
+    stub(200, { success: true, orderID: 'x1', status: 'matched' }, cap);
+    const r = await pmWrite<{ orderID: string }>(
+      'POST',
+      'clob',
+      '/order',
+      { a: 1 },
+      auth,
+      { host: 'https://gw.test' },
+    );
+    expect(r.ok && r.value.orderID).toBe('x1');
+    expect(cap.url).toBe('https://gw.test/byreal/api/gw/pm/clob/order');
+    const headers = cap.init?.headers as Record<string, string>;
+    expect(cap.init?.method).toBe('POST');
+    expect(headers.Authorization).toBe('Bearer oc_at_test');
+    expect(headers['x-evm-address']).toBe('0xAbC');
+    expect(cap.init?.body).toBe(JSON.stringify({ a: 1 }));
+  });
+
+  it('maps 425 → retryable SOURCE_UNAVAILABLE', async () => {
+    stub(425, { msg: 'too early' });
+    const r = await pmWrite('POST', 'clob', '/order', {}, auth, { host: 'https://gw.test' });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error.code).toBe('SOURCE_UNAVAILABLE');
+    expect(!r.ok && r.error.retryable).toBe(true);
+  });
+
+  it('maps other 4xx (400) → non-retryable API_ERROR', async () => {
+    stub(400, 'insufficient balance');
+    const r = await pmWrite('POST', 'clob', '/order', {}, auth, { host: 'https://gw.test' });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error.code).toBe('API_ERROR');
+    expect(!r.ok && r.error.retryable).toBe(false);
+  });
+
+  it('maps 5xx → retryable SOURCE_UNAVAILABLE', async () => {
+    stub(500, 'boom');
+    const r = await pmWrite('DELETE', 'clob', '/order', { orderID: 'o1' }, auth, { host: 'https://gw.test' });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.error.code).toBe('SOURCE_UNAVAILABLE');
+    expect(!r.ok && r.error.retryable).toBe(true);
   });
 });

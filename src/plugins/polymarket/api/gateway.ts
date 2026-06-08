@@ -95,3 +95,80 @@ export async function pmGet<T>(
     return err(sourceUnavailableError(`invalid JSON from GET ${url}`, true));
   }
 }
+
+/** Auth material for gateway write requests (CLOB writes + /v1 business writes). */
+export interface PmWriteAuth {
+  /** Agent token (oc_at_…) sent as `Authorization: Bearer`. */
+  token: string;
+  /** EVM EOA sent as `x-evm-address`. */
+  evmAddress: string;
+}
+
+/**
+ * Authenticated gateway write (POST/DELETE). Injects `Authorization: Bearer
+ * <agent-token>` + `x-evm-address: <EOA>` (the gateway resolves L2 creds and
+ * injects POLY_* HMAC; see docs/02 §B / docs/08).
+ *
+ * Returns the RAW parsed JSON as T — mirroring pmGet. `/clob/*` is a Polymarket
+ * passthrough with NO business envelope (raw OrderResponse / {balance}), while
+ * `/v1/*` IS enveloped; so envelope unwrap belongs in the callers (api/market.ts
+ * uses PmEnvelope + unwrapBusiness; api/order.ts + api/clob-account.ts use raw).
+ *
+ * HTTP mapping: 425 (too-early) + 5xx → retryable SOURCE_UNAVAILABLE; other
+ * non-2xx → API_ERROR (not retryable). Never throws.
+ */
+export async function pmWrite<T>(
+  method: 'POST' | 'DELETE',
+  base: PmBase,
+  path: string,
+  body: unknown | undefined,
+  auth: PmWriteAuth,
+  opts?: PmGetOptions,
+): Promise<Result<T, ByrealError>> {
+  const url = buildUrl(base, path, undefined, opts?.host);
+
+  if (process.env.DEBUG) {
+    console.error(`[DEBUG] PM ${method} ${url}`);
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: {
+        'User-Agent': 'byreal-cli',
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${auth.token}`,
+        'x-evm-address': auth.evmAddress,
+        ...opts?.headers,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(DEFAULTS.REQUEST_TIMEOUT_MS),
+    });
+  } catch (e: unknown) {
+    if (e instanceof DOMException && e.name === 'TimeoutError') {
+      return err(sourceUnavailableError(`request timed out: ${method} ${url}`, true));
+    }
+    const msg = (e as Error)?.message ?? 'network error';
+    const cause = (e as Error)?.cause;
+    const detail = cause instanceof Error ? ` (${cause.name}: ${cause.message})` : '';
+    return err(sourceUnavailableError(`${msg}${detail}: ${method} ${url}`, true));
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    // 425 (too-early, CLOB warmup) + 5xx are retryable; other 4xx are not.
+    if (res.status === 425 || res.status >= 500) {
+      return err(sourceUnavailableError(`HTTP ${res.status}: ${text || url}`, true));
+    }
+    return err(apiError(`PM gateway ${res.status}: ${text || url}`, res.status));
+  }
+
+  try {
+    const json = (await res.json()) as T;
+    return ok(json);
+  } catch {
+    return err(sourceUnavailableError(`invalid JSON from ${method} ${url}`, true));
+  }
+}
