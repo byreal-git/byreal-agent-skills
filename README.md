@@ -153,6 +153,8 @@ If Privy is not configured, `--execute` fails fast with `PRIVY_NOT_CONFIGURED` a
 | `polymarket portfolio read` | Polymarket: positions / value / pnl (public)     |
 | `polymarket funding balance`| Polymarket: available balance (public)           |
 | `polymarket order preview`  | Polymarket: order preview (book-sweep + slippage + freshness) |
+| `polymarket account readiness` | Polymarket: pre-trade gate (proxy READY + balance + market, L2) |
+| `polymarket order place`    | Polymarket: place market (FOK) order (re-quote → sign → submit → poll) |
 | `polymarket funding deposit-preview`  | Polymarket: deposit preview (Solana USDC → Polygon) |
 | `polymarket funding withdraw-preview` | Polymarket: withdraw preview (Polygon → Solana USDC) |
 | `polymarket funding status`           | Polymarket: deposit/withdraw transfer status |
