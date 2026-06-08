@@ -44,11 +44,10 @@ export interface PlaceDeps {
 export interface PlaceParams {
   walletAddress: string;
   tokenId: string;
-  conditionId?: string;
   side: OrderSide;
   signedPrice: string;
-  /** Shares (BUY market: derived from amount/price by the caller). */
-  size: string;
+  /** BUY = USD to spend; SELL = shares to sell (encode is amount-based). */
+  amount: string;
   negRisk: boolean;
   pollBudgetMs?: number; // default 20000
   pollIntervalMs?: number; // default 1500
@@ -76,10 +75,9 @@ export async function runOrderPlace(
     toEncodeReq({
       walletAddress: p.walletAddress,
       tokenId: p.tokenId,
-      conditionId: p.conditionId,
       side: p.side,
       signedPrice: p.signedPrice,
-      size: p.size,
+      amount: p.amount,
       negRisk: p.negRisk,
     }),
   );
@@ -136,7 +134,7 @@ export async function runOrderPlace(
     outcome: 'pending',
     side: p.side,
     signed_price: p.signedPrice,
-    size: p.size,
+    amount: p.amount,
     taking_amount: resp.takingAmount,
     making_amount: resp.makingAmount,
     transaction_hashes: resp.transactionsHashes,

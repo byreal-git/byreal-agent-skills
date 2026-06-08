@@ -7,10 +7,9 @@ import type { OpenOrder, OrderResponse } from './types.js';
 const baseParams: PlaceParams = {
   walletAddress: '0xE',
   tokenId: 'tok',
-  conditionId: '0xcond',
   side: 'BUY',
   signedPrice: '0.66',
-  size: '7',
+  amount: '5',
   negRisk: false,
   pollBudgetMs: 20_000,
   pollIntervalMs: 1_500,
@@ -22,7 +21,7 @@ function makeDeps(over: Partial<PlaceDeps> & { polls?: Array<ReturnType<typeof o
   const polls = over.polls ?? [ok<OpenOrder>({ id: 'o1', status: 'matched' })];
   let pi = 0;
   return {
-    encode: over.encode ?? (async () => ok({ eip712: {} as never, signatureSuffix: 'aa', order: { maker: '0xm', owner: '0xo' } })),
+    encode: over.encode ?? (async () => ok({ eip712: {} as never, signatureSuffix: 'aa', maker: '0xm', signer: '0xm', owner: '0xo', side: 'BUY' })),
     sign: over.sign ?? (async () => ok('0x' + 'bb'.repeat(65))),
     submit: over.submit ?? (async () => ok<OrderResponse>({ success: true, orderID: 'o1', status: 'live' })),
     syncBalance: over.syncBalance ?? (async () => {}),

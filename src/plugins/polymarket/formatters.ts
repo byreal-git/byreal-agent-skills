@@ -265,7 +265,9 @@ export function renderOrderPlace(d: OrderPlaceView): void {
     table.push([chalk.gray('Outcome'), c(d.outcome)]);
   }
   if (d.status != null) table.push([chalk.gray('Status'), String(d.status)]);
-  if (d.amount !== undefined) table.push([chalk.gray('Amount (USD)'), d.amount]);
+  if (d.amount !== undefined) {
+    table.push([chalk.gray(d.side === 'SELL' ? 'Amount (shares)' : 'Amount (USD)'), d.amount]);
+  }
   if (d.size !== undefined) table.push([chalk.gray('Size (shares)'), d.size]);
   if (d.signed_price !== undefined) table.push([chalk.gray('Signed Price'), String(d.signed_price)]);
   if (d.book_worst_price !== undefined) table.push([chalk.gray('Book Worst Price'), String(d.book_worst_price)]);

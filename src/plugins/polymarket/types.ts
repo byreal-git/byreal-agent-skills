@@ -21,24 +21,25 @@ export type OrderTypeStr = 'FOK' | 'GTC' | 'GTD';
 
 /**
  * Request body for POST /market/order/encode (OrderEncodeReq).
- * Exact field names confirmed in the live run (docs/09 §6); the param→request
- * mapping is isolated in lib/order-build.toEncodeReq so a rename touches one place.
+ * Confirmed against the live prod endpoint (docs/09 §1.1, fixture
+ * __fixtures__/order-encode-binary.json): both sides use `amount`
+ * (BUY = USD to spend, SELL = shares to sell); `size`/`conditionId` are NOT
+ * fields. The param→request mapping is isolated in lib/order-build.toEncodeReq.
  */
 export interface OrderEncodeReq {
   walletAddress: string;
   tokenId: string;
-  conditionId?: string;
   side: OrderSide;
   price: string;
-  size: string;
+  amount: string; // BUY = USD; SELL = shares
   orderType: OrderTypeStr;
   negRisk: boolean;
 }
 
 /**
- * The order fields the backend computed (maker=signer=proxy, taker=0x0,
- * signatureType=3 POLY_1271, makerAmount/takerAmount fixed-point). Index
- * signature passes through any unknown extras untouched.
+ * The order fields submitted to /clob/order (extracted flat from the DTO, minus
+ * encode-meta + owner, plus signature). maker=signer=proxy, taker=0x0,
+ * signatureType=3 (POLY_1271); v2-with-builder shape (timestamp/metadata/builder).
  */
 export interface EncodedOrder {
   salt?: string;
@@ -49,23 +50,29 @@ export interface EncodedOrder {
   makerAmount?: string;
   takerAmount?: string;
   side?: string | number;
-  expiration?: string;
-  nonce?: string;
-  feeRateBps?: string;
   signatureType?: number;
-  owner?: string;
+  timestamp?: string;
+  expiration?: string;
+  metadata?: string;
+  builder?: string;
   signature?: string;
   [k: string]: unknown;
 }
 
-/** Response of POST /market/order/encode (OrderEncodeDTO). */
+/**
+ * Response of POST /market/order/encode (OrderEncodeDTO). The shape is FLAT —
+ * the order fields (salt/maker/signer/taker/tokenId/makerAmount/takerAmount/
+ * side/signatureType/timestamp/expiration/metadata/builder/owner/orderType) sit
+ * at the TOP LEVEL alongside the encode meta below; accessed via the index
+ * signature and extracted by lib/order-build.extractOrder.
+ */
 export interface OrderEncodeDTO {
   eip712: Eip712TypedData;
   orderId?: string;
   appDomainSep?: string;
   contentsHash?: string;
+  /** ERC-7739 suffix, NOT 0x-prefixed. */
   signatureSuffix: string;
-  order: EncodedOrder;
   [k: string]: unknown;
 }
 
@@ -127,7 +134,8 @@ export interface OrderPlaceResult {
   outcome: 'settled' | 'pending';
   side: OrderSide;
   signed_price: string;
-  size: string;
+  /** User input: BUY = USD spent, SELL = shares sold. */
+  amount: string;
   taking_amount?: string;
   making_amount?: string;
   transaction_hashes?: string[];

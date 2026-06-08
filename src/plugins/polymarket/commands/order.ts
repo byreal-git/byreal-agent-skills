@@ -1,5 +1,4 @@
 import { Command } from 'commander';
-import Decimal from 'decimal.js';
 import type { GlobalOptions } from '../../../core/types.js';
 import {
   validationError,
@@ -20,7 +19,7 @@ import { submitOrder, getOrderStatus } from '../api/order.js';
 import { syncBalanceAllowance } from '../api/clob-account.js';
 import { buildOrderPreview } from '../lib/order-view.js';
 import { validate as validateFreshness, type PreviewSnapshot } from '../lib/freshness.js';
-import { stripOwner, toEncodeReq } from '../lib/order-build.js';
+import { extractOrder, toEncodeReq } from '../lib/order-build.js';
 import { gatherReadiness } from '../readiness-gather.js';
 import { runOrderPlace, type PlaceDeps } from '../order-exec.js';
 import { getPmConfig } from '../config.js';
@@ -158,13 +157,9 @@ export function createOrderCommand(): Command {
         if (!v.ok) outputPmError(output, previewExpiredError(v.reason));
       }
 
-      // size (shares) for the order: SELL = user shares; BUY = amount / signedPrice
-      // (T11 confirms whether market BUY encode wants shares or USD amount).
-      const sizeShares =
-        side === 'buy'
-          ? new Decimal(options.amount).div(signedPrice || '1').toDecimalPlaces(2, Decimal.ROUND_DOWN).toString()
-          : String(options.size);
-      const needAmount = side === 'buy' ? String(options.amount) : String(options.size);
+      // encode is amount-based (T11 confirmed): BUY amount = USD, SELL amount = shares.
+      const orderAmount = side === 'buy' ? String(options.amount) : String(options.size);
+      const needAmount = orderAmount;
 
       // ---- dry-run: signed price + best-effort readiness, no side effects ----
       if (mode === 'dry-run') {
@@ -185,8 +180,7 @@ export function createOrderCommand(): Command {
           mode: 'dry-run',
           side: sideUC,
           signed_price: signedPrice,
-          size: sizeShares,
-          amount: side === 'buy' ? String(options.amount) : undefined,
+          amount: orderAmount,
           book_worst_price: freshWorst,
           avg_price: snap.avg_price,
           fully_fills: previewR.value.fully_fills,
@@ -213,10 +207,9 @@ export function createOrderCommand(): Command {
           toEncodeReq({
             walletAddress: ctx.address,
             tokenId: options.tokenId,
-            conditionId: options.conditionId,
             side: sideUC,
             signedPrice,
-            size: sizeShares,
+            amount: orderAmount,
             negRisk: snap.neg_risk,
           }),
           auth,
@@ -227,7 +220,7 @@ export function createOrderCommand(): Command {
           {
             typedDataToSign: encR.value.eip712,
             signatureSuffix: encR.value.signatureSuffix,
-            order: stripOwner(encR.value.order),
+            order: extractOrder(encR.value),
             orderType: 'FOK',
             submitHint:
               'Polymarket orders sign via Privy (POLY_1271); sign eip712, assemble "0x"+innerSig+suffix, then POST /clob/order. Use --execute for the full flow.',
@@ -271,10 +264,9 @@ export function createOrderCommand(): Command {
         {
           walletAddress: ctx.address,
           tokenId: options.tokenId,
-          conditionId: options.conditionId,
           side: sideUC,
           signedPrice,
-          size: sizeShares,
+          amount: orderAmount,
           negRisk: snap.neg_risk,
         },
         deps,

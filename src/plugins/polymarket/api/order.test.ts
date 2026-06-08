@@ -18,14 +18,14 @@ function stub(status: number, body: unknown, capture?: { url?: string }) {
 describe('api wrappers', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('encodeOrder unwraps the /v1 business envelope → OrderEncodeDTO', async () => {
+  it('encodeOrder unwraps the /v1 business envelope → flat OrderEncodeDTO', async () => {
     stub(200, {
       success: true,
       ret_code: 0,
-      data: { signatureSuffix: 'aa', order: { maker: '0xm' }, eip712: {} },
+      data: { signatureSuffix: 'aa', maker: '0xm', signer: '0xm', side: 'BUY', eip712: {} },
     });
     const r = await encodeOrder(
-      { walletAddress: '0xE', tokenId: 't', side: 'BUY', price: '0.5', size: '5', orderType: 'FOK', negRisk: false },
+      { walletAddress: '0xE', tokenId: 't', side: 'BUY', price: '0.5', amount: '5', orderType: 'FOK', negRisk: false },
       auth,
     );
     expect(r.ok).toBe(true);
@@ -35,7 +35,7 @@ describe('api wrappers', () => {
   it('encodeOrder surfaces a /v1 envelope error (ret_code != 0)', async () => {
     stub(200, { success: false, ret_code: 500, ret_msg: 'Internal Server Error', data: null });
     const r = await encodeOrder(
-      { walletAddress: '0xE', tokenId: 't', side: 'BUY', price: '0.5', size: '5', orderType: 'FOK', negRisk: false },
+      { walletAddress: '0xE', tokenId: 't', side: 'BUY', price: '0.5', amount: '5', orderType: 'FOK', negRisk: false },
       auth,
     );
     expect(r.ok).toBe(false);

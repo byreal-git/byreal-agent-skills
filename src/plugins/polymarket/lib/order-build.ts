@@ -28,20 +28,38 @@ export function assembleSignature(innerSig: string, signatureSuffix: string): st
   return '0x' + strip0x(innerSig) + strip0x(signatureSuffix);
 }
 
-/** Return a copy of the order without `owner`. */
-export function stripOwner(order: EncodedOrder): EncodedOrder {
-  const { owner: _owner, ...rest } = order;
-  return rest;
+/** Encode-meta + owner keys that are NOT part of the submitted order. */
+const NON_ORDER_KEYS = new Set([
+  'eip712',
+  'orderId',
+  'appDomainSep',
+  'contentsHash',
+  'signatureSuffix',
+  'orderType',
+  'owner', // gateway overwrites owner→apiKey; the frontend omits it too
+]);
+
+/**
+ * Extract the submit `order` from the FLAT encode DTO: keep the order fields
+ * (salt/maker/signer/taker/tokenId/makerAmount/takerAmount/side/signatureType/
+ * timestamp/expiration/metadata/builder), drop encode-meta + owner.
+ */
+export function extractOrder(dto: OrderEncodeDTO): EncodedOrder {
+  const order: EncodedOrder = {};
+  for (const [k, v] of Object.entries(dto)) {
+    if (!NON_ORDER_KEYS.has(k)) order[k] = v;
+  }
+  return order;
 }
 
 export interface EncodeParams {
   walletAddress: string;
   tokenId: string;
-  conditionId?: string;
   side: OrderSide;
   /** Signed worst price (market = re-quote worst ± Δ, tick-aligned). */
   signedPrice: string;
-  size: string;
+  /** BUY = USD to spend; SELL = shares to sell. */
+  amount: string;
   negRisk: boolean;
   /** Defaults to FOK (market). */
   orderType?: OrderTypeStr;
@@ -51,22 +69,21 @@ export function toEncodeReq(p: EncodeParams): OrderEncodeReq {
   return {
     walletAddress: p.walletAddress,
     tokenId: p.tokenId,
-    conditionId: p.conditionId,
     side: p.side,
     price: p.signedPrice,
-    size: p.size,
+    amount: p.amount,
     orderType: p.orderType ?? 'FOK',
     negRisk: p.negRisk,
   };
 }
 
-/** Build the POST /clob/order body: owner stripped, assembled signature on the order. */
+/** Build the POST /clob/order body from the flat DTO: order (owner stripped) + assembled signature. */
 export function toSubmitBody(
   dto: OrderEncodeDTO,
   innerSig: string,
   orderType: OrderTypeStr,
 ): SubmitOrderBody {
-  const order = stripOwner(dto.order);
+  const order = extractOrder(dto);
   order.signature = assembleSignature(innerSig, dto.signatureSuffix);
   return { order, orderType, postOnly: false };
 }
