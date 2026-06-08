@@ -1,0 +1,40 @@
+src/plugins/polymarket/types.ts
+  4207dacb8c9c9355 98,102-105,107-117
+src/plugins/polymarket/lib/cancel-view.test.ts
+  4207dacb8c9c9355 1-35
+src/plugins/polymarket/formatters.ts
+  4207dacb8c9c9355 21-22,259-332
+src/plugins/polymarket/index.ts
+  4207dacb8c9c9355 121-161
+src/plugins/polymarket/api/order.ts
+  4207dacb8c9c9355 9-10,29-51
+src/plugins/polymarket/commands/order.ts
+  4207dacb8c9c9355 18-19,32-34,37-48,295-398
+src/plugins/polymarket/lib/cancel-view.ts
+  4207dacb8c9c9355 1-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.9+daa2e24",
+  "base_commit_sha": "c93dd940981142eeaafe06095c9878b9ba5a9dc8",
+  "prompts": {
+    "4207dacb8c9c9355": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f89ffc5f-800f-4908-9d03-be946e1f1dbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 367,
+      "total_deletions": 6,
+      "accepted_lines": 367,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
