@@ -6,7 +6,7 @@
 
 import type { Result } from '../../../core/types.js';
 import type { ByrealError } from '../../../core/errors.js';
-import { pmGet, type PmGetOptions, type PmQueryParams } from './gateway.js';
+import { pmGet, pmWrite, type PmGetOptions, type PmQueryParams, type PmWriteAuth } from './gateway.js';
 import { unwrapBusiness, type PmEnvelope } from './envelope.js';
 
 export interface BridgeSupportedAsset {
@@ -79,6 +79,34 @@ export async function getOrders(
   opts?: PmGetOptions,
 ): Promise<Result<BridgeOrder[], ByrealError>> {
   const r = await pmGet<PmEnvelope<BridgeOrder[]>>('v1', '/bridge/orders', params, opts);
+  if (!r.ok) return r;
+  return unwrapBusiness(r.value);
+}
+
+/**
+ * POST /bridge/deposit/submit — body fields confirmed against the live flow
+ * (the backend validates + broadcasts the signed Solana tx; CLI never broadcasts).
+ * /v1 business endpoint → enveloped. Exact field set may be trimmed after the
+ * first live submit (failed submits don't move funds).
+ */
+export interface BridgeDepositSubmitReq {
+  quoteId: string;
+  signedTransaction: string; // base64 signed Solana V0 tx
+  fromChainId: string;
+  fromTokenAddress: string;
+  toChainId: string;
+  toTokenAddress: string;
+  amount: string;
+  recipientAddress: string; // proxy wallet (Polygon)
+  depositAddress: string; // Solana intermediary
+  [k: string]: unknown;
+}
+
+export async function submitDeposit(
+  body: BridgeDepositSubmitReq,
+  auth: PmWriteAuth,
+): Promise<Result<BridgeOrder, ByrealError>> {
+  const r = await pmWrite<PmEnvelope<BridgeOrder>>('POST', 'v1', '/bridge/deposit/submit', body, auth);
   if (!r.ok) return r;
   return unwrapBusiness(r.value);
 }

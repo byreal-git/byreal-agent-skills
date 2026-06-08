@@ -306,6 +306,46 @@ export function renderAccountReadiness(v: ReadinessVerdict): void {
   if (v.blocking_reason) console.log(chalk.yellow(`\n  ⚠ ${v.blocking_reason}`));
 }
 
+/** Loose view for deposit dry-run / execute results. */
+export interface DepositResultView {
+  mode?: string;
+  outcome?: string;
+  status?: string | null;
+  terminal?: boolean;
+  success?: boolean;
+  amount?: string;
+  to_proxy?: string;
+  deposit_address?: string;
+  quote_id?: string | null;
+  to_amount?: string | null;
+  min_deposit?: string;
+  order_id?: string | null;
+  tx_hash?: string | null;
+}
+
+export function renderDepositResult(d: DepositResultView): void {
+  const heading = d.mode === 'dry-run' ? 'Deposit (dry-run)' : 'Deposit';
+  console.log(chalk.cyan.bold(`\n  ${heading} — Solana USDC → Polymarket\n`));
+  const table = new Table({ chars: TABLE_CHARS });
+  if (d.outcome) {
+    const c = d.outcome === 'completed' ? chalk.green : d.outcome === 'failed' ? chalk.red : chalk.yellow;
+    table.push([chalk.gray('Outcome'), c(d.outcome)]);
+  }
+  if (d.order_id) table.push([chalk.gray('Order ID'), d.order_id]);
+  if (d.status != null) table.push([chalk.gray('Status'), String(d.status)]);
+  if (d.amount !== undefined) table.push([chalk.gray('Amount (USDC)'), d.amount]);
+  if (d.to_amount != null) table.push([chalk.gray('To Amount'), String(d.to_amount)]);
+  if (d.to_proxy) table.push([chalk.gray('Proxy Wallet'), d.to_proxy]);
+  if (d.deposit_address) table.push([chalk.gray('Deposit Address'), d.deposit_address]);
+  if (d.quote_id != null) table.push([chalk.gray('Quote ID'), String(d.quote_id)]);
+  if (d.min_deposit !== undefined) table.push([chalk.gray('Min Deposit'), d.min_deposit]);
+  console.log(table.toString());
+  if (d.tx_hash) console.log(chalk.gray(`\n  tx: ${d.tx_hash}`)); // on-chain id, full (CLAUDE.md)
+  if (d.outcome === 'pending') {
+    console.error(chalk.gray('\n  [pending] bridge still advancing; re-check via `funding status --type deposit`.'));
+  }
+}
+
 export function renderFundingBalance(b: FundingBalance): void {
   console.log(chalk.cyan.bold('\n  Polymarket Balance\n'));
   const table = new Table({ chars: TABLE_CHARS });

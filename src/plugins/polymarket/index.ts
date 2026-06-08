@@ -157,6 +157,21 @@ const capabilities: Capability[] = [
     ],
   },
   {
+    id: 'pm.funding.deposit.execute',
+    name: 'Polymarket Deposit Execute',
+    description: 'Deposit Solana USDC → Polymarket proxy (build SPL transfer → Privy sign → bridge submit → poll)',
+    category: 'execute',
+    auth_required: true,
+    command: 'byreal-cli polymarket funding deposit --amount <usdc> --execute',
+    params: [
+      { name: 'amount', type: 'string', required: true, description: 'Amount in USDC' },
+      { name: 'evm-wallet-address', type: 'string', required: false, description: 'EVM EOA (proxy wallet target)' },
+      { name: 'wallet-address', type: 'string', required: false, description: 'Solana source wallet (defaults to realclaw-config solana wallet)' },
+      { name: 'execute', type: 'boolean', required: false, description: 'Sign + submit (real transfer); default emits unsigned tx' },
+      { name: 'dry-run', type: 'boolean', required: false, description: 'Preview quote + deposit address only' },
+    ],
+  },
+  {
     id: 'pm.funding.withdraw.preview',
     name: 'Polymarket Withdraw Preview',
     description: 'Preview a Polymarket → Solana USDC withdraw (read-only; submit is Phase B)',
