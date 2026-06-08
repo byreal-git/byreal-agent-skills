@@ -1,0 +1,36 @@
+src/plugins/polymarket/index.ts
+  4207dacb8c9c9355 19,100-115,179
+src/plugins/polymarket/readiness-gather.ts
+  4207dacb8c9c9355 1-74
+src/plugins/polymarket/commands/account.ts
+  4207dacb8c9c9355 1-58
+src/plugins/polymarket/readiness-gather.test.ts
+  4207dacb8c9c9355 1-71
+src/plugins/polymarket/formatters.ts
+  4207dacb8c9c9355 21,238-253
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.9+daa2e24",
+  "base_commit_sha": "00250d0b3187fa0b5406d6e163f80ddd2c407a38",
+  "prompts": {
+    "4207dacb8c9c9355": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f89ffc5f-800f-4908-9d03-be946e1f1dbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 239,
+      "total_deletions": 1,
+      "accepted_lines": 238,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
