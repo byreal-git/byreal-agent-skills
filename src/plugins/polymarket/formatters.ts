@@ -209,11 +209,26 @@ export function renderWithdrawPreview(p: WithdrawPreview): void {
 export function renderTransferStatus(s: TransferStatus): void {
   console.log(chalk.cyan.bold(`\n  Transfer Status — ${s.type} (${s.count})\n`));
   const table = new Table({
-    head: [chalk.cyan.bold('Order ID'), chalk.cyan.bold('Type'), chalk.cyan.bold('Status'), chalk.cyan.bold('From'), chalk.cyan.bold('To')],
+    head: [
+      chalk.cyan.bold('Order ID'),
+      chalk.cyan.bold('Type'),
+      chalk.cyan.bold('Status'),
+      chalk.cyan.bold('Amount'),
+      chalk.cyan.bold('Created'),
+      chalk.cyan.bold('Tx Hash'),
+    ],
     chars: TABLE_CHARS,
   });
   for (const o of s.orders) {
-    table.push([o.order_id ?? '-', o.type ?? '-', o.status ?? '-', o.from_amount ?? '-', o.to_amount ?? '-']);
+    // Tx hash is an on-chain identifier — shown in full (never truncated; CLAUDE.md).
+    table.push([
+      o.order_id ?? '-',
+      o.type ?? '-',
+      o.status ?? '-',
+      o.amount ?? '-',
+      o.created_at ?? '-',
+      o.tx_hash ?? '-',
+    ]);
   }
   console.log(table.toString());
   console.error(chalk.gray(`\n  ${s.note}`));

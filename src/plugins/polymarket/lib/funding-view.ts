@@ -101,9 +101,14 @@ export interface TransferStatusItem {
   order_id: string | null;
   type: string | null;
   status: string | null;
-  from_amount: string | null;
-  to_amount: string | null;
-  create_time: number | null;
+  bridge_status: string | null;
+  /** Bridge order amount (the list view returns a single `amount`, not from/to). */
+  amount: string | null;
+  from_chain_id: string | null;
+  to_chain_id: string | null;
+  tx_hash: string | null;
+  created_at: string | null; // ISO 8601
+  updated_at: string | null; // ISO 8601
 }
 
 const TERMINAL = new Set(['COMPLETED', 'FAILED']);
@@ -118,12 +123,16 @@ export interface TransferStatus {
 
 export function buildTransferStatus(type: string, orders: BridgeOrder[]): TransferStatus {
   const items: TransferStatusItem[] = orders.map((o) => ({
-    order_id: (o.orderId as string) ?? null,
-    type: (o.type as string) ?? null,
-    status: (o.status as string) ?? null,
-    from_amount: (o.fromAmount as string) ?? null,
-    to_amount: (o.toAmount as string) ?? null,
-    create_time: (o.createTime as number) ?? null,
+    order_id: o.orderId ?? null,
+    type: o.type ?? null,
+    status: o.status ?? null,
+    bridge_status: o.bridgeStatus ?? null,
+    amount: o.amount ?? null,
+    from_chain_id: o.fromChainId ?? null,
+    to_chain_id: o.toChainId ?? null,
+    tx_hash: o.txHash ?? null,
+    created_at: o.createdAt ?? null,
+    updated_at: o.updatedAt ?? null,
   }));
   const allTerminal = items.length > 0 && items.every((i) => TERMINAL.has((i.status ?? '').toUpperCase()));
   return {

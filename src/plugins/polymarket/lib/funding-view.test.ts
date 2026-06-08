@@ -74,7 +74,20 @@ describe('buildTransferStatus', () => {
     const s = buildTransferStatus('deposit', orders);
     expect(s.count).toBe(2);
     expect(s.orders[0].status).toBe('COMPLETED');
-    expect(s.all_terminal).toBe(false); // ord_dep_2 PROCESSING
+    expect(s.all_terminal).toBe(false); // 2nd order PROCESSING
+  });
+
+  it('maps the REAL /bridge/orders field names (amount/createdAt/txHash, not from/to/createTime)', () => {
+    const s = buildTransferStatus('deposit', orders);
+    const o = s.orders[0];
+    expect(o.order_id).toBe('44956f00-11a3-4e1a-b581-86fa93e1a736');
+    expect(o.amount).toBe('10.000000');
+    expect(o.bridge_status).toBe('COMPLETED');
+    expect(o.tx_hash).toBe(
+      'SHqKW5JpxrF96bQeXe66mosxBYQuqXQK2yMRqWNrSf17mLYXChwKzvk2KFv2CirT9yNAvNakzJRiQWshg8fja2Q',
+    );
+    expect(o.created_at).toBe('2026-06-05T03:30:29.583Z');
+    expect(o.from_chain_id).toBe('1151111081099710');
   });
 
   it('all_terminal=true when all COMPLETED/FAILED', () => {

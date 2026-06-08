@@ -1,8 +1,34 @@
 {
   "success": true,
+  "version": "v2.0.0",
+  "timestamp": 1780913997712,
   "ret_code": 0,
+  "ret_msg": null,
+  "args": null,
   "data": [
-    { "orderId": "ord_dep_1", "type": "deposit", "status": "COMPLETED", "fromAmount": "20", "toAmount": "19.94", "createTime": 1780000000000 },
-    { "orderId": "ord_dep_2", "type": "deposit", "status": "PROCESSING", "fromAmount": "50", "createTime": 1780000100000 }
+    {
+      "orderId": "44956f00-11a3-4e1a-b581-86fa93e1a736",
+      "type": "deposit",
+      "status": "COMPLETED",
+      "bridgeStatus": "COMPLETED",
+      "amount": "10.000000",
+      "fromChainId": "1151111081099710",
+      "toChainId": null,
+      "txHash": "SHqKW5JpxrF96bQeXe66mosxBYQuqXQK2yMRqWNrSf17mLYXChwKzvk2KFv2CirT9yNAvNakzJRiQWshg8fja2Q",
+      "createdAt": "2026-06-05T03:30:29.583Z",
+      "updatedAt": "2026-06-05T03:31:51.257Z"
+    },
+    {
+      "orderId": "00000000-0000-0000-0000-000000000002",
+      "type": "deposit",
+      "status": "PROCESSING",
+      "bridgeStatus": "PROCESSING",
+      "amount": "50.000000",
+      "fromChainId": "1151111081099710",
+      "toChainId": null,
+      "txHash": "2PendingDepositSignature222222222222222222222222222222222222222222222222222222222222222222",
+      "createdAt": "2026-06-05T04:00:00.000Z",
+      "updatedAt": "2026-06-05T04:00:05.000Z"
+    }
   ]
 }

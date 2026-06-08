@@ -35,6 +35,16 @@ export interface BridgeOrder {
   orderId?: string;
   status?: string;
   type?: string;
+  // Real /bridge/orders fields (verified against a live COMPLETED deposit order):
+  // a single `amount` (no from/to split in the list view), ISO `createdAt`/`updatedAt`,
+  // `txHash`, `bridgeStatus`, and chain ids — NOT fromAmount/toAmount/createTime.
+  bridgeStatus?: string;
+  amount?: string;
+  fromChainId?: string;
+  toChainId?: string | null;
+  txHash?: string;
+  createdAt?: string;
+  updatedAt?: string;
   [k: string]: unknown;
 }
 
