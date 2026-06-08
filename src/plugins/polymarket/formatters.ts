@@ -18,6 +18,7 @@ import type { Portfolio, FundingBalance } from './lib/portfolio-view.js';
 import type { EventCandidate } from './lib/whitelist.js';
 import type { OrderPreview } from './lib/order-view.js';
 import type { DepositPreview, WithdrawPreview, TransferStatus } from './lib/funding-view.js';
+import type { ReadinessVerdict } from './types.js';
 
 /** Validate an EVM (Polygon) EOA address shape. Never calls new PublicKey(). */
 export function isEvmAddress(addr: string): boolean {
@@ -232,6 +233,22 @@ export function renderTransferStatus(s: TransferStatus): void {
   }
   console.log(table.toString());
   console.error(chalk.gray(`\n  ${s.note}`));
+}
+
+export function renderAccountReadiness(v: ReadinessVerdict): void {
+  console.log(
+    chalk.cyan.bold(`\n  Account Readiness — ${v.ready ? chalk.green('READY') : chalk.red('NOT READY')}\n`),
+  );
+  const table = new Table({ chars: TABLE_CHARS });
+  const mark = (ok: boolean) => (ok ? chalk.green('✓') : chalk.red('✗'));
+  table.push(
+    [chalk.gray('Proxy Wallet'), v.proxy_address ?? '-'],
+    [chalk.gray('Proxy READY'), `${mark(v.checks.proxy_ready.ok)} ${v.checks.proxy_ready.detail}`],
+    [chalk.gray('Balance'), `${mark(v.checks.balance.ok)} ${v.checks.balance.detail}`],
+    [chalk.gray('Market'), `${mark(v.checks.market.ok)} ${v.checks.market.detail}`],
+  );
+  console.log(table.toString());
+  if (v.blocking_reason) console.log(chalk.yellow(`\n  ⚠ ${v.blocking_reason}`));
 }
 
 export function renderFundingBalance(b: FundingBalance): void {

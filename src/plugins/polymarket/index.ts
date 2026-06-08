@@ -16,6 +16,7 @@ import { createEventCommand } from './commands/event.js';
 import { createPortfolioCommand } from './commands/portfolio.js';
 import { createFundingCommand } from './commands/funding.js';
 import { createOrderCommand } from './commands/order.js';
+import { createAccountCommand } from './commands/account.js';
 
 const capabilities: Capability[] = [
   {
@@ -97,6 +98,22 @@ const capabilities: Capability[] = [
     ],
   },
   {
+    id: 'pm.account.readiness',
+    name: 'Polymarket Account Readiness',
+    description: 'Pre-trade gate: proxy READY + balance (BUY/SELL) + market state (L2)',
+    category: 'query',
+    auth_required: true,
+    command: 'byreal-cli polymarket account readiness --token-id <id> --side <buy|sell>',
+    params: [
+      { name: 'token-id', type: 'string', required: true, description: 'CLOB outcome token id (asset_id)' },
+      { name: 'side', type: 'string', required: true, description: 'buy | sell', enum: ['buy', 'sell'] },
+      { name: 'amount', type: 'string', required: false, description: 'BUY: USD needed (COLLATERAL)' },
+      { name: 'size', type: 'string', required: false, description: 'SELL: shares needed (CONDITIONAL)' },
+      { name: 'condition-id', type: 'string', required: false, description: 'Market conditionId (enables market-state checks)' },
+      { name: 'evm-wallet-address', type: 'string', required: false, description: 'EVM EOA (defaults to realclaw-config evm wallet)' },
+    ],
+  },
+  {
     id: 'pm.funding.balance',
     name: 'Polymarket Funding Balance',
     description: 'Read Polymarket available balance (public parts)',
@@ -159,6 +176,7 @@ export const polymarketPlugin: DefiPlugin = {
     cmd.addCommand(createPortfolioCommand());
     cmd.addCommand(createFundingCommand());
     cmd.addCommand(createOrderCommand());
+    cmd.addCommand(createAccountCommand());
     return cmd;
   },
   capabilities,
