@@ -1,0 +1,28 @@
+src/core/constants.ts
+  49a38b4385a5350f 163-169,171
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.9+daa2e24",
+  "base_commit_sha": "8849c544261db65a2cc5c6053bd149c1de14bdc5",
+  "prompts": {
+    "49a38b4385a5350f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1bc4101a-98b7-4646-a22b-2b7350dbc04a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 8,
+      "total_deletions": 112,
+      "accepted_lines": 39,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
