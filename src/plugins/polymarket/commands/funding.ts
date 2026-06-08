@@ -210,16 +210,15 @@ export function createFundingCommand(): Command {
         recipientAtaExists: toAtaInfo !== null,
       });
 
+      // Body matches the working frontend request exactly (docs/09): field is
+      // `signedTx`, walletAddress=proxy, no toChain/toToken/recipient.
       const submitBody = {
         quoteId: quote.quoteId,
-        signedTransaction: '', // filled after signing (execute) — placeholder for unsigned-tx echo
+        signedTx: '', // filled after signing (execute) — placeholder for unsigned-tx echo
         walletAddress: proxyAddress, // deposit-wallet lookup key (proxy); omitting → 40904
         fromChainId: SOLANA_BRIDGE_CHAIN_ID,
         fromTokenAddress: USDC_SOLANA_MINT,
-        toChainId: POLYGON_CHAIN_ID,
-        toTokenAddress: USDC_E_POLYGON,
         amount: options.amount,
-        recipientAddress: proxyAddress,
         depositAddress,
       };
 
@@ -256,7 +255,7 @@ export function createFundingCommand(): Command {
       if (!signedR.ok) outputPmError(output, signedR.error);
       const signedTx = signedR.value.signedTxs[0].signedTx;
 
-      const subR = await submitDeposit({ ...submitBody, signedTransaction: signedTx }, evmAuth);
+      const subR = await submitDeposit({ ...submitBody, signedTx }, evmAuth);
       if (!subR.ok) outputPmError(output, subR.error);
       const orderId = subR.value.orderId;
 
@@ -284,7 +283,7 @@ export function createFundingCommand(): Command {
           to_proxy: proxyAddress,
           deposit_address: depositAddress,
           quote_id: quote.quoteId,
-          tx_hash: order.txHash ?? null,
+          tx_hash: order.txHash ?? order.txSignature ?? null,
         },
         renderDepositResult,
         startTime,

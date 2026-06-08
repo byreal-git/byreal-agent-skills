@@ -43,6 +43,8 @@ export interface BridgeOrder {
   fromChainId?: string;
   toChainId?: string | null;
   txHash?: string;
+  /** deposit/submit response uses txSignature (Solana sig) instead of txHash. */
+  txSignature?: string;
   createdAt?: string;
   updatedAt?: string;
   [k: string]: unknown;
@@ -89,17 +91,20 @@ export async function getOrders(
  * /v1 business endpoint → enveloped. Exact field set may be trimmed after the
  * first live submit (failed submits don't move funds).
  */
+/**
+ * Confirmed against the working frontend request:
+ *   { walletAddress(proxy), fromChainId, depositAddress, fromTokenAddress,
+ *     amount, signedTx, quoteId }
+ * Note: field is `signedTx` (NOT signedTransaction); no toChainId/toTokenAddress/
+ * recipientAddress; walletAddress = proxy (deposit-wallet lookup key, else 40904).
+ */
 export interface BridgeDepositSubmitReq {
   quoteId: string;
-  signedTransaction: string; // base64 signed Solana V0 tx
-  /** Proxy/deposit wallet (Polygon) — the deposit-wallet lookup key; omitting it → 40904. */
-  walletAddress: string;
+  signedTx: string; // base64 signed Solana V0 tx
+  walletAddress: string; // proxy (Polygon)
   fromChainId: string;
   fromTokenAddress: string;
-  toChainId: string;
-  toTokenAddress: string;
   amount: string;
-  recipientAddress: string; // proxy wallet (Polygon)
   depositAddress: string; // Solana intermediary
   [k: string]: unknown;
 }
