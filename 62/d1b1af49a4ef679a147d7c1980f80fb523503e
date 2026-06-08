@@ -1,0 +1,44 @@
+src/plugins/polymarket/types.ts
+  4207dacb8c9c9355 24-27,34,40-42,54-57,62-68,74,137-138
+src/plugins/polymarket/api/order.test.ts
+  4207dacb8c9c9355 21,25,28,38
+src/plugins/polymarket/order-exec.ts
+  4207dacb8c9c9355 49-50,80,137
+src/plugins/polymarket/order-exec.test.ts
+  4207dacb8c9c9355 12,24
+src/plugins/polymarket/commands/order.ts
+  4207dacb8c9c9355 22,160-162,183,212,223,269
+src/plugins/polymarket/lib/order-build.test.ts
+  4207dacb8c9c9355 2-4,7-11,18,21,25-39,44-46,50-51,56,62,70
+src/plugins/polymarket/formatters.ts
+  4207dacb8c9c9355 268-270
+src/plugins/polymarket/__fixtures__/order-encode-binary.json
+  4207dacb8c9c9355 1-150
+src/plugins/polymarket/lib/order-build.ts
+  4207dacb8c9c9355 31-52,61-62,74,80,86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.9+daa2e24",
+  "base_commit_sha": "62d1b1af49a4ef679a147d7c1980f80fb523503e",
+  "prompts": {
+    "4207dacb8c9c9355": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f89ffc5f-800f-4908-9d03-be946e1f1dbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 253,
+      "total_deletions": 85,
+      "accepted_lines": 253,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
