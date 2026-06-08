@@ -1,0 +1,38 @@
+src/plugins/polymarket/lib/order-terminal.test.ts
+  4207dacb8c9c9355 1-37
+src/plugins/polymarket/lib/order-build.test.ts
+  4207dacb8c9c9355 1-73
+src/plugins/polymarket/lib/order-terminal.ts
+  4207dacb8c9c9355 1-35
+src/plugins/polymarket/lib/readiness.ts
+  4207dacb8c9c9355 1-54
+src/plugins/polymarket/lib/order-build.ts
+  4207dacb8c9c9355 1-72
+src/plugins/polymarket/lib/readiness.test.ts
+  4207dacb8c9c9355 1-97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.9+daa2e24",
+  "base_commit_sha": "25e9f0b846f253b35a6b705a26f0467cba30261a",
+  "prompts": {
+    "4207dacb8c9c9355": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f89ffc5f-800f-4908-9d03-be946e1f1dbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 368,
+      "total_deletions": 0,
+      "accepted_lines": 368,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
