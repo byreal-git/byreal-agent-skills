@@ -1,0 +1,36 @@
+src/plugins/polymarket/lib/portfolio-view.ts
+  4207dacb8c9c9355 12,14-60,92,108,110-112,120,138-143,148,150-151,156-157,166,172-174,188,191,195-196
+src/plugins/polymarket/formatters.ts
+  4207dacb8c9c9355 163-164
+src/plugins/polymarket/commands/funding.ts
+  4207dacb8c9c9355 10-11,66-77
+src/plugins/polymarket/commands/portfolio.ts
+  4207dacb8c9c9355 5-7,9,33-54
+src/plugins/polymarket/lib/portfolio-view.test.ts
+  4207dacb8c9c9355 4,6,65-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.9+daa2e24",
+  "base_commit_sha": "ec26da110a3e9aff4e9105f5789b155438c145a7",
+  "prompts": {
+    "4207dacb8c9c9355": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f89ffc5f-800f-4908-9d03-be946e1f1dbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 166,
+      "total_deletions": 21,
+      "accepted_lines": 166,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
