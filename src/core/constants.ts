@@ -160,12 +160,15 @@ export const POLYGON_MAINNET_CAIP2 = "eip155:137";
 // Same proxy + apiBasePath as Solana; only the terminal path differs.
 export const SIGN_EVM_TYPED_DATA_PATH = "/sign/evm-typed-data";
 
-// Byreal Polymarket gateway. Production (api2.byreal.io) has NOT deployed the
-// PM gateway yet — every /byreal/api/gw/pm/* prefix 404s there — so the default
-// is the test host the frontend uses. Override with PM_GATEWAY_HOST.
-// See docs/polymarket-cli/02-backend-gateway.md.
+// Byreal Polymarket gateway. Production (api2.byreal.io) went live ~2026-06-08
+// (verified: /byreal/api/gw/pm/* returns 200, categories/events/search all work)
+// and is now the default. Override with PM_GATEWAY_HOST to point back at the test
+// host (api2.sbu-test-5.bybit.com) — but note the agent token + proxy wallet are
+// per-environment, so the gateway host must match the active realclaw-config
+// (test config → test host, prod config → prod host).
+// See docs/polymarket-cli/02-backend-gateway.md + 08 §2.1.
 export const PM_GATEWAY_HOST_DEFAULT =
-  process.env.PM_GATEWAY_HOST ?? "https://api2.sbu-test-5.bybit.com";
+  process.env.PM_GATEWAY_HOST ?? "https://api2.byreal.io";
 // Common context-path prefix; concrete clients append /v1 | /clob | /gamma.
 export const PM_GATEWAY_BASE_PATH = "/byreal/api/gw/pm";
 
