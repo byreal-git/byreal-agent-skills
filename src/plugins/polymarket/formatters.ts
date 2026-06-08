@@ -290,6 +290,28 @@ export function renderOrderPlace(d: OrderPlaceView): void {
   }
 }
 
+export interface WalletDeployView {
+  mode?: string;
+  eoa?: string;
+  status?: string;
+  proxy_address?: string | null;
+  ready?: boolean;
+  note?: string;
+}
+
+export function renderWalletDeploy(d: WalletDeployView): void {
+  console.log(chalk.cyan.bold('\n  Wallet Deploy\n'));
+  const table = new Table({ chars: TABLE_CHARS });
+  if (d.eoa) table.push([chalk.gray('EOA'), d.eoa]);
+  if (d.status) {
+    const c = String(d.status).toUpperCase() === 'READY' ? chalk.green : chalk.yellow;
+    table.push([chalk.gray('Status'), c(d.status)]);
+  }
+  if (d.proxy_address != null) table.push([chalk.gray('Proxy Wallet'), d.proxy_address]);
+  console.log(table.toString());
+  if (d.note) console.error(chalk.gray(`\n  ${d.note}`));
+}
+
 export function renderAccountReadiness(v: ReadinessVerdict): void {
   console.log(
     chalk.cyan.bold(`\n  Account Readiness — ${v.ready ? chalk.green('READY') : chalk.red('NOT READY')}\n`),

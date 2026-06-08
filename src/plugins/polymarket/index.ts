@@ -118,6 +118,19 @@ const capabilities: Capability[] = [
     ],
   },
   {
+    id: 'pm.account.deploy',
+    name: 'Polymarket Account Deploy',
+    description: 'Deploy the proxy/deposit wallet (POST /wallet/deploy → poll READY)',
+    category: 'execute',
+    auth_required: true,
+    command: 'byreal-cli polymarket account deploy --execute',
+    params: [
+      { name: 'evm-wallet-address', type: 'string', required: false, description: 'EVM EOA (defaults to realclaw-config evm wallet)' },
+      { name: 'execute', type: 'boolean', required: false, description: 'Trigger the deploy; default reports status only' },
+      { name: 'dry-run', type: 'boolean', required: false, description: 'Report current wallet status only' },
+    ],
+  },
+  {
     id: 'pm.account.readiness',
     name: 'Polymarket Account Readiness',
     description: 'Pre-trade gate: proxy READY + balance (BUY/SELL) + market state (L2)',
