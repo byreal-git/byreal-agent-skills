@@ -1,0 +1,30 @@
+src/plugins/polymarket/commands/funding.ts
+  4207dacb8c9c9355 213-214,217,258,286
+src/plugins/polymarket/api/bridge.ts
+  4207dacb8c9c9355 46-47,94-100,103-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.9+daa2e24",
+  "base_commit_sha": "efc2413d234baccb011db2ff6f07e47258a8b02a",
+  "prompts": {
+    "4207dacb8c9c9355": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f89ffc5f-800f-4908-9d03-be946e1f1dbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 16,
+      "total_deletions": 12,
+      "accepted_lines": 16,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
