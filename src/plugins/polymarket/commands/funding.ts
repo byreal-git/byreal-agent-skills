@@ -7,7 +7,8 @@ import { validationError, sourceUnavailableError, type ByrealError } from '../..
 import { safeResolveExecutionMode } from '../../../cli/output/formatters.js';
 import { printDryRunBanner, printPrivySignBanner } from '../../../core/confirm.js';
 import { getConnection } from '../../../core/solana.js';
-import { getPrivyContext, requireEvmPrivyContext, privySignMany } from '../../../privy/execute.js';
+import { getPrivyContext, getEvmPrivyContext, requireEvmPrivyContext, privySignMany } from '../../../privy/execute.js';
+import { getBalanceAllowance } from '../api/clob-account.js';
 import { loadRealclawConfig } from '../../../privy/config.js';
 import { getValue } from '../api/data.js';
 import {
@@ -62,7 +63,18 @@ export function createFundingCommand(): Command {
 
       const valR = await getValue(proxyAddress);
       const value = valR.ok ? valR.value : null;
-      outputPmSuccess(output, buildFundingBalance(value, proxyAddress), renderFundingBalance, startTime);
+
+      // L2 cash (best-effort): balance-allowance when the agent token is configured.
+      let cashRaw: string | null | undefined;
+      const ctx = getEvmPrivyContext(options.evmWalletAddress);
+      if (ctx) {
+        const baR = await getBalanceAllowance('COLLATERAL', undefined, {
+          token: ctx.token,
+          evmAddress: ctx.address,
+        });
+        cashRaw = baR.ok ? baR.value.balance : null;
+      }
+      outputPmSuccess(output, buildFundingBalance(value, proxyAddress, cashRaw), renderFundingBalance, startTime);
     });
 
   cmd

@@ -160,7 +160,8 @@ export function renderPortfolio(p: Portfolio): void {
     ]);
   }
   console.log(table.toString());
-  if (p.partial) console.log(chalk.gray(`\n  partial: ${p.partial_reason ?? 'some fields require Phase B'}`));
+  console.log(chalk.gray(`\n  active orders: ${p.active_orders.length}`));
+  if (p.partial) console.log(chalk.gray(`  partial: ${p.partial_reason ?? 'some fields require Phase B'}`));
 }
 
 export function renderEventSearch(d: { query: string; events: EventCandidate[] }): void {

@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { buildPortfolio, buildFundingBalance, normalizeValue } from './portfolio-view.js';
+import { buildPortfolio, buildFundingBalance, normalizeValue, usdcFromRaw, lockedSellSize } from './portfolio-view.js';
 import type { DataPosition, DataValue } from '../api/data.js';
+import type { OpenOrder } from '../types.js';
 
 const FX = path.join(__dirname, '..', '__fixtures__');
 function load<T>(name: string): T {
@@ -59,5 +60,54 @@ describe('buildFundingBalance', () => {
     expect(b.cash_available_usdc).toBeNull();
     expect(b.proxy_wallet).toBe('0xPROXY');
     expect(b.partial).toBe(true);
+  });
+});
+
+describe('L2 helpers', () => {
+  it('usdcFromRaw converts 1e6 units', () => {
+    expect(usdcFromRaw('12000000')).toBe('12');
+    expect(usdcFromRaw('0')).toBe('0');
+    expect(usdcFromRaw(null)).toBeNull();
+    expect(usdcFromRaw(undefined)).toBeNull();
+  });
+  it('lockedSellSize sums remaining SELL size for an asset', () => {
+    const orders: OpenOrder[] = [
+      { id: 'o1', asset_id: 'a1', side: 'SELL', original_size: '10', size_matched: '3' },
+      { id: 'o2', asset_id: 'a1', side: 'BUY', original_size: '5', size_matched: '0' },
+      { id: 'o3', asset_id: 'a2', side: 'SELL', original_size: '4', size_matched: '0' },
+    ];
+    expect(lockedSellSize(orders, 'a1')).toBe(7); // only the SELL on a1, remaining 7
+    expect(lockedSellSize(orders, 'a2')).toBe(4);
+    expect(lockedSellSize(orders, 'zzz')).toBe(0);
+  });
+});
+
+describe('buildPortfolio L2', () => {
+  const positions: DataPosition[] = [{ asset: 'a1', size: 10, conditionId: 'c1', title: 'M', outcome: 'Yes' }];
+  it('without L2 → partial, cash null, sellable=size', () => {
+    const p = buildPortfolio(positions, [{ value: 5 }], { proxyAddress: '0xP' });
+    expect(p.partial).toBe(true);
+    expect(p.summary.cash_available_usdc).toBeNull();
+    expect(p.positions[0].sellable_size).toBe('10');
+    expect(p.active_orders).toEqual([]);
+  });
+  it('with L2 → cash populated, active_orders shaped, sellable deducts locked SELL', () => {
+    const p = buildPortfolio(positions, [{ value: 5 }], { proxyAddress: '0xP' }, {
+      cashRaw: '12000000',
+      activeOrders: [{ id: 'o1', asset_id: 'a1', side: 'SELL', original_size: '4', size_matched: '0', price: '0.6' }],
+    });
+    expect(p.partial).toBe(false);
+    expect(p.summary.cash_available_usdc).toBe('12');
+    expect(p.positions[0].sellable_size).toBe('6'); // 10 - 4
+    expect(p.active_orders.length).toBe(1);
+    expect(p.active_orders[0].order_id).toBe('o1');
+  });
+});
+
+describe('buildFundingBalance L2', () => {
+  it('cashRaw provided → cash populated, not partial', () => {
+    const b = buildFundingBalance([{ value: 5 }], '0xP', '11500000');
+    expect(b.cash_available_usdc).toBe('11.5');
+    expect(b.partial).toBe(false);
   });
 });
