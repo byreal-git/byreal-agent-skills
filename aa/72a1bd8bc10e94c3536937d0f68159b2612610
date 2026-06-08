@@ -1,0 +1,30 @@
+src/cli/commands/skill.ts
+  4207dacb8c9c9355 99-100,102,221-223,246-263
+README.md
+  4207dacb8c9c9355 156-157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.9+daa2e24",
+  "base_commit_sha": "aa72a1bd8bc10e94c3536937d0f68159b2612610",
+  "prompts": {
+    "4207dacb8c9c9355": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f89ffc5f-800f-4908-9d03-be946e1f1dbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 27,
+      "total_deletions": 4,
+      "accepted_lines": 26,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
