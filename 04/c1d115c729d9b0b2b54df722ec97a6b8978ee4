@@ -1,0 +1,30 @@
+src/plugins/polymarket/order-exec.ts
+  11bf0c6c1ad47f5a 74-89,141
+src/plugins/polymarket/order-exec.test.ts
+  11bf0c6c1ad47f5a 113-125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.9+daa2e24",
+  "base_commit_sha": "04c1d115c729d9b0b2b54df722ec97a6b8978ee4",
+  "prompts": {
+    "11bf0c6c1ad47f5a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a1aea0d8-fac9-4aee-b84d-187f808ec745",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 30,
+      "total_deletions": 1,
+      "accepted_lines": 121,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
