@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { encodeOrder } from './market.js';
-import { submitOrder, getOrderStatus } from './order.js';
+import { submitOrder, getOrderStatus, getActiveOrders } from './order.js';
 import { getBalanceAllowance } from './clob-account.js';
 
 const auth = { token: 'oc_at_t', evmAddress: '0xE' };
@@ -46,6 +46,22 @@ describe('api wrappers', () => {
     const r = await submitOrder({ order: {}, orderType: 'FOK', postOnly: false, deferExec: false }, auth);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value.orderID).toBe('o1');
+  });
+
+  it('getActiveOrders extracts .data from the paginated CLOB response', async () => {
+    stub(200, { data: [{ id: 'o1', side: 'BUY' }], next_cursor: 'x', limit: 500, count: 1 });
+    const r = await getActiveOrders({}, auth);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(Array.isArray(r.value)).toBe(true);
+      expect(r.value[0].id).toBe('o1');
+    }
+  });
+
+  it('getActiveOrders tolerates a bare array', async () => {
+    stub(200, [{ id: 'o2' }]);
+    const r = await getActiveOrders({}, auth);
+    expect(r.ok && r.value[0].id).toBe('o2');
   });
 
   it('getOrderStatus returns raw OpenOrder, path includes order id', async () => {
