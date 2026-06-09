@@ -103,6 +103,7 @@ byreal-cli catalog show dex.pool.list
 | pm.order.status | Polymarket: read a single order status (L2) |
 | pm.order.cancel | Polymarket: cancel open orders (dry-run previews; execute cancels) |
 | pm.funding.deposit.execute | Polymarket: deposit Solana USDC → Polygon proxy (build SPL → Privy sign → bridge submit → poll) |
+| pm.funding.withdraw.execute | Polymarket: withdraw Polygon pUSD → Solana USDC (backend signs via Privy + relays; CLI zero-signing) |
 
 > Polymarket plugin: **Phase A** (auth-free discovery + local previews) is done; **Phase B** adds trading — \`order place\` (market FOK + limit GTC), \`account readiness\`, \`order active/status/cancel\`, \`account deploy\`, \`funding deposit\`, L2 portfolio/balance reads. See docs/polymarket-cli/07–10.
 
@@ -235,6 +236,7 @@ Present on-chain data first, then external context, then synthesize how external
 | Polymarket deposit (execute) | \`byreal-cli polymarket funding deposit --amount <usdc> --execute\` |
 | Polymarket deposit preview | \`byreal-cli polymarket funding deposit-preview --amount <usdc>\` |
 | Polymarket withdraw preview | \`byreal-cli polymarket funding withdraw-preview --amount <usdc> --recipient <solana>\` |
+| Polymarket withdraw (execute) | \`byreal-cli polymarket funding withdraw --amount <usdc> --recipient <solana> --execute\` |
 | Polymarket transfer status | \`byreal-cli polymarket funding status --type <deposit\|withdraw>\` |
 
 ## Workflow: Polymarket Discovery (Phase A)
@@ -256,7 +258,7 @@ Notes:
 - \`portfolio read\` / \`funding balance\` return public fields only in Phase A (positions/value/pnl). \`cash_available_usdc\` and \`active_orders\` are \`null\` with \`partial: true\` until Phase B (CLOB L2 auth).
 - EVM address resolves from \`--evm-wallet-address\` or a \`type:"evm"\` wallet in realclaw-config.json.
 - \`order preview\` is **read-only** local computation (no signing): it re-reads the live CLOB book, sweeps it for the market worst-price, applies the absolute slippage buffer (Δ = slippage_bps/10000, default 0.01 — a probability point, NOT a relative %; BUY worst+Δ ceil-to-tick, SELL worst−Δ floor-to-tick), and returns an immutable snapshot with \`quoted_at\`/\`expires_at\`. Market orders are FOK. Get \`token_id\` from \`event detail\` (\`yes_token_id\`/\`no_token_id\`).
-- \`funding deposit-preview\` / \`withdraw-preview\` are **read-only** previews (quote + deposit address + min, from \`bridge/supported-assets\`); P0 supports **Solana USDC ⇄ Polygon** only. The actual transfers — deposit (construct Solana SPL tx → Privy sign → \`/bridge/deposit/submit\`) and withdraw submit — are Phase B. \`funding status\` reads \`/bridge/orders\` (COMPLETED/FAILED terminal). All four resolve the proxy wallet first, so they need a deployed proxy for the happy path.
+- \`funding deposit-preview\` / \`withdraw-preview\` are **read-only** previews (quote + min, from \`bridge/supported-assets\`); P0 supports **Solana USDC ⇄ Polygon** only. \`funding status\` reads \`/bridge/orders\` (COMPLETED/FAILED terminal). All resolve the proxy wallet first, so they need a deployed proxy. **Deposit** source is the **embedded Solana wallet** in realclaw-config (only it can be signed by the agent token), NOT your main/Phantom wallet. **Withdraw** \`--recipient\` is any Solana address you choose (your deposit source or main wallet) — funds do NOT auto-return to the source.
 
 ## Workflow: Polymarket Trading (Phase B — market + limit orders)
 
@@ -275,6 +277,7 @@ Notes:
 - **Limit** orders (\`--order-type limit\`) are **GTC** (resting): \`encode(price) → sign → submit → keepalive\`. Both sides use \`--price\` (0<p<1) + \`--size\` (shares); no book sweep, no \`--preview\`. On HTTP 200 the order is \`outcome: "accepted"\` (resting) and the backend keepalive is registered (best-effort; a keepalive failure does not fail the order). ⚠️ A resting order can still be auto-canceled by the CLOB if heartbeats lapse — re-check with \`order active\`/\`order status\`.
 - \`order active\` lists open orders; \`order status --order-id\` reads one; \`order cancel\` locks the target set (\`--order-id\` / \`--all\` / \`--market\`) and \`--dry-run\` previews it, \`--execute\` cancels (DELETE /clob/order or /cancel-all). Cancel applies to resting (limit) orders.
 - **Funding the proxy:** \`account deploy --execute\` deploys the proxy/deposit wallet; \`funding deposit --amount <usdc> --execute\` bridges Solana USDC → Polygon proxy (build SPL → Privy sign → /bridge/deposit/submit → poll, ≤30s → pending). Solana source = \`--wallet-address\` or the realclaw-config solana wallet. Then \`funding status --type deposit\` to confirm.
+- **Withdraw:** \`funding withdraw --amount <usdc> --recipient <solanaAddr> --execute\` bridges Polygon proxy pUSD → Solana USDC. It is **CLI zero-signing** — the backend encodes, signs via Privy, and relays; the CLI only POSTs \`{walletAddress=proxy, toChainId, toTokenAddress, recipientAddr, amount, quoteId}\`. Poll ≤30s → pending; re-check via \`funding status --type withdraw\`. ⚠️ The backend signs withdraw typed-data under a dedicated Privy policy (\`bridge_withdraw_v1\`); until the agent token is granted that policy the gateway returns \`40902\` (a backend/policy gap, not a CLI bug) — the CLI surfaces a clear hint.
 
 ## Command Notes
 

@@ -64,7 +64,7 @@ export function buildDepositPreview(params: {
     meets_minimum: meetsMin(params.amount, min),
     deposit_address: params.depositAddress,
     quote: normQuote(params.quote),
-    note: 'Phase A preview only. Submit (construct Solana tx → Privy sign → /bridge/deposit/submit) is Phase B.',
+    note: 'Source = the embedded Solana wallet in realclaw-config (only it can be signed by the agent token), NOT your main/Phantom wallet. Run `funding deposit --execute` to submit.',
   };
 }
 
@@ -93,7 +93,7 @@ export function buildWithdrawPreview(params: {
     min_withdraw: min ?? null,
     meets_minimum: meetsMin(params.amount, min),
     quote: normQuote(params.quote),
-    note: 'Phase A preview only. CLI does not sign withdrawals; submit is Phase B (gateway encode → Privy → Relayer).',
+    note: 'Funds go to --recipient (any Solana address — your deposit source or main wallet); they do NOT auto-return to the deposit source. CLI does not sign withdrawals; the backend signs via Privy + relays. Run `funding withdraw --execute` to submit.',
   };
 }
 

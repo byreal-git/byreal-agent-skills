@@ -453,6 +453,49 @@ export function renderDepositResult(d: DepositResultView): void {
   }
 }
 
+/** Loose view for withdraw dry-run / execute results. */
+export interface WithdrawResultView {
+  mode?: string;
+  outcome?: string;
+  status?: string | null;
+  terminal?: boolean;
+  success?: boolean;
+  amount?: string;
+  from_proxy?: string;
+  to_recipient?: string;
+  quote_id?: string | null;
+  to_amount?: string | null;
+  min_withdraw?: string;
+  order_id?: string | null;
+  tx_hash?: string | null;
+  note?: string;
+}
+
+export function renderWithdrawResult(d: WithdrawResultView): void {
+  const heading = d.mode === 'dry-run' ? 'Withdraw (dry-run)' : 'Withdraw';
+  console.log(chalk.cyan.bold(`\n  ${heading} — Polymarket pUSD → Solana USDC\n`));
+  const table = new Table({ chars: TABLE_CHARS });
+  if (d.outcome) {
+    const c = d.outcome === 'completed' ? chalk.green : d.outcome === 'failed' ? chalk.red : chalk.yellow;
+    table.push([chalk.gray('Outcome'), c(d.outcome)]);
+  }
+  if (d.order_id) table.push([chalk.gray('Order ID'), d.order_id]);
+  if (d.status != null) table.push([chalk.gray('Status'), String(d.status)]);
+  if (d.amount !== undefined) table.push([chalk.gray('Amount (USDC)'), d.amount]);
+  if (d.to_amount != null) table.push([chalk.gray('To Amount'), String(d.to_amount)]);
+  // Proxy + recipient are on-chain addresses — shown in full (CLAUDE.md).
+  if (d.from_proxy) table.push([chalk.gray('From Proxy'), d.from_proxy]);
+  if (d.to_recipient) table.push([chalk.gray('To Recipient (solana)'), d.to_recipient]);
+  if (d.quote_id != null) table.push([chalk.gray('Quote ID'), String(d.quote_id)]);
+  if (d.min_withdraw !== undefined) table.push([chalk.gray('Min Withdraw'), d.min_withdraw]);
+  console.log(table.toString());
+  if (d.tx_hash) console.log(chalk.gray(`\n  tx: ${d.tx_hash}`)); // on-chain id, full (CLAUDE.md)
+  if (d.note) console.error(chalk.gray(`\n  ${d.note}`));
+  if (d.outcome === 'pending') {
+    console.error(chalk.gray('\n  [pending] bridge still advancing; re-check via `funding status --type withdraw`.'));
+  }
+}
+
 export function renderFundingBalance(b: FundingBalance): void {
   console.log(chalk.cyan.bold('\n  Polymarket Balance\n'));
   const table = new Table({ chars: TABLE_CHARS });

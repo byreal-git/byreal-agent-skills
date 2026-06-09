@@ -117,3 +117,34 @@ export async function submitDeposit(
   if (!r.ok) return r;
   return unwrapBusiness(r.value);
 }
+
+/**
+ * POST /bridge/withdraw/submit — Polymarket (Polygon proxy, PUSD) → Solana USDC.
+ * SIGNATURE-FREE from the client: the backend resolves the proxy from
+ * walletAddress, encodes a Safe tx, signs the EIP-712 via Privy, and submits via
+ * the relayer (CLI never signs). Body confirmed against the frontend request
+ * (funding-bridge/services/submit.ts) + backend BridgeWithdrawSubmitReq:
+ *   { walletAddress(=proxy), toChainId, toTokenAddress, recipientAddr, amount, quoteId }
+ * ⚠️ The field is `recipientAddr` (the quote query param is `recipientAddress` —
+ * different name). walletAddress MUST be the proxy (findByProxyAddress → 40904).
+ * /v1 business endpoint → enveloped. Same-proxy concurrent bridges are rejected
+ * (40910 BRIDGE_PENDING_ORDER_EXISTS); a repeated quoteId is idempotent.
+ */
+export interface BridgeWithdrawSubmitReq {
+  walletAddress: string; // proxy (Polygon Safe)
+  toChainId: string; // Solana bridge chain id
+  toTokenAddress: string; // Solana USDC mint
+  recipientAddr: string; // destination Solana address
+  amount: string; // human-readable USDC
+  quoteId: string;
+  [k: string]: unknown;
+}
+
+export async function submitWithdraw(
+  body: BridgeWithdrawSubmitReq,
+  auth: PmWriteAuth,
+): Promise<Result<BridgeOrder, ByrealError>> {
+  const r = await pmWrite<PmEnvelope<BridgeOrder>>('POST', 'v1', '/bridge/withdraw/submit', body, auth);
+  if (!r.ok) return r;
+  return unwrapBusiness(r.value);
+}

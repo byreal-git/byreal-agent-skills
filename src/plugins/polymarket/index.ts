@@ -243,6 +243,22 @@ const capabilities: Capability[] = [
     ],
   },
   {
+    id: 'pm.funding.withdraw.execute',
+    name: 'Polymarket Withdraw Execute',
+    description:
+      'Withdraw Polymarket (Polygon proxy pUSD) → Solana USDC (quote → backend signs via Privy + relays → poll; CLI zero-signing)',
+    category: 'execute',
+    auth_required: true,
+    command: 'byreal-cli polymarket funding withdraw --amount <usdc> --recipient <solanaAddr> --execute',
+    params: [
+      { name: 'amount', type: 'string', required: true, description: 'Amount in USDC (UI)' },
+      { name: 'recipient', type: 'string', required: true, description: 'Destination Solana wallet (any address; not auto the deposit source)' },
+      { name: 'evm-wallet-address', type: 'string', required: false, description: 'EVM EOA (proxy wallet source)' },
+      { name: 'execute', type: 'boolean', required: false, description: 'Submit the withdraw (real fund movement); default emits the prepared request' },
+      { name: 'dry-run', type: 'boolean', required: false, description: 'Preview quote + min only' },
+    ],
+  },
+  {
     id: 'pm.transfer.status',
     name: 'Polymarket Transfer Status',
     description: 'Read deposit/withdraw bridge transfer status',

@@ -17,6 +17,7 @@ import {
   getDepositAddress,
   getOrders,
   submitDeposit,
+  submitWithdraw,
 } from '../api/bridge.js';
 import { resolveProxy } from '../account.js';
 import { buildUnsignedSplTransfer } from '../lib/deposit-tx.js';
@@ -36,15 +37,22 @@ import {
   renderWithdrawPreview,
   renderTransferStatus,
   renderDepositResult,
+  renderWithdrawResult,
 } from '../formatters.js';
 
 // Bridge chain ids + token addresses (P0: Solana USDC ⇄ Polygon pUSD).
 const SOLANA_BRIDGE_CHAIN_ID = '1151111081099710';
 const POLYGON_CHAIN_ID = '137';
 const USDC_SOLANA_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
-// Polygon-side bridge token is USDC.e (the frontend prices/bridges via this; docs/05 §2
-// "USDC.e 怪异点"). The earlier pUSD address (0xC011…) makes /bridge/quote 500.
+// DEPOSIT quotes the Polygon side as USDC.e (the frontend prices the inbound leg
+// via this; docs/05 §2 "USDC.e 怪异点"). pUSD on the deposit direction makes
+// /bridge/quote 500.
 const USDC_E_POLYGON = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+// WITHDRAW quotes the Polygon side as pUSD — that is what the proxy actually
+// holds, so the quote reflects the real PUSD→USDC conversion (live-verified:
+// pUSD → toAmount 0.99, USDC.e → a misleading 1:1). Matches the frontend
+// (quote.ts uses assets.polymarket.tokenAddress = pUSD for the withdraw leg).
+const PUSD_POLYGON = '0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB';
 
 export function createFundingCommand(): Command {
   const cmd = new Command('funding').description('Polymarket funding (deposit / withdraw / status)');
@@ -322,7 +330,7 @@ export function createFundingCommand(): Command {
 
       const quoteR = await getQuote({
         fromChainId: POLYGON_CHAIN_ID,
-        fromTokenAddress: USDC_E_POLYGON,
+        fromTokenAddress: PUSD_POLYGON, // withdraw source = proxy's pUSD (accurate conversion)
         toChainId: SOLANA_BRIDGE_CHAIN_ID,
         toTokenAddress: USDC_SOLANA_MINT,
         amount: options.amount,
@@ -339,6 +347,154 @@ export function createFundingCommand(): Command {
           proxyAddress,
         }),
         renderWithdrawPreview,
+        startTime,
+      );
+    });
+
+  cmd
+    .command('withdraw')
+    .description('Withdraw Polymarket (Polygon proxy pUSD) → Solana USDC: quote → backend signs+relays → poll')
+    .requiredOption('--amount <amount>', 'Amount in USDC (UI)')
+    .requiredOption('--recipient <solanaAddress>', 'Destination Solana wallet (any address — your deposit source or main wallet)')
+    .option('--evm-wallet-address <addr>', 'EVM EOA (proxy wallet source)')
+    .option('--execute', 'Submit the withdraw (backend signs via Privy + relays; real fund movement)')
+    .option('--dry-run', 'Preview quote + min only; no submit')
+    .action(async (options, cmdObj: Command) => {
+      const { output } = cmdObj.optsWithGlobals() as GlobalOptions;
+      const startTime = Date.now();
+      const mode = safeResolveExecutionMode(options, output);
+
+      // proxy (Polygon source) — also the deposit-wallet lookup key for submit.
+      const proxyR = await resolveProxy(options.evmWalletAddress);
+      if (!proxyR.ok) outputPmError(output, proxyR.error);
+      const { proxyAddress } = proxyR.value;
+
+      const assetsR = await getSupportedAssets();
+      if (!assetsR.ok) outputPmError(output, assetsR.error);
+      const asset = findUsdc(assetsR.value);
+      if (!asset) outputPmError(output, sourceUnavailableError('USDC not in bridge supported-assets'));
+      const minW = asset.minWithdrawAmount ? new Decimal(asset.minWithdrawAmount) : null;
+      if (minW && new Decimal(options.amount).lt(minW)) {
+        outputPmError(output, validationError(`amount ${options.amount} below min withdraw ${minW.toString()}`, 'amount'));
+      }
+
+      // quote: Polygon pUSD (what the proxy holds) → Solana USDC. recipientAddress
+      // (quote query param) = the destination Solana address.
+      const quoteR = await getQuote({
+        fromChainId: POLYGON_CHAIN_ID,
+        fromTokenAddress: PUSD_POLYGON,
+        toChainId: SOLANA_BRIDGE_CHAIN_ID,
+        toTokenAddress: USDC_SOLANA_MINT,
+        amount: options.amount,
+        recipientAddress: options.recipient,
+      });
+      if (!quoteR.ok) outputPmError(output, quoteR.error);
+      const quote = quoteR.value;
+
+      // submit body — SIGNATURE-FREE (backend encodes→Privy→Relayer). Field is
+      // `recipientAddr` (≠ the quote's `recipientAddress`); walletAddress = proxy.
+      const submitBody = {
+        walletAddress: proxyAddress,
+        toChainId: SOLANA_BRIDGE_CHAIN_ID,
+        toTokenAddress: USDC_SOLANA_MINT,
+        recipientAddr: options.recipient,
+        amount: options.amount,
+        quoteId: quote.quoteId,
+      };
+
+      if (mode === 'dry-run') {
+        printDryRunBanner();
+        outputPmSuccess(
+          output,
+          {
+            mode: 'dry-run',
+            amount: options.amount,
+            from_proxy: proxyAddress,
+            to_recipient: options.recipient,
+            quote_id: quote.quoteId,
+            to_amount: quote.toAmount ?? null,
+            min_withdraw: asset.minWithdrawAmount,
+            note: 'Funds go to --recipient (your explicit target — does NOT auto-return to the deposit source). CLI does not sign withdrawals; the backend signs via Privy + relays.',
+          },
+          renderWithdrawResult,
+          startTime,
+        );
+        return;
+      }
+
+      // EOA + agent token for the authenticated, signature-free submit.
+      let evmAuth: { token: string; evmAddress: string };
+      try {
+        const evmCtx = requireEvmPrivyContext(options.evmWalletAddress);
+        evmAuth = { token: evmCtx.token, evmAddress: evmCtx.address };
+      } catch (e) {
+        outputPmError(output, e as ByrealError);
+        return;
+      }
+
+      if (mode === 'unsigned-tx') {
+        // No client-side tx to sign — emit the prepared submit request instead.
+        outputPmSuccess(
+          output,
+          {
+            submit_request: submitBody,
+            submitHint:
+              'Withdraw is signature-free (backend encodes → Privy signs → Relayer). POST this to /v1/bridge/withdraw/submit with Authorization: Bearer + x-evm-address, or use --execute.',
+          },
+          () => console.error('[unsigned-tx] withdraw submit request emitted; use -o json for the payload.'),
+          startTime,
+        );
+        return;
+      }
+
+      // execute: submit (no client signing) → poll 3s × ≤30s → terminal | pending
+      printPrivySignBanner();
+      const subR = await submitWithdraw(submitBody, evmAuth);
+      if (!subR.ok) {
+        // The backend signs the withdraw typed-data with the agent token under a
+        // dedicated Privy policy (bridge_withdraw_v1). If that policy isn't granted
+        // to the agent token, the gateway returns 40902 — a backend/policy gap, not
+        // a CLI bug. Surface a clear, actionable message.
+        if (/40902|privy auth/i.test(subR.error.message)) {
+          outputPmError(
+            output,
+            sourceUnavailableError(
+              `withdraw rejected by backend (40902): the agent token lacks the Privy "bridge_withdraw_v1" typed-data signing policy. ` +
+                `Order placement already works, but withdraw signing must be granted backend-side before this can complete. Original: ${subR.error.message}`,
+              false,
+            ),
+          );
+        }
+        outputPmError(output, subR.error);
+      }
+      const orderId = subR.value.orderId;
+
+      let order = subR.value;
+      const deadline = Date.now() + 30_000;
+      while (orderId && !isBridgeTerminal(order) && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const pollR = await getOrders({ walletAddress: proxyAddress, type: 'withdraw', orderId });
+        if (pollR.ok) {
+          const found = pollR.value.find((o) => o.orderId === orderId) ?? pollR.value[0];
+          if (found) order = found;
+        }
+      }
+
+      outputPmSuccess(
+        output,
+        {
+          order_id: orderId ?? null,
+          status: order.status ?? order.bridgeStatus ?? null,
+          terminal: isBridgeTerminal(order),
+          success: isBridgeSuccess(order),
+          outcome: isBridgeTerminal(order) ? (isBridgeSuccess(order) ? 'completed' : 'failed') : 'pending',
+          amount: options.amount,
+          from_proxy: proxyAddress,
+          to_recipient: options.recipient,
+          quote_id: quote.quoteId,
+          tx_hash: order.txHash ?? order.txSignature ?? null,
+        },
+        renderWithdrawResult,
         startTime,
       );
     });
