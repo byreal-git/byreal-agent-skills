@@ -1,0 +1,43 @@
+src/plugins/polymarket/lib/slippage.test.ts
+  11bf0c6c1ad47f5a 51-93
+src/plugins/polymarket/lib/slippage.ts
+  11bf0c6c1ad47f5a 8-17,25-27,45-46,59-63,65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.9+daa2e24",
+  "base_commit_sha": "dc14087582186fd2c67fc3284fed74e220ba4368",
+  "prompts": {
+    "11bf0c6c1ad47f5a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a1aea0d8-fac9-4aee-b84d-187f808ec745",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 64,
+      "total_deletions": 3,
+      "accepted_lines": 64,
+      "overriden_lines": 0
+    },
+    "4207dacb8c9c9355": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f89ffc5f-800f-4908-9d03-be946e1f1dbe",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
