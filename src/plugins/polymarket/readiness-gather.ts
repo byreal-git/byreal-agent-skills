@@ -15,9 +15,10 @@ import type { ByrealError } from '../../core/errors.js';
 import type { OrderSide, ReadinessVerdict } from './types.js';
 import type { PmWriteAuth } from './api/gateway.js';
 import { getWalletStatus } from './api/wallet.js';
-import { getBalanceAllowance } from './api/clob-account.js';
+import { getBalanceAllowance, syncBalanceAllowance } from './api/clob-account.js';
 import { getMarket } from './api/clob.js';
 import { aggregateReadiness } from './lib/readiness.js';
+import { usdcFromRaw } from './lib/portfolio-view.js';
 
 export interface ReadinessGatherParams {
   auth: PmWriteAuth; // token + evmAddress (EOA)
@@ -39,9 +40,15 @@ export async function gatherReadiness(
   const proxyAddress = statusR.value.proxyAddress ?? null;
 
   // 2) balance (BUY=COLLATERAL / SELL=CONDITIONAL+token_id). Degrade to '0'.
+  //    The CLOB balance ledger is cached + eventually-consistent — force a refresh
+  //    (/balance-allowance/update) before reading, exactly as the frontend does
+  //    after deposits (docs/09). Best-effort: ignore the sync result.
   const assetType = p.side === 'BUY' ? 'COLLATERAL' : 'CONDITIONAL';
+  await syncBalanceAllowance(assetType, p.tokenId, p.auth);
   const balR = await getBalanceAllowance(assetType, p.tokenId, p.auth);
-  const balance = balR.ok ? balR.value.balance : '0';
+  // balance-allowance returns RAW units (1e6 for both COLLATERAL/PUSD and
+  // CONDITIONAL/shares); `need` is in UI units → convert before comparing.
+  const balance = balR.ok ? (usdcFromRaw(balR.value.balance) ?? '0') : '0';
 
   // 3) market booleans via /clob/markets (needs conditionId). enableOrderBook is a
   //    Gamma field absent from /clob/markets → approximated as active && !closed.

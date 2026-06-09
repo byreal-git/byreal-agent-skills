@@ -65,7 +65,7 @@ describe('api wrappers', () => {
     if (r.ok) expect(r.value.balance).toBe('9');
     expect(cap.url).toContain('asset_type=CONDITIONAL');
     expect(cap.url).toContain('token_id=tok9');
-    expect(cap.url).toContain('signature_type=POLY_1271');
+    expect(cap.url).toContain('signature_type=3');
   });
 
   it('getBalanceAllowance BUY uses COLLATERAL and omits token_id', async () => {

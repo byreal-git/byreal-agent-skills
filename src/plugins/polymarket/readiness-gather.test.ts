@@ -21,7 +21,7 @@ describe('gatherReadiness', () => {
   it('BUY ready: READY wallet + sufficient COLLATERAL + tradable market', async () => {
     routeStub([
       { match: '/v1/wallet/status', body: { success: true, ret_code: 0, data: { walletAddress: '0xEOA', proxyAddress: '0xP', status: 'READY' } } },
-      { match: '/clob/balance-allowance', body: { balance: '100', allowances: {} } },
+      { match: '/clob/balance-allowance', body: { balance: '100000000', allowances: {} } },
       { match: '/clob/markets/', body: { active: true, accepting_orders: true, closed: false } },
     ]);
     const r = await gatherReadiness({ auth, tokenId: 'tok', side: 'BUY', need: '5', conditionId: '0xcond' });
@@ -62,7 +62,7 @@ describe('gatherReadiness', () => {
   it('marks market unverified when no conditionId', async () => {
     routeStub([
       { match: '/v1/wallet/status', body: { success: true, ret_code: 0, data: { walletAddress: '0xEOA', proxyAddress: '0xP', status: 'READY' } } },
-      { match: '/clob/balance-allowance', body: { balance: '100' } },
+      { match: '/clob/balance-allowance', body: { balance: '100000000' } },
     ]);
     const r = await gatherReadiness({ auth, tokenId: 'tok', side: 'BUY', need: '5' });
     expect(r.ok).toBe(true);
