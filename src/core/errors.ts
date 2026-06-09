@@ -51,7 +51,7 @@ export const ErrorCodes = {
   SDK_ERROR: 'SDK_ERROR',
   UNKNOWN_ERROR: 'UNKNOWN_ERROR',
 
-  // Polymarket errors (PRD §7) — see docs/polymarket-cli/05
+  // Polymarket errors (PRD §7) — see docs/polymarket-cli/03-prd-analysis.md
   CATEGORY_NOT_FOUND: 'CATEGORY_NOT_FOUND',
   NO_VISIBLE_CATEGORIES: 'NO_VISIBLE_CATEGORIES',
   EVENT_NOT_FOUND: 'EVENT_NOT_FOUND',

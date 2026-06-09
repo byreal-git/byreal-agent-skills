@@ -2,7 +2,7 @@
  * Price/amount precision helpers for Polymarket order math.
  *
  * tickSize ∈ {0.1, 0.01, 0.001, 0.0001} → price decimals {1,2,3,4}; the
- * maker/taker amount decimals are price decimals + 2 (docs/06 M4 C4). Amounts
+ * maker/taker amount decimals are price decimals + 2. Amounts
  * are floored (never rounded up) before scaling to 1e6 fixed point.
  *
  * Pure functions; use decimal.js to avoid float drift.

@@ -1,5 +1,5 @@
 /**
- * Pure readiness aggregation (docs/05 二·交易类, docs/09 §3).
+ * Pure readiness aggregation (docs/03 二·交易类).
  *
  * Checks (no allowance — full-approved at deploy):
  *  - proxy READY  (status === 'READY' AND a proxyAddress we can trust)

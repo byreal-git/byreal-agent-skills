@@ -1,5 +1,5 @@
 /**
- * Pre-submit minimum-order checks (docs/next-todo §4.2 follow-up).
+ * Pre-submit minimum-order checks.
  *
  * The CLOB rejects too-small orders with a cryptic `invalid taker amount`. We
  * pre-check locally (so dry-run surfaces it, with numbers) mirroring the

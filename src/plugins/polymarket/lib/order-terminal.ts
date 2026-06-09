@@ -1,5 +1,5 @@
 /**
- * Terminal-state logic for order polling (docs/03, docs/06 C9).
+ * Terminal-state logic for order polling.
  *
  * ⚠️ For MARKET orders, `live`/`delayed` = NON-terminal (keep polling); every
  * other status (incl. `matched`) = terminal. For LIMIT orders, HTTP 200 with

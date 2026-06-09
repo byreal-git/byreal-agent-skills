@@ -2,8 +2,6 @@
  * Polymarket plugin — Phase A (auth-free reads + local previews).
  *
  * Command tree: byreal-cli polymarket <category|event|portfolio|funding|order>
- * See docs/polymarket-cli/06-cli-development-plan.md and
- * docs/polymarket-cli/07-phase-a-implementation-and-test.md.
  *
  * Capabilities are filled in as each command lands (C2–C5); the catalog merges
  * them at runtime via getAllCapabilities().

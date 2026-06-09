@@ -1,7 +1,7 @@
 /**
  * Polymarket event typing + market filtering/sorting + compact/full views.
  *
- * Rules (docs/polymarket-cli/05 §5.3):
+ * Rules (docs/polymarket-cli/03 §5.3):
  *   - classify: sports (gameId + sportsMarketType) → neg-risk (event.negRisk)
  *     → binary (single Yes/No).
  *   - filterTradable: drop negRiskOther / inactive / closed / archived /

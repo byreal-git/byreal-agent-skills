@@ -52,7 +52,7 @@ export async function getWalletAddress(
 /**
  * POST /wallet/deploy — async deploy of the proxy/deposit wallet (API key →
  * Safe deploy → approvals). Returns current status; CLI polls /wallet/status to
- * READY. 40901 = "already deploying" → treated as idempotent success (docs/05 §5.2,
+ * READY. 40901 = "already deploying" → treated as idempotent success (docs/03 §5.2,
  * docs/02 A2). Write auth (Bearer + x-evm-address).
  */
 export async function deployWallet(

@@ -1,13 +1,13 @@
 /**
  * Market-order signed price = worstPrice ± absolute Δ, clamped to a legal range
- * and aligned to tick (docs/polymarket-cli/05 §4.3).
+ * and aligned to tick (docs/polymarket-cli/03 §4.3).
  *
  *   Δ = slippageBps / 10000   (ABSOLUTE probability points — default 0.01;
  *                              NOT a relative % of worst like swap's slippage)
  *   BUY:  signed = min(worst + Δ, 1 - tick), then CEIL to tick
  *   SELL: signed = max(worst - Δ, worst·(1 - relCap), tick), then FLOOR to tick
  *
- * The SELL relative floor (docs/next-todo §4.2): for very-low-price tokens the
+ * The SELL relative floor: for very-low-price tokens the
  * absolute Δ can exceed the token price, so worst-Δ goes ≤ 0 and the signed
  * price used to be slammed to the tick floor (e.g. 0.001) — the encoded
  * takerAmount then came out so small the CLOB rejected it ("invalid taker

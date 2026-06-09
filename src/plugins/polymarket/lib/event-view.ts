@@ -130,7 +130,7 @@ function buildSingleMarket(event: RawEvent, allMarkets: RawMarket[], marketId: s
   // Group by the SELECTED market's negRiskMarketID (the precise source), falling
   // back to the event-level group. Using the event level alone mis-groups when
   // an event holds more than one neg-risk group, or when Gamma only populates
-  // the market-level id — see docs/05 §5.3 "同 negRiskMarketID 其他候选".
+  // the market-level id — see docs/03 §5.3 "同 negRiskMarketID 其他候选".
   const selected = allMarkets.find((m) => m.id === marketId);
   const group = selected?.negRiskMarketID ?? event.negRiskMarketID;
   const withRelated = picked.map((m) => ({

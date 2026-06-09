@@ -1,6 +1,6 @@
 /**
  * order.preview core: turn a live book + order params into an immutable preview
- * snapshot (docs/05 §4). Market orders sweep the book for worstPrice and apply
+ * snapshot (docs/03 §4). Market orders sweep the book for worstPrice and apply
  * the absolute slippage buffer; limit orders echo the user price. Pure (book +
  * clock injected); the command layer fetches the book and prints.
  */

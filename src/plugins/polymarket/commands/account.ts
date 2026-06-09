@@ -1,5 +1,5 @@
 /**
- * polymarket account readiness — pre-trade gate (docs/09 §3).
+ * polymarket account readiness — pre-trade gate.
  * Aggregates proxy READY + balance (BUY/SELL routing) + market booleans via
  * the shared gatherReadiness orchestrator. Needs the agent token (L2 balance).
  */

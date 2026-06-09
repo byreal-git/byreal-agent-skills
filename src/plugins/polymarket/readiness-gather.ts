@@ -42,7 +42,7 @@ export async function gatherReadiness(
   // 2) balance (BUY=COLLATERAL / SELL=CONDITIONAL+token_id). Degrade to '0'.
   //    The CLOB balance ledger is cached + eventually-consistent — force a refresh
   //    (/balance-allowance/update) before reading, exactly as the frontend does
-  //    after deposits (docs/09). Best-effort: ignore the sync result.
+  //    after deposits. Best-effort: ignore the sync result.
   const assetType = p.side === 'BUY' ? 'COLLATERAL' : 'CONDITIONAL';
   await syncBalanceAllowance(assetType, p.tokenId, p.auth);
   const balR = await getBalanceAllowance(assetType, p.tokenId, p.auth);

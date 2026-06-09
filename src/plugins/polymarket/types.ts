@@ -21,7 +21,7 @@ export type OrderTypeStr = 'FOK' | 'GTC' | 'GTD';
 
 /**
  * Request body for POST /market/order/encode (OrderEncodeReq).
- * Confirmed against the live prod endpoint (docs/09 §1.1, fixture
+ * Confirmed against the live prod endpoint (fixture
  * __fixtures__/order-encode-binary.json): both sides use `amount`
  * (BUY = USD to spend, SELL = shares to sell); `size`/`conditionId` are NOT
  * fields. The param→request mapping is isolated in lib/order-build.toEncodeReq.

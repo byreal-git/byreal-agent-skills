@@ -3,7 +3,7 @@
  *
  * Phase A: previews are read-only (quote + address + min). The deposit *submit*
  * (construct → privySignMany → /bridge/deposit/submit) and withdraw submit are
- * Phase B. Bridge polling timeout returns `pending` (not failure) per docs/05 §5.6.
+ * Phase B. Bridge polling timeout returns `pending` (not failure) per docs/03 §5.6.
  */
 
 import type { BridgeSupportedAsset, BridgeQuote, BridgeOrder } from '../api/bridge.js';

@@ -14,7 +14,7 @@ import { pmGet, type PmWriteAuth } from './gateway.js';
  * NUMBER. POLY_1271 = 3 (Safe/proxy). ⚠️ The string 'POLY_1271' is silently read
  * as a different type → returns the EOA's (empty) balance instead of the proxy's,
  * which manifests as balance=0 + allowances=0. Must send the numeric '3'
- * (matches the frontend, verified live 2026-06-09). docs/09.
+ * (matches the frontend, verified live 2026-06-09).
  */
 const SIGNATURE_TYPE_POLY_1271 = '3';
 
@@ -33,7 +33,7 @@ export function getBalanceAllowance(
 
 /**
  * GET /clob/balance-allowance/update — triggers a backend balance/allowance cache
- * refresh (docs/03). Used after a 400 insufficient-balance to re-sync before one
+ * refresh. Used after a 400 insufficient-balance to re-sync before one
  * retry. Returns are ignored (the call is the side effect).
  */
 export function syncBalanceAllowance(

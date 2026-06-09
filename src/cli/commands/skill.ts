@@ -105,7 +105,7 @@ byreal-cli catalog show dex.pool.list
 | pm.funding.deposit.execute | Polymarket: deposit Solana USDC → Polygon proxy (build SPL → Privy sign → bridge submit → poll) |
 | pm.funding.withdraw.execute | Polymarket: withdraw Polygon pUSD → Solana USDC (backend signs via Privy + relays; CLI zero-signing) |
 
-> Polymarket plugin: **Phase A** (auth-free discovery + local previews) is done; **Phase B** adds trading — \`order place\` (market FOK + limit GTC), \`account readiness\`, \`order active/status/cancel\`, \`account deploy\`, \`funding deposit\`, L2 portfolio/balance reads. See docs/polymarket-cli/07–10.
+> Polymarket plugin: **Phase A** (auth-free discovery + local previews) is done; **Phase B** adds trading — \`order place\` (market FOK + limit GTC), \`account readiness\`, \`order active/status/cancel\`, \`account deploy\`, \`funding deposit\`, L2 portfolio/balance reads.
 
 ## Global Options
 

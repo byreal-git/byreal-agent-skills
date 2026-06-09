@@ -5,7 +5,7 @@
  * `defaults.pm_*` → hardcoded PM_DEFAULTS.
  *
  * Defaults are fixed per the TRD review (2026-06-03); see
- * docs/polymarket-cli/05-prd-analysis.md §4.4 and §5.6.
+ * docs/polymarket-cli/03-prd-analysis.md §4.4 and §5.6.
  *
  * `resolvePmConfig` is the pure merge core (unit-tested); `getPmConfig`
  * wraps it by reading the byreal-cli config file.

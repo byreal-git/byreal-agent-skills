@@ -45,7 +45,7 @@ const SOLANA_BRIDGE_CHAIN_ID = '1151111081099710';
 const POLYGON_CHAIN_ID = '137';
 const USDC_SOLANA_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 // DEPOSIT quotes the Polygon side as USDC.e (the frontend prices the inbound leg
-// via this; docs/05 §2 "USDC.e 怪异点"). pUSD on the deposit direction makes
+// via this; docs/03 §2 "USDC.e 怪异点"). pUSD on the deposit direction makes
 // /bridge/quote 500.
 const USDC_E_POLYGON = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
 // WITHDRAW quotes the Polygon side as pUSD — that is what the proxy actually
@@ -230,7 +230,7 @@ export function createFundingCommand(): Command {
         recipientAtaExists: toAtaInfo !== null,
       });
 
-      // Body matches the working frontend request exactly (docs/09): field is
+      // Body matches the working frontend request exactly: field is
       // `signedTx`, walletAddress=proxy, no toChain/toToken/recipient.
       const submitBody = {
         quoteId: quote.quoteId,

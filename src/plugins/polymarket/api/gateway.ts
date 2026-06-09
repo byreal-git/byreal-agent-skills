@@ -107,7 +107,7 @@ export interface PmWriteAuth {
 /**
  * Authenticated gateway write (POST/DELETE). Injects `Authorization: Bearer
  * <agent-token>` + `x-evm-address: <EOA>` (the gateway resolves L2 creds and
- * injects POLY_* HMAC; see docs/02 §B / docs/08).
+ * injects POLY_* HMAC; see docs/02 §B / docs/04).
  *
  * Returns the RAW parsed JSON as T — mirroring pmGet. `/clob/*` is a Polymarket
  * passthrough with NO business envelope (raw OrderResponse / {balance}), while

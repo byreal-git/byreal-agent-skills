@@ -3,7 +3,7 @@
  *
  * The Byreal whitelist has no flat "all event ids" endpoint; it is the set of
  * `eventId`s with `dataStatus===0` from /categoy/data across categories
- * (docs/polymarket-cli/05 §5.1). `intersect` is the hard guarantee that
+ * (docs/polymarket-cli/03 §5.1). `intersect` is the hard guarantee that
  * event.search never returns events outside the whitelist.
  *
  * Pure functions; the caching + gateway calls live in whitelist-cache.ts and

@@ -1,13 +1,13 @@
 /**
- * Order placement orchestrator (Plan B, execute mode) — docs/09 §2, docs/06 C1–C9.
+ * Order placement orchestrator (Plan B, execute mode).
  *
  *   encode → sign (Privy) → assemble suffix → submit → market terminal poll
  *
- * Robustness (docs/06 C7): submit 425/5xx → exponential backoff ≤ maxEarlyRetries;
+ * Robustness: submit 425/5xx → exponential backoff ≤ maxEarlyRetries;
  * submit 400 insufficient-balance OR success:false balance rejection → syncBalance
  * (BUY=COLLATERAL / SELL=CONDITIONAL+token_id) then ONE retry.
  *
- * Market terminal poll (docs/06 C9): GET data/order/{id}, classify via order-terminal;
+ * Market terminal poll: GET data/order/{id}, classify via order-terminal;
  * 1.5s × ≤ pollBudgetMs; timeout → pending (NOT failure).
  *
  * All side effects are injected (PlaceDeps) so the happy path + retries + poll are

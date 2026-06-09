@@ -1,7 +1,7 @@
 /**
  * Polymarket data-api passthrough (raw JSON) via the gateway /data route.
  * Phase A public reads: /positions, /value (keyed by the proxy wallet).
- * Shapes follow the public Polymarket data-api (docs/polymarket-cli/03).
+ * Shapes follow the public Polymarket data-api.
  */
 
 import type { Result } from '../../../core/types.js';

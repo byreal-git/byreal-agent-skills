@@ -1,5 +1,5 @@
 /**
- * Pure selection/shaping for order cancel (docs/05 cancel flow). cancel.preview
+ * Pure selection/shaping for order cancel (docs/03 cancel flow). cancel.preview
  * locks the set of orders that would be canceled; cancel.execute deletes them.
  */
 import type { OpenOrder } from '../types.js';

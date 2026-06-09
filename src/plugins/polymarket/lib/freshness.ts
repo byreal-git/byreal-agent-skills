@@ -1,6 +1,6 @@
 /**
  * Preview freshness: an immutable snapshot returned by order.preview and the
- * TTL/drift validation order.place runs against a re-quote (docs/05 §4.5).
+ * TTL/drift validation order.place runs against a re-quote (docs/03 §4.5).
  *
  * Stateless: the CLI does not persist anything — the Skill round-trips the
  * snapshot back into order.place, which re-quotes and validates:

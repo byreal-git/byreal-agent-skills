@@ -1,5 +1,5 @@
 /**
- * Pure helpers for Plan-B order assembly (docs/02 §二, docs/09).
+ * Pure helpers for Plan-B order assembly (docs/02 §二).
  *
  * The backend `encode` endpoint produces the order math + EIP-712 typed-data;
  * here we only:
@@ -9,7 +9,7 @@
  *  - shape the encode request and the submit body
  *
  * Exact `OrderEncodeReq` field names + the submit `signature` placement are
- * confirmed against a real encode response (docs/09 §6); the mapping lives here
+ * confirmed against a real encode response; the mapping lives here
  * so any rename touches one place.
  */
 import type {

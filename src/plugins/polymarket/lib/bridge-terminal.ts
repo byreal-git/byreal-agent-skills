@@ -1,5 +1,5 @@
 /**
- * Bridge order terminal-state logic (docs/02 §六, docs/05 §5.6).
+ * Bridge order terminal-state logic (docs/02 §六, docs/03 §5.6).
  * Business statuses: SIGNED / CONFIRMED / COMPLETED / FAILED; upstream bridge
  * adds DEPOSIT_DETECTED / PROCESSING / … . Terminal = COMPLETED | FAILED on
  * either the business `status` or the upstream `bridgeStatus`. Poll timeout →
