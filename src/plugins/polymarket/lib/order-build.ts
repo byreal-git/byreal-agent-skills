@@ -77,7 +77,12 @@ export function toEncodeReq(p: EncodeParams): OrderEncodeReq {
   };
 }
 
-/** Build the POST /clob/order body from the flat DTO: order (owner stripped) + assembled signature. */
+/**
+ * Build the POST /clob/order body from the flat DTO (matches the frontend's
+ * serializeSignedOrder): order fields (owner stripped) + assembled signature,
+ * with `salt` as a NUMBER (the CLOB rejects a string salt → "Invalid order
+ * payload"). Body shape `{order, orderType, postOnly, deferExec}`.
+ */
 export function toSubmitBody(
   dto: OrderEncodeDTO,
   innerSig: string,
@@ -85,5 +90,8 @@ export function toSubmitBody(
 ): SubmitOrderBody {
   const order = extractOrder(dto);
   order.signature = assembleSignature(innerSig, dto.signatureSuffix);
-  return { order, orderType, postOnly: false };
+  if (typeof order.salt === 'string') {
+    order.salt = Number.parseInt(order.salt, 10);
+  }
+  return { order, orderType, postOnly: false, deferExec: false };
 }

@@ -43,7 +43,7 @@ describe('api wrappers', () => {
 
   it('submitOrder returns the RAW /clob OrderResponse (no envelope)', async () => {
     stub(200, { success: true, orderID: 'o1', status: 'matched' });
-    const r = await submitOrder({ order: {}, orderType: 'FOK', postOnly: false }, auth);
+    const r = await submitOrder({ order: {}, orderType: 'FOK', postOnly: false, deferExec: false }, auth);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value.orderID).toBe('o1');
   });

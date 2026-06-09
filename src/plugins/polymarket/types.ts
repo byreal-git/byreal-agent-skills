@@ -42,7 +42,8 @@ export interface OrderEncodeReq {
  * signatureType=3 (POLY_1271); v2-with-builder shape (timestamp/metadata/builder).
  */
 export interface EncodedOrder {
-  salt?: string;
+  /** CLOB submit expects salt as a NUMBER (serializeSignedOrder parseInt's it). */
+  salt?: string | number;
   maker?: string;
   signer?: string;
   taker?: string;
@@ -81,6 +82,7 @@ export interface SubmitOrderBody {
   order: EncodedOrder;
   orderType: OrderTypeStr;
   postOnly: boolean;
+  deferExec: boolean;
 }
 
 /** Raw OrderResponse from POST /clob/order (Polymarket passthrough, no envelope). */
@@ -144,8 +146,11 @@ export interface ReadinessVerdict {
 export interface OrderPlaceResult {
   orderID: string;
   status: string | null;
-  /** settled = reached a terminal status within the poll budget; pending = timed out (re-check via order status). */
-  outcome: 'settled' | 'pending';
+  /**
+   * market: settled = terminal within poll budget; pending = timed out.
+   * limit: accepted = HTTP 200 + live (no settlement poll).
+   */
+  outcome: 'settled' | 'pending' | 'accepted';
   side: OrderSide;
   signed_price: string;
   /** User input: BUY = USD spent, SELL = shares sold. */

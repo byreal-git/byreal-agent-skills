@@ -46,9 +46,13 @@ describe('toSubmitBody', () => {
     const body = toSubmitBody(realDto, innerSig, 'FOK');
     expect(body.orderType).toBe('FOK');
     expect(body.postOnly).toBe(false);
+    expect(body.deferExec).toBe(false);
     expect('owner' in body.order).toBe(false);
     expect(body.order.signature).toBe('0x' + 'bb'.repeat(65) + String(realDto.signatureSuffix));
     expect(body.order.maker).toBe(realDto.maker);
+    // CLOB expects numeric salt (serializeSignedOrder parseInt's it)
+    expect(typeof body.order.salt).toBe('number');
+    expect(body.order.salt).toBe(Number.parseInt(String(realDto.salt), 10));
   });
 });
 
