@@ -40,6 +40,7 @@ describe('runOrderPlace', () => {
       expect(r.value.outcome).toBe('settled');
       expect(r.value.orderID).toBe('o1');
       expect(r.value.status).toBe('matched');
+      expect(r.value.order_type).toBe('FOK'); // execute result carries order_type (matches dry-run)
     }
   });
 
@@ -162,6 +163,7 @@ describe('runOrderPlace — limit (GTC)', () => {
       expect(r.value.outcome).toBe('accepted');
       expect(r.value.orderID).toBe('o1');
       expect(r.value.status).toBe('live');
+      expect(r.value.order_type).toBe('GTC');
     }
     expect(pollOnce).not.toHaveBeenCalled(); // limit: acceptance is terminal, no settlement poll
     expect(registerKeepalive).toHaveBeenCalledWith('o1');

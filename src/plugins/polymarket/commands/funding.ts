@@ -87,7 +87,7 @@ export function createFundingCommand(): Command {
 
   cmd
     .command('deposit-preview')
-    .description('Preview a Solana USDC → Polymarket deposit (read-only; submit is Phase B)')
+    .description('Preview a Solana USDC → Polymarket deposit (read-only; submit via `funding deposit --execute`)')
     .requiredOption('--amount <amount>', 'Amount in USDC (UI)')
     .option('--evm-wallet-address <addr>', 'EVM EOA (proxy wallet target)')
     .action(async (options, cmdObj: Command) => {
@@ -312,7 +312,7 @@ export function createFundingCommand(): Command {
 
   cmd
     .command('withdraw-preview')
-    .description('Preview a Polymarket → Solana USDC withdraw (read-only; submit is Phase B)')
+    .description('Preview a Polymarket → Solana USDC withdraw (read-only; submit via `funding withdraw --execute`)')
     .requiredOption('--amount <amount>', 'Amount in USDC (UI)')
     .requiredOption('--recipient <solanaAddress>', 'Destination Solana wallet')
     .option('--evm-wallet-address <addr>', 'EVM EOA (proxy wallet source)')
@@ -422,18 +422,10 @@ export function createFundingCommand(): Command {
         return;
       }
 
-      // EOA + agent token for the authenticated, signature-free submit.
-      let evmAuth: { token: string; evmAddress: string };
-      try {
-        const evmCtx = requireEvmPrivyContext(options.evmWalletAddress);
-        evmAuth = { token: evmCtx.token, evmAddress: evmCtx.address };
-      } catch (e) {
-        outputPmError(output, e as ByrealError);
-        return;
-      }
-
+      // unsigned-tx (default, back-compat): no client tx to sign — emit the
+      // prepared submit request. Must work WITHOUT an agent token, so this runs
+      // BEFORE resolving the EVM Privy context (mirrors `deposit`).
       if (mode === 'unsigned-tx') {
-        // No client-side tx to sign — emit the prepared submit request instead.
         outputPmSuccess(
           output,
           {
@@ -447,25 +439,31 @@ export function createFundingCommand(): Command {
         return;
       }
 
-      // execute: submit (no client signing) → poll 3s × ≤30s → terminal | pending
+      // execute: EOA + agent token for the authenticated, signature-free submit.
+      let evmAuth: { token: string; evmAddress: string };
+      try {
+        const evmCtx = requireEvmPrivyContext(options.evmWalletAddress);
+        evmAuth = { token: evmCtx.token, evmAddress: evmCtx.address };
+      } catch (e) {
+        outputPmError(output, e as ByrealError);
+        return;
+      }
+
+      // submit (no client signing) → poll 3s × ≤30s → terminal | pending
       printPrivySignBanner();
       const subR = await submitWithdraw(submitBody, evmAuth);
       if (!subR.ok) {
-        // The backend signs the withdraw typed-data with the agent token under a
-        // dedicated Privy policy (bridge_withdraw_v1). If that policy isn't granted
-        // to the agent token, the gateway returns 40902 — a backend/policy gap, not
-        // a CLI bug. Surface a clear, actionable message.
-        if (/40902|privy auth/i.test(subR.error.message)) {
-          outputPmError(
-            output,
-            sourceUnavailableError(
-              `withdraw rejected by backend (40902): the agent token lacks the Privy "bridge_withdraw_v1" typed-data signing policy. ` +
-                `Order placement already works, but withdraw signing must be granted backend-side before this can complete. Original: ${subR.error.message}`,
+        // The backend signs the withdraw typed-data server-side via Privy. A 40902
+        // here is a backend server-side-signing gap for withdraw (NOT a CLI bug;
+        // order placement already signs fine) — surface a clear, actionable hint.
+        const e = /40902|privy auth/i.test(subR.error.message)
+          ? sourceUnavailableError(
+              `withdraw rejected by backend (40902 Privy auth): server-side withdraw signing is not yet enabled for the agent token. ` +
+                `Order placement signs fine, so this is a backend gap (server-side signing path), not a CLI bug. Original: ${subR.error.message}`,
               false,
-            ),
-          );
-        }
-        outputPmError(output, subR.error);
+            )
+          : subR.error;
+        outputPmError(output, e);
       }
       const orderId = subR.value.orderId;
 

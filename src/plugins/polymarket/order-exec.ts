@@ -149,6 +149,7 @@ export async function runOrderPlace(
 
   const base: OrderPlaceResult = {
     orderID,
+    order_type: orderType,
     status: resp.status ?? null,
     outcome: 'pending',
     side: p.side,

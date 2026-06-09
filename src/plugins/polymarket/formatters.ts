@@ -30,7 +30,6 @@ export interface OrderPlaceView {
   status?: string | null;
   side: string;
   signed_price?: string | number;
-  size?: string;
   amount?: string;
   book_worst_price?: number;
   avg_price?: number;
@@ -134,7 +133,7 @@ export function renderPortfolio(p: Portfolio): void {
   console.log(
     chalk.gray(
       `  value=${p.summary.current_value_usd ?? '-'}  pnl=${p.summary.pnl_usd ?? '-'}  ` +
-        `cash=${p.summary.cash_available_usdc ?? 'n/a (Phase B)'}\n`,
+        `cash=${p.summary.cash_available_usdc ?? 'n/a (needs agent token)'}\n`,
     ),
   );
   const table = new Table({
@@ -162,7 +161,7 @@ export function renderPortfolio(p: Portfolio): void {
   }
   console.log(table.toString());
   console.log(chalk.gray(`\n  active orders: ${p.active_orders.length}`));
-  if (p.partial) console.log(chalk.gray(`  partial: ${p.partial_reason ?? 'some fields require Phase B'}`));
+  if (p.partial) console.log(chalk.gray(`  partial: ${p.partial_reason ?? 'some fields need the agent token'}`));
 }
 
 export function renderEventSearch(d: { query: string; events: EventCandidate[] }): void {
@@ -196,7 +195,7 @@ export function renderOrderPreview(o: OrderPreview): void {
   console.log(table.toString());
   if (o.warning) console.log(chalk.yellow(`\n  ⚠ ${o.warning}`));
   console.error(
-    chalk.gray('\n  [preview] round-trip this snapshot to order.place (Phase B); it re-quotes + checks PREVIEW_EXPIRED.'),
+    chalk.gray('\n  [preview] round-trip this snapshot to `order place --preview`; it re-quotes + checks PREVIEW_EXPIRED.'),
   );
 }
 
@@ -346,7 +345,6 @@ export function renderOrderPlace(d: OrderPlaceView): void {
   if (d.amount !== undefined) {
     table.push([chalk.gray(d.side === 'SELL' ? 'Amount (shares)' : 'Amount (USD)'), d.amount]);
   }
-  if (d.size !== undefined) table.push([chalk.gray('Size (shares)'), d.size]);
   if (d.signed_price !== undefined) table.push([chalk.gray('Signed Price'), String(d.signed_price)]);
   if (d.book_worst_price !== undefined) table.push([chalk.gray('Book Worst Price'), String(d.book_worst_price)]);
   if (d.avg_price !== undefined) table.push([chalk.gray('Avg Price'), String(d.avg_price)]);
@@ -502,7 +500,7 @@ export function renderFundingBalance(b: FundingBalance): void {
   table.push(
     [chalk.gray('Proxy Wallet'), b.proxy_wallet],
     [chalk.gray('Current Value (USD)'), b.current_value_usd ?? '-'],
-    [chalk.gray('Cash Available (USDC)'), b.cash_available_usdc ?? 'n/a (Phase B)'],
+    [chalk.gray('Cash Available (USDC)'), b.cash_available_usdc ?? 'n/a (needs agent token)'],
   );
   console.log(table.toString());
 }

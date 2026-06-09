@@ -70,7 +70,7 @@ const capabilities: Capability[] = [
   {
     id: 'pm.portfolio.read',
     name: 'Polymarket Portfolio Read',
-    description: 'Read positions / value / pnl (public parts; L2 cash/orders are Phase B)',
+    description: 'Read positions / value / pnl (+ L2 cash/active_orders when the agent token is configured)',
     category: 'query',
     auth_required: false,
     command: 'byreal-cli polymarket portfolio read --evm-wallet-address <addr>',
@@ -205,7 +205,7 @@ const capabilities: Capability[] = [
   {
     id: 'pm.funding.deposit.preview',
     name: 'Polymarket Deposit Preview',
-    description: 'Preview a Solana USDC → Polymarket deposit (read-only; submit is Phase B)',
+    description: 'Preview a Solana USDC → Polymarket deposit (read-only; submit via `funding deposit --execute`)',
     category: 'query',
     auth_required: false,
     command: 'byreal-cli polymarket funding deposit-preview --amount <usdc>',
@@ -232,7 +232,7 @@ const capabilities: Capability[] = [
   {
     id: 'pm.funding.withdraw.preview',
     name: 'Polymarket Withdraw Preview',
-    description: 'Preview a Polymarket → Solana USDC withdraw (read-only; submit is Phase B)',
+    description: 'Preview a Polymarket → Solana USDC withdraw (read-only; submit via `funding withdraw --execute`)',
     category: 'query',
     auth_required: false,
     command: 'byreal-cli polymarket funding withdraw-preview --amount <usdc> --recipient <solanaAddr>',
@@ -278,7 +278,7 @@ export const polymarketPlugin: DefiPlugin = {
   name: 'Polymarket',
   createCommand() {
     const cmd = new Command('polymarket').description(
-      'Polymarket prediction markets — discover, preview, fund (Phase A)',
+      'Polymarket prediction markets — discover, preview, trade (market/limit), fund (deposit/withdraw)',
     );
     cmd.addCommand(createCategoryCommand());
     cmd.addCommand(createEventCommand());

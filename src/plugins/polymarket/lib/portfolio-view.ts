@@ -171,7 +171,7 @@ export function buildPortfolio(
     positions: mapped,
     active_orders: active ? active.map(shapeOrder) : [],
     partial: !haveL2,
-    partial_reason: haveL2 ? undefined : 'cash_available_usdc and active_orders require CLOB L2 auth (Phase B)',
+    partial_reason: haveL2 ? undefined : 'cash_available_usdc and active_orders require the agent token (CLOB L2 auth)',
   };
 }
 

@@ -145,6 +145,8 @@ export interface ReadinessVerdict {
 /** Result of an executed order placement (execute mode). */
 export interface OrderPlaceResult {
   orderID: string;
+  /** 'FOK' (market) | 'GTC' (limit) — mirrors the dry-run view for consistent output. */
+  order_type: OrderTypeStr;
   status: string | null;
   /**
    * market: settled = terminal within poll budget; pending = timed out.

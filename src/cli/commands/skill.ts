@@ -94,7 +94,7 @@ byreal-cli catalog show dex.pool.list
 | pm.category.list | Polymarket: list Byreal-configured categories |
 | pm.event.list | Polymarket: list active tradable events under a category |
 | pm.event.detail | Polymarket: event detail (compact/full, neg-risk, related_markets) |
-| pm.portfolio.read | Polymarket: positions / value / pnl (public; L2 cash/orders are Phase B) |
+| pm.portfolio.read | Polymarket: positions / value / pnl (+ L2 cash/active_orders when the agent token is configured) |
 | pm.funding.balance | Polymarket: available balance (public parts) |
 | pm.account.readiness | Polymarket: pre-trade gate — proxy READY + balance + market state (L2) |
 | pm.account.deploy | Polymarket: deploy the proxy/deposit wallet (poll READY) |
@@ -255,7 +255,7 @@ byreal-cli polymarket event detail --event-id <id> --market-id <id> -o json   # 
 Notes:
 - \`event search\` takes a **title-like English query** (the Skill rewrites the user's words first; never pass raw user phrasing or specific option names). It runs Gamma public-search through the gateway and intersects with the Byreal whitelist, so it never returns events outside the whitelist; empty → \`NO_MATCH\`, source down → \`EVENT_SEARCH_UNAVAILABLE\`.
 - \`event detail\` is neg-risk aware: it hides \`negRiskOther\` placeholders, sorts candidates by YES probability, and reports \`market_count\`/\`markets_returned\`/\`markets_truncated\`.
-- \`portfolio read\` / \`funding balance\` return public fields only in Phase A (positions/value/pnl). \`cash_available_usdc\` and \`active_orders\` are \`null\` with \`partial: true\` until Phase B (CLOB L2 auth).
+- \`portfolio read\` / \`funding balance\` return positions/value/pnl from public data; \`cash_available_usdc\` and \`active_orders\` (CLOB L2) are populated when the agent token is configured, else \`null\` with \`partial: true\`.
 - EVM address resolves from \`--evm-wallet-address\` or a \`type:"evm"\` wallet in realclaw-config.json.
 - \`order preview\` is **read-only** local computation (no signing): it re-reads the live CLOB book, sweeps it for the market worst-price, applies the absolute slippage buffer (Δ = slippage_bps/10000, default 0.01 — a probability point, NOT a relative %; BUY worst+Δ ceil-to-tick, SELL worst−Δ floor-to-tick), and returns an immutable snapshot with \`quoted_at\`/\`expires_at\`. Market orders are FOK. Get \`token_id\` from \`event detail\` (\`yes_token_id\`/\`no_token_id\`).
 - \`funding deposit-preview\` / \`withdraw-preview\` are **read-only** previews (quote + min, from \`bridge/supported-assets\`); P0 supports **Solana USDC ⇄ Polygon** only. \`funding status\` reads \`/bridge/orders\` (COMPLETED/FAILED terminal). All resolve the proxy wallet first, so they need a deployed proxy. **Deposit** source is the **embedded Solana wallet** in realclaw-config (only it can be signed by the agent token), NOT your main/Phantom wallet. **Withdraw** \`--recipient\` is any Solana address you choose (your deposit source or main wallet) — funds do NOT auto-return to the source.
