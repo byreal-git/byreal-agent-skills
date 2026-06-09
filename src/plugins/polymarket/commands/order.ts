@@ -29,6 +29,7 @@ import { syncBalanceAllowance } from '../api/clob-account.js';
 import { buildOrderPreview } from '../lib/order-view.js';
 import { validate as validateFreshness, type PreviewSnapshot } from '../lib/freshness.js';
 import { extractOrder, toEncodeReq } from '../lib/order-build.js';
+import { checkOrderMinimum } from '../lib/order-minimums.js';
 import { gatherReadiness } from '../readiness-gather.js';
 import { runOrderPlace, type PlaceDeps } from '../order-exec.js';
 import { getPmConfig } from '../config.js';
@@ -201,6 +202,30 @@ export function createOrderCommand(): Command {
             ? String(options.amount)
             : String(options.size);
       const needAmount = orderAmount;
+
+      // ---- minimum-order pre-check (local; mirrors frontend + book min_order_size)
+      //      so dry-run surfaces "too small" with numbers instead of a cryptic
+      //      CLOB `invalid taker amount` at execute time. ----
+      const minOrderSizeRaw = (bookR.value as { min_order_size?: string | number }).min_order_size;
+      const minOrderSize = minOrderSizeRaw !== undefined ? Number(minOrderSizeRaw) : undefined;
+      const sharesForCheck =
+        side === 'buy' && kind === 'market'
+          ? Number(orderAmount) / Number(signedPrice)
+          : Number(options.size);
+      const notionalForCheck =
+        side === 'buy' && kind === 'market'
+          ? Number(orderAmount)
+          : Number(options.size) * Number(signedPrice);
+      const minChk = checkOrderMinimum({
+        kind,
+        side: sideUC,
+        shares: sharesForCheck,
+        notionalUsd: notionalForCheck,
+        minOrderSize,
+      });
+      if (!minChk.ok) {
+        outputPmError(output, validationError(minChk.reason ?? 'order below minimum', side === 'buy' && kind === 'market' ? 'amount' : 'size'));
+      }
 
       // ---- dry-run: signed price + best-effort readiness, no side effects ----
       if (mode === 'dry-run') {
