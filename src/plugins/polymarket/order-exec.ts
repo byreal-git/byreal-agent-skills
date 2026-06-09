@@ -71,6 +71,22 @@ function isBalanceFailure(text: string | undefined): boolean {
   return !!text && BALANCE_RE.test(text);
 }
 
+/**
+ * The CLOB rejects orders whose value is below its minimum order size with a
+ * cryptic `invalid taker amount`. Enrich it so the user understands the order is
+ * simply too small (common for low-price long-shot tokens: shares × price falls
+ * under the minimum) — no slippage value can fix a sub-minimum notional.
+ */
+function enrichSubmitError(e: ByrealError): ByrealError {
+  if (/invalid taker amount/i.test(e.message)) {
+    return apiError(
+      `order below the CLOB minimum order size (the order value, shares × price, is too small to trade) — increase the size/amount. Original: ${e.message}`,
+      e.details?.status_code as number | undefined,
+    );
+  }
+  return e;
+}
+
 export async function runOrderPlace(
   p: PlaceParams,
   d: PlaceDeps,
@@ -122,7 +138,7 @@ export async function runOrderPlace(
         didBalanceSync = true;
         continue;
       }
-      return err(e);
+      return err(enrichSubmitError(e));
     }
     // HTTP 200 — but Polymarket may still reject (success:false)
     if (sub.value.success === false) {

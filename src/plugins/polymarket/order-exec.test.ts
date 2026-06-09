@@ -110,6 +110,19 @@ describe('runOrderPlace', () => {
     expect(submit).toHaveBeenCalledTimes(1);
   });
 
+  it('enriches an "invalid taker amount" rejection with a minimum-order-size hint', async () => {
+    const submit = vi.fn(async () =>
+      err(apiError('PM gateway 400: {"error":"invalid taker amount"}', 400)),
+    );
+    const r = await runOrderPlace({ ...baseParams, side: 'SELL' }, makeDeps({ submit }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.message).toMatch(/minimum order size/i);
+      expect(r.error.message).toMatch(/invalid taker amount/i); // keeps the original reason
+    }
+    expect(submit).toHaveBeenCalledTimes(1); // not a retryable/balance error
+  });
+
   it('propagates encode error without signing/submitting', async () => {
     const sign = vi.fn();
     const submit = vi.fn();
