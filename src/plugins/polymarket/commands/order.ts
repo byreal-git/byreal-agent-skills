@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import Decimal from 'decimal.js';
 import type { GlobalOptions } from '../../../core/types.js';
 import {
   validationError,
@@ -15,7 +16,14 @@ import {
 } from '../../../privy/execute.js';
 import { getBook } from '../api/clob.js';
 import { encodeOrder } from '../api/market.js';
-import { submitOrder, getOrderStatus, getActiveOrders, cancelOrder, cancelAll } from '../api/order.js';
+import {
+  submitOrder,
+  getOrderStatus,
+  getActiveOrders,
+  cancelOrder,
+  cancelAll,
+  submitLimitKeepalive,
+} from '../api/order.js';
 import { selectCancelTargets } from '../lib/cancel-view.js';
 import { syncBalanceAllowance } from '../api/clob-account.js';
 import { buildOrderPreview } from '../lib/order-view.js';
@@ -100,15 +108,16 @@ export function createOrderCommand(): Command {
 
   cmd
     .command('place')
-    .description('Place a market (FOK) order: re-quote → Privy sign → submit → terminal poll')
+    .description('Place an order: market (FOK; re-quote→sign→submit→poll) or limit (GTC; resting + keepalive)')
     .requiredOption('--token-id <id>', 'CLOB outcome token id (asset_id)')
     .requiredOption('--side <side>', 'buy | sell')
     .option('--amount <usd>', 'BUY market: USD to spend')
-    .option('--size <shares>', 'SELL market: shares to sell')
-    .option('--order-type <type>', 'market (FOK) — limit is a later milestone', 'market')
+    .option('--size <shares>', 'SELL market, or limit (both sides): shares')
+    .option('--price <p>', 'Limit price (limit orders only; 0 < p < 1)')
+    .option('--order-type <type>', 'market (FOK) | limit (GTC)', 'market')
     .option('--condition-id <id>', 'Market conditionId (enables readiness market checks)')
     .option('--slippage-bps <bps>', 'Market slippage tolerance (absolute Δ; default 100 = 0.01)')
-    .option('--preview <json>', 'Preview snapshot JSON from `order preview` (freshness/PREVIEW_EXPIRED check)')
+    .option('--preview <json>', 'Preview snapshot JSON from `order preview` (market freshness/PREVIEW_EXPIRED check)')
     .option('--evm-wallet-address <0x>', 'EVM EOA (defaults to realclaw-config evm wallet)')
     .option('--execute', 'Sign + submit the order via Privy (real on-chain order)')
     .option('--dry-run', 'Preview signed price + readiness only; no encode/sign/submit')
@@ -123,33 +132,39 @@ export function createOrderCommand(): Command {
       }
       const sideUC = side.toUpperCase() as 'BUY' | 'SELL';
       const orderType = String(options.orderType).toLowerCase();
-      if (orderType !== 'market') {
-        outputPmError(
-          output,
-          validationError('order place supports market (FOK) only in this milestone; limit is next', 'order-type'),
-        );
+      if (orderType !== 'market' && orderType !== 'limit') {
+        outputPmError(output, validationError('--order-type must be market or limit', 'order-type'));
       }
-      if (side === 'buy' && !options.amount) {
-        outputPmError(output, validationError('market BUY requires --amount (USD)', 'amount'));
-      }
-      if (side === 'sell' && !options.size) {
-        outputPmError(output, validationError('market SELL requires --size (shares)', 'size'));
+      const kind = orderType === 'limit' ? 'limit' : 'market';
+
+      // input validation per kind
+      if (kind === 'market') {
+        if (side === 'buy' && !options.amount) {
+          outputPmError(output, validationError('market BUY requires --amount (USD)', 'amount'));
+        }
+        if (side === 'sell' && !options.size) {
+          outputPmError(output, validationError('market SELL requires --size (shares)', 'size'));
+        }
+      } else {
+        if (!options.price) outputPmError(output, validationError('limit orders require --price', 'price'));
+        if (!options.size) outputPmError(output, validationError('limit orders require --size (shares)', 'size'));
       }
 
       const pm = getPmConfig(
         options.slippageBps ? { marketSlippageBps: parseInt(options.slippageBps, 10) } : {},
       );
 
-      // ---- re-quote (public): book-sweep → signed worst price ----
+      // ---- price source: market = book-sweep + slippage; limit = user price (tick-aligned) ----
       const bookR = await getBook(options.tokenId);
       if (!bookR.ok) outputPmError(output, bookR.error);
       const previewR = buildOrderPreview({
         tokenId: options.tokenId,
         conditionId: options.conditionId ?? null,
         side: side as 'buy' | 'sell',
-        orderType: 'market',
+        orderType: kind,
         amount: options.amount,
         size: options.size,
+        price: options.price,
         slippageBps: pm.marketSlippageBps,
         book: bookR.value,
         nowSec: Math.floor(Date.now() / 1000),
@@ -160,8 +175,8 @@ export function createOrderCommand(): Command {
       const signedPrice = String(snap.signed_worst_price);
       const freshWorst = snap.book_worst_price;
 
-      // ---- freshness check against a round-tripped preview snapshot ----
-      if (options.preview) {
+      // ---- freshness check against a round-tripped preview snapshot (market only) ----
+      if (kind === 'market' && options.preview) {
         let prior: PreviewSnapshot;
         try {
           prior = JSON.parse(options.preview) as PreviewSnapshot;
@@ -173,8 +188,18 @@ export function createOrderCommand(): Command {
         if (!v.ok) outputPmError(output, previewExpiredError(v.reason));
       }
 
-      // encode is amount-based (T11 confirmed): BUY amount = USD, SELL amount = shares.
-      const orderAmount = side === 'buy' ? String(options.amount) : String(options.size);
+      // encode is amount-based: BUY amount = USD, SELL amount = shares. For a limit
+      // BUY the user gives shares (--size) + --price, so USD = size × signed price
+      // (encode's BUY branch divides amount/price back to shares). SELL = shares.
+      const encOrderType: 'FOK' | 'GTC' = kind === 'limit' ? 'GTC' : 'FOK';
+      const orderAmount =
+        kind === 'limit'
+          ? side === 'buy'
+            ? new Decimal(options.size).mul(signedPrice).toString()
+            : String(options.size)
+          : side === 'buy'
+            ? String(options.amount)
+            : String(options.size);
       const needAmount = orderAmount;
 
       // ---- dry-run: signed price + best-effort readiness, no side effects ----
@@ -194,6 +219,7 @@ export function createOrderCommand(): Command {
         }
         const dryView = {
           mode: 'dry-run',
+          order_type: encOrderType,
           side: sideUC,
           signed_price: signedPrice,
           amount: orderAmount,
@@ -227,6 +253,7 @@ export function createOrderCommand(): Command {
             signedPrice,
             amount: orderAmount,
             negRisk: snap.neg_risk,
+            orderType: encOrderType,
           }),
           auth,
         );
@@ -237,9 +264,13 @@ export function createOrderCommand(): Command {
             typedDataToSign: encR.value.eip712,
             signatureSuffix: encR.value.signatureSuffix,
             order: extractOrder(encR.value),
-            orderType: 'FOK',
+            orderType: encOrderType,
             submitHint:
-              'Polymarket orders sign via Privy (POLY_1271); sign eip712, assemble "0x"+innerSig+suffix, then POST /clob/order. Use --execute for the full flow.',
+              'Polymarket orders sign via Privy (POLY_1271); sign eip712, assemble "0x"+innerSig+suffix, then POST /clob/order' +
+              (kind === 'limit'
+                ? ' with orderType GTC, then POST /v1/market/limit-order/submit {eoaAddress, orderId} to keep it alive.'
+                : '.') +
+              ' Use --execute for the full flow.',
           },
           () => {
             // table view is the JSON; unsigned-tx is JSON-oriented
@@ -250,7 +281,7 @@ export function createOrderCommand(): Command {
         return;
       }
 
-      // ---- execute: readiness gate → encode → sign → submit → poll ----
+      // ---- execute: readiness gate → encode → sign → submit → poll/accept ----
       printPrivySignBanner();
       const rr = await gatherReadiness({
         auth,
@@ -274,6 +305,16 @@ export function createOrderCommand(): Command {
         pollOnce: (orderId) => getOrderStatus(orderId, auth),
         sleep: (ms) => new Promise((res) => setTimeout(res, ms)),
         now: () => Date.now(),
+        // limit only: register the backend keepalive heartbeat (eoaAddress = EOA,
+        // orderId = the CLOB order id). Throwing here is caught by runOrderPlace
+        // as best-effort — the order is already accepted.
+        registerKeepalive:
+          kind === 'limit'
+            ? async (orderId) => {
+                const r = await submitLimitKeepalive(ctx.address, orderId, auth);
+                if (!r.ok) throw r.error;
+              }
+            : undefined,
       };
 
       const placeR = await runOrderPlace(
@@ -284,6 +325,7 @@ export function createOrderCommand(): Command {
           signedPrice,
           amount: orderAmount,
           negRisk: snap.neg_risk,
+          kind,
         },
         deps,
       );

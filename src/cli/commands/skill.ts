@@ -98,13 +98,13 @@ byreal-cli catalog show dex.pool.list
 | pm.funding.balance | Polymarket: available balance (public parts) |
 | pm.account.readiness | Polymarket: pre-trade gate — proxy READY + balance + market state (L2) |
 | pm.account.deploy | Polymarket: deploy the proxy/deposit wallet (poll READY) |
-| pm.order.place | Polymarket: place a market (FOK) order (re-quote → Privy sign → submit → poll) |
+| pm.order.place | Polymarket: place a market (FOK; re-quote → sign → submit → poll) or limit (GTC; resting + keepalive) order |
 | pm.order.active | Polymarket: list active (open) orders (L2) |
 | pm.order.status | Polymarket: read a single order status (L2) |
 | pm.order.cancel | Polymarket: cancel open orders (dry-run previews; execute cancels) |
 | pm.funding.deposit.execute | Polymarket: deposit Solana USDC → Polygon proxy (build SPL → Privy sign → bridge submit → poll) |
 
-> Polymarket plugin: **Phase A** (auth-free discovery + local previews) is done; **Phase B M0** adds trading (\`order place\` market FOK + \`account readiness\`). Remaining Phase B (order cancel/active/status, funding execute, wallet deploy, L2 portfolio reads) is in progress. See docs/polymarket-cli/07–10.
+> Polymarket plugin: **Phase A** (auth-free discovery + local previews) is done; **Phase B** adds trading — \`order place\` (market FOK + limit GTC), \`account readiness\`, \`order active/status/cancel\`, \`account deploy\`, \`funding deposit\`, L2 portfolio/balance reads. See docs/polymarket-cli/07–10.
 
 ## Global Options
 
@@ -224,8 +224,9 @@ Present on-chain data first, then external context, then synthesize how external
 | Polymarket balance | \`byreal-cli polymarket funding balance [--evm-wallet-address <addr>]\` |
 | Polymarket order preview | \`byreal-cli polymarket order preview --token-id <id> --side buy --amount <usd>\` |
 | Polymarket account readiness | \`byreal-cli polymarket account readiness --token-id <id> --side buy --amount <usd> --condition-id <cond>\` |
-| Polymarket order place (dry-run) | \`byreal-cli polymarket order place --token-id <id> --side buy --amount <usd> --dry-run\` |
-| Polymarket order place (execute) | \`byreal-cli polymarket order place --token-id <id> --side buy --amount <usd> --execute\` |
+| Polymarket order place (market, dry-run) | \`byreal-cli polymarket order place --token-id <id> --side buy --amount <usd> --dry-run\` |
+| Polymarket order place (market, execute) | \`byreal-cli polymarket order place --token-id <id> --side buy --amount <usd> --execute\` |
+| Polymarket order place (limit GTC) | \`byreal-cli polymarket order place --token-id <id> --side buy --order-type limit --price <p> --size <shares> --execute\` |
 | Polymarket active orders | \`byreal-cli polymarket order active\` |
 | Polymarket order status | \`byreal-cli polymarket order status --order-id <id>\` |
 | Polymarket cancel (preview) | \`byreal-cli polymarket order cancel --order-id <id> --dry-run\` |
@@ -257,7 +258,7 @@ Notes:
 - \`order preview\` is **read-only** local computation (no signing): it re-reads the live CLOB book, sweeps it for the market worst-price, applies the absolute slippage buffer (Δ = slippage_bps/10000, default 0.01 — a probability point, NOT a relative %; BUY worst+Δ ceil-to-tick, SELL worst−Δ floor-to-tick), and returns an immutable snapshot with \`quoted_at\`/\`expires_at\`. Market orders are FOK. Get \`token_id\` from \`event detail\` (\`yes_token_id\`/\`no_token_id\`).
 - \`funding deposit-preview\` / \`withdraw-preview\` are **read-only** previews (quote + deposit address + min, from \`bridge/supported-assets\`); P0 supports **Solana USDC ⇄ Polygon** only. The actual transfers — deposit (construct Solana SPL tx → Privy sign → \`/bridge/deposit/submit\`) and withdraw submit — are Phase B. \`funding status\` reads \`/bridge/orders\` (COMPLETED/FAILED terminal). All four resolve the proxy wallet first, so they need a deployed proxy for the happy path.
 
-## Workflow: Polymarket Trading (Phase B M0 — market orders)
+## Workflow: Polymarket Trading (Phase B — market + limit orders)
 
 \`\`\`
 # 1) preview (read-only) → 2) readiness gate → 3) place dry-run → 4) place execute → 5) confirm
@@ -269,11 +270,11 @@ byreal-cli polymarket order place        --token-id <yesTokenId> --side buy --am
 
 Notes:
 - \`account readiness\` is the **pre-trade gate** (needs the agent token): proxy \`READY\` (proxyAddress trusted only when READY) + balance (BUY→COLLATERAL/USDC, SELL→CONDITIONAL/shares+token_id) + market booleans (active/acceptingOrders/enableOrderBook). Pass \`--condition-id\` to verify the market state. allowance is NOT checked (full-approved at deploy).
-- \`order place\` is a **write command** with the standard three modes: default \`unsigned-tx\` emits the to-sign EIP-712 + \`signatureSuffix\` (Polymarket orders sign via Privy/POLY_1271, so this artifact is for a Privy-capable signer/debug; the \`encode\` step still needs the agent token); \`--dry-run\` shows the signed price + readiness with no side effects; \`--execute\` runs the full \`re-quote → Privy sign → submit → terminal poll\`.
-- Market orders are **FOK** (all-or-nothing). place re-quotes the book at execute time; pass the \`order preview\` snapshot via \`--preview '<json>'\` to enforce \`PREVIEW_EXPIRED\` (TTL/drift). Market terminal poll is ≤20s; on timeout it returns \`outcome: "pending"\` (not a failure) — re-check via \`order status --order-id\`.
-- \`order active\` lists open orders; \`order status --order-id\` reads one; \`order cancel\` locks the target set (\`--order-id\` / \`--all\` / \`--market\`) and \`--dry-run\` previews it, \`--execute\` cancels (DELETE /clob/order or /cancel-all).
+- \`order place\` is a **write command** with the standard three modes: default \`unsigned-tx\` emits the to-sign EIP-712 + \`signatureSuffix\` (Polymarket orders sign via Privy/POLY_1271, so this artifact is for a Privy-capable signer/debug; the \`encode\` step still needs the agent token); \`--dry-run\` shows the signed price + readiness with no side effects; \`--execute\` runs the full flow.
+- **Market** orders (\`--order-type market\`, default) are **FOK** (all-or-nothing): \`re-quote → sign → submit → terminal poll\`. place re-quotes the book at execute time; pass the \`order preview\` snapshot via \`--preview '<json>'\` to enforce \`PREVIEW_EXPIRED\` (TTL/drift). Terminal poll is ≤20s; on timeout it returns \`outcome: "pending"\` (not a failure) — re-check via \`order status --order-id\`. BUY uses \`--amount\` (USD); SELL uses \`--size\` (shares).
+- **Limit** orders (\`--order-type limit\`) are **GTC** (resting): \`encode(price) → sign → submit → keepalive\`. Both sides use \`--price\` (0<p<1) + \`--size\` (shares); no book sweep, no \`--preview\`. On HTTP 200 the order is \`outcome: "accepted"\` (resting) and the backend keepalive is registered (best-effort; a keepalive failure does not fail the order). ⚠️ A resting order can still be auto-canceled by the CLOB if heartbeats lapse — re-check with \`order active\`/\`order status\`.
+- \`order active\` lists open orders; \`order status --order-id\` reads one; \`order cancel\` locks the target set (\`--order-id\` / \`--all\` / \`--market\`) and \`--dry-run\` previews it, \`--execute\` cancels (DELETE /clob/order or /cancel-all). Cancel applies to resting (limit) orders.
 - **Funding the proxy:** \`account deploy --execute\` deploys the proxy/deposit wallet; \`funding deposit --amount <usdc> --execute\` bridges Solana USDC → Polygon proxy (build SPL → Privy sign → /bridge/deposit/submit → poll, ≤30s → pending). Solana source = \`--wallet-address\` or the realclaw-config solana wallet. Then \`funding status --type deposit\` to confirm.
-- Limit orders + keepalive (\`/market/limit-order/submit\`) and L2 portfolio reads (cash/active_orders) are the remaining Phase B work.
 
 ## Command Notes
 

@@ -39,6 +39,12 @@ export interface PlaceDeps {
   pollOnce: (orderId: string) => Promise<Result<OpenOrder, ByrealError>>;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
+  /**
+   * LIMIT only: register the resting order for the backend keepalive heartbeat
+   * (POST /v1/market/limit-order/submit). Best-effort — a failure here must NOT
+   * fail the already-accepted order. Omitted/unused for market orders.
+   */
+  registerKeepalive?: (orderId: string) => Promise<void>;
 }
 
 export interface PlaceParams {
@@ -49,6 +55,11 @@ export interface PlaceParams {
   /** BUY = USD to spend; SELL = shares to sell (encode is amount-based). */
   amount: string;
   negRisk: boolean;
+  /**
+   * market (FOK): re-quoted, settlement-polled. limit (GTC): user price, no
+   * poll — HTTP 200 + live = accepted/resting, then keepalive. Default market.
+   */
+  kind?: 'market' | 'limit';
   pollBudgetMs?: number; // default 20000
   pollIntervalMs?: number; // default 1500
   maxEarlyRetries?: number; // default 3
@@ -67,6 +78,8 @@ export async function runOrderPlace(
   const pollBudgetMs = p.pollBudgetMs ?? 20_000;
   const pollIntervalMs = p.pollIntervalMs ?? 1_500;
   const maxEarly = p.maxEarlyRetries ?? 3;
+  const kind = p.kind ?? 'market';
+  const orderType: 'FOK' | 'GTC' = kind === 'limit' ? 'GTC' : 'FOK';
   const assetType: 'COLLATERAL' | 'CONDITIONAL' = p.side === 'BUY' ? 'COLLATERAL' : 'CONDITIONAL';
   const syncTokenId = p.side === 'SELL' ? p.tokenId : undefined;
 
@@ -79,6 +92,7 @@ export async function runOrderPlace(
       signedPrice: p.signedPrice,
       amount: p.amount,
       negRisk: p.negRisk,
+      orderType,
     }),
   );
   if (!encR.ok) return encR;
@@ -87,7 +101,7 @@ export async function runOrderPlace(
   // ---- sign (Privy) ----
   const sigR = await d.sign(dto.eip712);
   if (!sigR.ok) return sigR;
-  const body = toSubmitBody(dto, sigR.value, 'FOK');
+  const body = toSubmitBody(dto, sigR.value, orderType);
 
   // ---- submit with robustness: maxEarly retries for 425/5xx + ONE balance-sync retry ----
   let earlyRetries = 0;
@@ -144,6 +158,21 @@ export async function runOrderPlace(
     making_amount: resp.makingAmount,
     transaction_hashes: resp.transactionsHashes,
   };
+
+  // ---- limit (GTC): HTTP 200 + live = accepted/resting; no settlement poll.
+  //      Register the backend keepalive heartbeat (best-effort: a keepalive
+  //      failure must not fail the already-accepted order). ----
+  if (kind === 'limit') {
+    if (d.registerKeepalive) {
+      try {
+        await d.registerKeepalive(orderID);
+      } catch {
+        // best-effort — the order is accepted regardless; backend may still
+        // pick it up via its sync job, and the user can re-place if it lapses.
+      }
+    }
+    return ok({ ...base, outcome: 'accepted' });
+  }
 
   // ---- market terminal poll ----
   const deadline = d.now() + pollBudgetMs;

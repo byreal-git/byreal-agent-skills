@@ -24,6 +24,7 @@ import type { CancelTarget } from './lib/cancel-view.js';
 /** Loose view covering both the dry-run preview and the executed OrderPlaceResult. */
 export interface OrderPlaceView {
   mode?: string;
+  order_type?: string;
   orderID?: string;
   outcome?: string;
   status?: string | null;
@@ -333,11 +334,12 @@ export function renderCancelResult(d: CancelResultView): void {
 
 export function renderOrderPlace(d: OrderPlaceView): void {
   const heading = d.mode === 'dry-run' ? 'Order Place (dry-run)' : 'Order Placed';
-  console.log(chalk.cyan.bold(`\n  ${heading} — ${d.side}\n`));
+  console.log(chalk.cyan.bold(`\n  ${heading} — ${d.side}${d.order_type ? ' ' + d.order_type : ''}\n`));
   const table = new Table({ chars: TABLE_CHARS });
+  if (d.order_type) table.push([chalk.gray('Order Type'), d.order_type]);
   if (d.orderID) table.push([chalk.gray('Order ID'), d.orderID]);
   if (d.outcome) {
-    const c = d.outcome === 'settled' ? chalk.green : chalk.yellow;
+    const c = d.outcome === 'settled' || d.outcome === 'accepted' ? chalk.green : chalk.yellow;
     table.push([chalk.gray('Outcome'), c(d.outcome)]);
   }
   if (d.status != null) table.push([chalk.gray('Status'), String(d.status)]);
@@ -363,6 +365,13 @@ export function renderOrderPlace(d: OrderPlaceView): void {
   if (d.warning) console.log(chalk.yellow(`\n  ⚠ ${d.warning}`));
   if (d.outcome === 'pending') {
     console.error(chalk.gray('\n  [pending] not confirmed within poll budget; re-check via `order status` / data/order/{id}.'));
+  }
+  if (d.outcome === 'accepted') {
+    console.error(
+      chalk.gray(
+        '\n  [accepted] limit order is resting; backend keepalive registered. A resting order may still be auto-canceled by the CLOB if heartbeats lapse — re-check via `order active` / `order status`.',
+      ),
+    );
   }
 }
 

@@ -28,6 +28,7 @@ function makeDeps(over: Partial<PlaceDeps> & { polls?: Array<ReturnType<typeof o
     pollOnce: over.pollOnce ?? (async () => polls[Math.min(pi++, polls.length - 1)] as never),
     sleep: over.sleep ?? (async (ms: number) => { clock += ms; }),
     now: over.now ?? (() => clock),
+    registerKeepalive: over.registerKeepalive,
   };
 }
 
@@ -132,5 +133,75 @@ describe('runOrderPlace', () => {
     const r = await runOrderPlace(baseParams, makeDeps({ submit, syncBalance, polls: [ok<OpenOrder>({ id: 'o1', status: 'matched' })] }));
     expect(r.ok).toBe(true);
     expect(submit).toHaveBeenCalledTimes(2);
+  });
+
+  it('market order does NOT register keepalive', async () => {
+    const registerKeepalive = vi.fn(async () => {});
+    const r = await runOrderPlace(baseParams, makeDeps({ registerKeepalive, polls: [ok<OpenOrder>({ id: 'o1', status: 'matched' })] }));
+    expect(r.ok).toBe(true);
+    expect(registerKeepalive).not.toHaveBeenCalled();
+  });
+});
+
+describe('runOrderPlace — limit (GTC)', () => {
+  const limitParams: PlaceParams = { ...baseParams, kind: 'limit', signedPrice: '0.62', amount: '62' };
+
+  it('is accepted on submit (no settlement poll) and registers keepalive', async () => {
+    const pollOnce = vi.fn(async () => ok<OpenOrder>({ id: 'o1', status: 'live' }));
+    const registerKeepalive = vi.fn(async () => {});
+    const r = await runOrderPlace(
+      limitParams,
+      makeDeps({
+        submit: async () => ok<OrderResponse>({ success: true, orderID: 'o1', status: 'live' }),
+        pollOnce,
+        registerKeepalive,
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.outcome).toBe('accepted');
+      expect(r.value.orderID).toBe('o1');
+      expect(r.value.status).toBe('live');
+    }
+    expect(pollOnce).not.toHaveBeenCalled(); // limit: acceptance is terminal, no settlement poll
+    expect(registerKeepalive).toHaveBeenCalledWith('o1');
+  });
+
+  it('encode + submit use orderType GTC', async () => {
+    let encReq: { orderType?: string } | undefined;
+    let subBody: { orderType?: string } | undefined;
+    const r = await runOrderPlace(
+      limitParams,
+      makeDeps({
+        encode: async (req) => {
+          encReq = req;
+          return ok({ eip712: {} as never, signatureSuffix: 'aa', maker: '0xm', side: 'BUY' });
+        },
+        submit: async (body) => {
+          subBody = body;
+          return ok<OrderResponse>({ success: true, orderID: 'o1', status: 'live' });
+        },
+        registerKeepalive: async () => {},
+      }),
+    );
+    expect(r.ok).toBe(true);
+    expect(encReq?.orderType).toBe('GTC');
+    expect(subBody?.orderType).toBe('GTC');
+  });
+
+  it('keepalive failure does NOT fail the placed order', async () => {
+    const registerKeepalive = vi.fn(async () => {
+      throw new Error('keepalive 500');
+    });
+    const r = await runOrderPlace(
+      limitParams,
+      makeDeps({
+        submit: async () => ok<OrderResponse>({ success: true, orderID: 'o1', status: 'live' }),
+        registerKeepalive,
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.outcome).toBe('accepted');
+    expect(registerKeepalive).toHaveBeenCalled();
   });
 });
