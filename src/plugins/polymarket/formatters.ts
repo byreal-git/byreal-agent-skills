@@ -17,7 +17,7 @@ import type { EventListItem, EventDetail } from './lib/event-view.js';
 import type { Portfolio, FundingBalance } from './lib/portfolio-view.js';
 import type { EventCandidate } from './lib/whitelist.js';
 import type { OrderPreview } from './lib/order-view.js';
-import type { DepositPreview, WithdrawPreview, TransferStatus } from './lib/funding-view.js';
+import type { TransferStatus } from './lib/funding-view.js';
 import type { ReadinessVerdict, OpenOrder } from './types.js';
 import type { CancelTarget } from './lib/cancel-view.js';
 
@@ -142,6 +142,7 @@ export function renderPortfolio(p: Portfolio): void {
       chalk.cyan.bold('Market'),
       chalk.cyan.bold('Outcome'),
       chalk.cyan.bold('Size'),
+      chalk.cyan.bold('Sellable'),
       chalk.cyan.bold('Avg'),
       chalk.cyan.bold('Cur'),
       chalk.cyan.bold('PnL'),
@@ -154,6 +155,7 @@ export function renderPortfolio(p: Portfolio): void {
       pos.market_title ?? '-',
       pos.outcome_label ?? '-',
       pos.size,
+      pos.sellable_size,
       pos.avg_price ?? '-',
       pos.current_price ?? '-',
       `${pos.cash_pnl_usd ?? '-'} (${pos.cash_pnl_percent ?? '-'}%)`,
@@ -197,36 +199,6 @@ export function renderOrderPreview(o: OrderPreview): void {
   console.error(
     chalk.gray('\n  [preview] round-trip this snapshot to `order place --preview`; it re-quotes + checks PREVIEW_EXPIRED.'),
   );
-}
-
-export function renderDepositPreview(p: DepositPreview): void {
-  console.log(chalk.cyan.bold('\n  Deposit Preview — Solana USDC → Polymarket\n'));
-  const table = new Table({ chars: TABLE_CHARS });
-  table.push(
-    [chalk.gray('From'), `${p.from.amount} ${p.from.token} (solana)`],
-    [chalk.gray('To proxy wallet'), `${p.to.proxy_wallet} (polygon ${p.to.token})`],
-    [chalk.gray('Min deposit'), p.min_deposit ?? '-'],
-    [chalk.gray('Meets minimum'), String(p.meets_minimum)],
-    [chalk.gray('Deposit address'), p.deposit_address ?? 'n/a (quote/address unavailable)'],
-    [chalk.gray('Quote → amount'), p.quote.to_amount ?? '-'],
-    [chalk.gray('Est. time (ms)'), p.quote.est_time_ms != null ? String(p.quote.est_time_ms) : '-'],
-  );
-  console.log(table.toString());
-  console.error(chalk.gray(`\n  ${p.note}`));
-}
-
-export function renderWithdrawPreview(p: WithdrawPreview): void {
-  console.log(chalk.cyan.bold('\n  Withdraw Preview — Polymarket → Solana USDC\n'));
-  const table = new Table({ chars: TABLE_CHARS });
-  table.push(
-    [chalk.gray('From proxy wallet'), `${p.from.proxy_wallet} (polygon)`],
-    [chalk.gray('To recipient'), `${p.to.recipient} (solana ${p.to.token})`],
-    [chalk.gray('Min withdraw'), p.min_withdraw ?? '-'],
-    [chalk.gray('Meets minimum'), String(p.meets_minimum)],
-    [chalk.gray('Quote → amount'), p.quote.to_amount ?? '-'],
-  );
-  console.log(table.toString());
-  console.error(chalk.gray(`\n  ${p.note}`));
 }
 
 export function renderTransferStatus(s: TransferStatus): void {

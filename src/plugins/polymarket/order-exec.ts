@@ -197,6 +197,14 @@ export async function runOrderPlace(
     const pr = await d.pollOnce(orderID);
     const timedOut = d.now() >= deadline;
     if (pr.ok) {
+      // Immediately after a successful submit, CLOB/data may briefly return
+      // null/not-yet-indexed for the order id. Treat that as "not confirmed yet"
+      // instead of crashing after the order has already been accepted.
+      if (!pr.value) {
+        if (timedOut) return ok(base);
+        await d.sleep(pollIntervalMs);
+        continue;
+      }
       const c = classifyPoll(pr.value, timedOut);
       if (c.outcome === 'settled') return ok({ ...base, outcome: 'settled', status: c.order.status ?? base.status });
       if (c.outcome === 'pending') return ok({ ...base, outcome: 'pending', status: c.order.status ?? base.status });

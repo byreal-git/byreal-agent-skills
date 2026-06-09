@@ -201,18 +201,6 @@ const capabilities: Capability[] = [
     ],
   },
   {
-    id: 'pm.funding.deposit.preview',
-    name: 'Polymarket Deposit Preview',
-    description: 'Preview a Solana USDC → Polymarket deposit (read-only; submit via `funding deposit --execute`)',
-    category: 'query',
-    auth_required: false,
-    command: 'byreal-cli polymarket funding deposit-preview --amount <usdc>',
-    params: [
-      { name: 'amount', type: 'string', required: true, description: 'Amount in USDC (UI)' },
-      { name: 'evm-wallet-address', type: 'string', required: false, description: 'EVM EOA (proxy wallet target)' },
-    ],
-  },
-  {
     id: 'pm.funding.deposit.execute',
     name: 'Polymarket Deposit Execute',
     description: 'Deposit Solana USDC → Polymarket proxy (build SPL transfer → Privy sign → bridge submit → poll)',
@@ -228,29 +216,15 @@ const capabilities: Capability[] = [
     ],
   },
   {
-    id: 'pm.funding.withdraw.preview',
-    name: 'Polymarket Withdraw Preview',
-    description: 'Preview a Polymarket → Solana USDC withdraw (read-only; submit via `funding withdraw --execute`)',
-    category: 'query',
-    auth_required: false,
-    command: 'byreal-cli polymarket funding withdraw-preview --amount <usdc> --recipient <solanaAddr>',
-    params: [
-      { name: 'amount', type: 'string', required: true, description: 'Amount in USDC (UI)' },
-      { name: 'recipient', type: 'string', required: true, description: 'Destination Solana wallet' },
-      { name: 'evm-wallet-address', type: 'string', required: false, description: 'EVM EOA (proxy wallet source)' },
-    ],
-  },
-  {
     id: 'pm.funding.withdraw.execute',
     name: 'Polymarket Withdraw Execute',
     description:
-      'Withdraw Polymarket (Polygon proxy pUSD) → Solana USDC (quote → backend signs via Privy + relays → poll; CLI zero-signing)',
+      'Withdraw Polymarket (Polygon proxy pUSD) → embedded Solana USDC (quote → backend signs via Privy + relays → poll; CLI zero-signing)',
     category: 'execute',
     auth_required: true,
-    command: 'byreal-cli polymarket funding withdraw --amount <usdc> --recipient <solanaAddr> --execute',
+    command: 'byreal-cli polymarket funding withdraw --amount <usdc> --execute',
     params: [
       { name: 'amount', type: 'string', required: true, description: 'Amount in USDC (UI)' },
-      { name: 'recipient', type: 'string', required: true, description: 'Destination Solana wallet (any address; not auto the deposit source)' },
       { name: 'evm-wallet-address', type: 'string', required: false, description: 'EVM EOA (proxy wallet source)' },
       { name: 'execute', type: 'boolean', required: false, description: 'Submit the withdraw (real fund movement); default emits the prepared request' },
       { name: 'dry-run', type: 'boolean', required: false, description: 'Preview quote + min only' },

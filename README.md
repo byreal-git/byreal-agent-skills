@@ -159,10 +159,8 @@ If Privy is not configured, `--execute` fails fast with `PRIVY_NOT_CONFIGURED` a
 | `polymarket order active`   | Polymarket: list active (open) orders (L2) |
 | `polymarket order status`   | Polymarket: read a single order status (L2) |
 | `polymarket order cancel`   | Polymarket: cancel open orders (dry-run previews; execute cancels) |
-| `polymarket funding deposit` | Polymarket: deposit Solana USDC → Polygon proxy (bridge) |
-| `polymarket funding deposit-preview`  | Polymarket: deposit preview (Solana USDC → Polygon) |
-| `polymarket funding withdraw-preview` | Polymarket: withdraw preview (Polygon pUSD → Solana USDC) |
-| `polymarket funding withdraw`         | Polymarket: withdraw Polygon pUSD → Solana USDC (backend signs + relays; CLI zero-signing) |
+| `polymarket funding deposit` | Polymarket: deposit Solana USDC → Polygon proxy (use `--dry-run` to preview) |
+| `polymarket funding withdraw` | Polymarket: withdraw Polygon pUSD → embedded Solana USDC (use `--dry-run` to preview; backend signs + relays) |
 | `polymarket funding status`           | Polymarket: deposit/withdraw transfer status |
 | `update check`            | Check for CLI updates                          |
 

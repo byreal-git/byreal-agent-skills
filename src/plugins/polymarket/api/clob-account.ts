@@ -18,7 +18,7 @@ import { pmGet, type PmWriteAuth } from './gateway.js';
  */
 const SIGNATURE_TYPE_POLY_1271 = '3';
 
-/** GET /clob/balance-allowance?asset_type=&signature_type=POLY_1271(&token_id=). Raw /clob body. */
+/** GET /clob/balance-allowance?asset_type=&signature_type=3(&token_id=). Raw /clob body. */
 export function getBalanceAllowance(
   assetType: 'COLLATERAL' | 'CONDITIONAL',
   tokenId: string | undefined,

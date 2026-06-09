@@ -25,16 +25,12 @@ import { isBridgeTerminal, isBridgeSuccess } from '../lib/bridge-terminal.js';
 import { buildFundingBalance } from '../lib/portfolio-view.js';
 import {
   findUsdc,
-  buildDepositPreview,
-  buildWithdrawPreview,
   buildTransferStatus,
 } from '../lib/funding-view.js';
 import {
   outputPmError,
   outputPmSuccess,
   renderFundingBalance,
-  renderDepositPreview,
-  renderWithdrawPreview,
   renderTransferStatus,
   renderDepositResult,
   renderWithdrawResult,
@@ -53,6 +49,26 @@ const USDC_E_POLYGON = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
 // pUSD → toAmount 0.99, USDC.e → a misleading 1:1). Matches the frontend
 // (quote.ts uses assets.polymarket.tokenAddress = pUSD for the withdraw leg).
 const PUSD_POLYGON = '0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB';
+
+function resolveConfiguredSolanaWallet(): string | null {
+  return loadRealclawConfig()?.wallets?.find((w) => w.type === 'solana')?.address ?? null;
+}
+
+function requireConfiguredSolanaWallet(): string {
+  const solAddr = resolveConfiguredSolanaWallet();
+  if (!solAddr) {
+    throw validationError(
+      'No embedded Solana wallet configured. Configure a type:"solana" wallet in realclaw-config.json',
+      'wallet-address',
+    );
+  }
+  try {
+    new PublicKey(solAddr);
+  } catch {
+    throw validationError(`Invalid embedded Solana wallet address: ${solAddr}`, 'wallet-address');
+  }
+  return solAddr;
+}
 
 export function createFundingCommand(): Command {
   const cmd = new Command('funding').description('Polymarket funding (deposit / withdraw / status)');
@@ -83,54 +99,6 @@ export function createFundingCommand(): Command {
         cashRaw = baR.ok ? baR.value.balance : null;
       }
       outputPmSuccess(output, buildFundingBalance(value, proxyAddress, cashRaw), renderFundingBalance, startTime);
-    });
-
-  cmd
-    .command('deposit-preview')
-    .description('Preview a Solana USDC → Polymarket deposit (read-only; submit via `funding deposit --execute`)')
-    .requiredOption('--amount <amount>', 'Amount in USDC (UI)')
-    .option('--evm-wallet-address <addr>', 'EVM EOA (proxy wallet target)')
-    .action(async (options, cmdObj: Command) => {
-      const { output } = cmdObj.optsWithGlobals() as GlobalOptions;
-      const startTime = Date.now();
-
-      const proxyR = await resolveProxy(options.evmWalletAddress);
-      if (!proxyR.ok) outputPmError(output, proxyR.error);
-      const { proxyAddress } = proxyR.value;
-
-      const assetsR = await getSupportedAssets();
-      if (!assetsR.ok) outputPmError(output, assetsR.error);
-      const asset = findUsdc(assetsR.value);
-
-      // Quote + deposit address are best-effort (need a live funded flow).
-      const [quoteR, addrR] = await Promise.all([
-        getQuote({
-          fromChainId: SOLANA_BRIDGE_CHAIN_ID,
-          fromTokenAddress: USDC_SOLANA_MINT,
-          toChainId: POLYGON_CHAIN_ID,
-          toTokenAddress: USDC_E_POLYGON,
-          amount: options.amount,
-          recipientAddress: proxyAddress,
-        }),
-        getDepositAddress({
-          walletAddress: proxyAddress,
-          fromChainId: SOLANA_BRIDGE_CHAIN_ID,
-          fromTokenAddress: USDC_SOLANA_MINT,
-        }),
-      ]);
-
-      outputPmSuccess(
-        output,
-        buildDepositPreview({
-          amount: options.amount,
-          asset,
-          quote: quoteR.ok ? quoteR.value : null,
-          depositAddress: addrR.ok ? addrR.value.depositAddress : null,
-          proxyAddress,
-        }),
-        renderDepositPreview,
-        startTime,
-      );
     });
 
   cmd
@@ -203,9 +171,7 @@ export function createFundingCommand(): Command {
       }
 
       // Solana source wallet (signer) — global --wallet-address or config solana wallet
-      const solAddr =
-        globals.walletAddress ??
-        loadRealclawConfig()?.wallets?.find((w) => w.type === 'solana')?.address;
+      const solAddr = globals.walletAddress ?? resolveConfiguredSolanaWallet();
       if (!solAddr) {
         outputPmError(output, validationError('No Solana wallet. Pass --wallet-address or configure a type:"solana" wallet', 'wallet-address'));
         return;
@@ -214,12 +180,26 @@ export function createFundingCommand(): Command {
       // Build the unsigned SPL transfer (blockhash + recipient ATA checked on-chain)
       const conn = getConnection();
       const mint = new PublicKey(USDC_SOLANA_MINT);
+      const fromAta = getAssociatedTokenAddressSync(mint, new PublicKey(solAddr), true);
       const toAta = getAssociatedTokenAddressSync(mint, new PublicKey(depositAddress), true);
-      const [bh, toAtaInfo] = await Promise.all([
+      const amountRaw = new Decimal(options.amount).mul(new Decimal(10).pow(decimals)).toFixed(0);
+      const [bh, toAtaInfo, fromBalanceRaw] = await Promise.all([
         conn.getLatestBlockhash('confirmed'),
         conn.getAccountInfo(toAta),
+        conn.getTokenAccountBalance(fromAta)
+          .then((b) => b.value.amount)
+          .catch(() => '0'),
       ]);
-      const amountRaw = new Decimal(options.amount).mul(new Decimal(10).pow(decimals)).toFixed(0);
+      if (new Decimal(fromBalanceRaw).lt(amountRaw)) {
+        const balanceUi = new Decimal(fromBalanceRaw).div(new Decimal(10).pow(decimals)).toString();
+        outputPmError(
+          output,
+          validationError(
+            `insufficient Solana USDC balance: wallet ${solAddr} has ${balanceUi} USDC, deposit requires ${options.amount} USDC`,
+            'amount',
+          ),
+        );
+      }
       const unsignedTx = buildUnsignedSplTransfer({
         fromOwner: solAddr,
         depositOwner: depositAddress,
@@ -311,51 +291,9 @@ export function createFundingCommand(): Command {
     });
 
   cmd
-    .command('withdraw-preview')
-    .description('Preview a Polymarket → Solana USDC withdraw (read-only; submit via `funding withdraw --execute`)')
-    .requiredOption('--amount <amount>', 'Amount in USDC (UI)')
-    .requiredOption('--recipient <solanaAddress>', 'Destination Solana wallet')
-    .option('--evm-wallet-address <addr>', 'EVM EOA (proxy wallet source)')
-    .action(async (options, cmdObj: Command) => {
-      const { output } = cmdObj.optsWithGlobals() as GlobalOptions;
-      const startTime = Date.now();
-
-      const proxyR = await resolveProxy(options.evmWalletAddress);
-      if (!proxyR.ok) outputPmError(output, proxyR.error);
-      const { proxyAddress } = proxyR.value;
-
-      const assetsR = await getSupportedAssets();
-      if (!assetsR.ok) outputPmError(output, assetsR.error);
-      const asset = findUsdc(assetsR.value);
-
-      const quoteR = await getQuote({
-        fromChainId: POLYGON_CHAIN_ID,
-        fromTokenAddress: PUSD_POLYGON, // withdraw source = proxy's pUSD (accurate conversion)
-        toChainId: SOLANA_BRIDGE_CHAIN_ID,
-        toTokenAddress: USDC_SOLANA_MINT,
-        amount: options.amount,
-        recipientAddress: options.recipient,
-      });
-
-      outputPmSuccess(
-        output,
-        buildWithdrawPreview({
-          amount: options.amount,
-          asset,
-          quote: quoteR.ok ? quoteR.value : null,
-          recipientSolana: options.recipient,
-          proxyAddress,
-        }),
-        renderWithdrawPreview,
-        startTime,
-      );
-    });
-
-  cmd
     .command('withdraw')
-    .description('Withdraw Polymarket (Polygon proxy pUSD) → Solana USDC: quote → backend signs+relays → poll')
+    .description('Withdraw Polymarket (Polygon proxy pUSD) → embedded Solana USDC: quote → backend signs+relays → poll')
     .requiredOption('--amount <amount>', 'Amount in USDC (UI)')
-    .requiredOption('--recipient <solanaAddress>', 'Destination Solana wallet (any address — your deposit source or main wallet)')
     .option('--evm-wallet-address <addr>', 'EVM EOA (proxy wallet source)')
     .option('--execute', 'Submit the withdraw (backend signs via Privy + relays; real fund movement)')
     .option('--dry-run', 'Preview quote + min only; no submit')
@@ -363,6 +301,12 @@ export function createFundingCommand(): Command {
       const { output } = cmdObj.optsWithGlobals() as GlobalOptions;
       const startTime = Date.now();
       const mode = safeResolveExecutionMode(options, output);
+      let recipient: string;
+      try {
+        recipient = requireConfiguredSolanaWallet();
+      } catch (e) {
+        outputPmError(output, e as ByrealError);
+      }
 
       // proxy (Polygon source) — also the deposit-wallet lookup key for submit.
       const proxyR = await resolveProxy(options.evmWalletAddress);
@@ -386,7 +330,7 @@ export function createFundingCommand(): Command {
         toChainId: SOLANA_BRIDGE_CHAIN_ID,
         toTokenAddress: USDC_SOLANA_MINT,
         amount: options.amount,
-        recipientAddress: options.recipient,
+        recipientAddress: recipient,
       });
       if (!quoteR.ok) outputPmError(output, quoteR.error);
       const quote = quoteR.value;
@@ -397,7 +341,7 @@ export function createFundingCommand(): Command {
         walletAddress: proxyAddress,
         toChainId: SOLANA_BRIDGE_CHAIN_ID,
         toTokenAddress: USDC_SOLANA_MINT,
-        recipientAddr: options.recipient,
+        recipientAddr: recipient,
         amount: options.amount,
         quoteId: quote.quoteId,
       };
@@ -410,11 +354,11 @@ export function createFundingCommand(): Command {
             mode: 'dry-run',
             amount: options.amount,
             from_proxy: proxyAddress,
-            to_recipient: options.recipient,
+            to_recipient: recipient,
             quote_id: quote.quoteId,
             to_amount: quote.toAmount ?? null,
             min_withdraw: asset.minWithdrawAmount,
-            note: 'Funds go to --recipient (your explicit target — does NOT auto-return to the deposit source). CLI does not sign withdrawals; the backend signs via Privy + relays.',
+            note: 'Funds return to the embedded Solana wallet in realclaw-config. CLI does not sign withdrawals; the backend signs via Privy + relays.',
           },
           renderWithdrawResult,
           startTime,
@@ -488,7 +432,7 @@ export function createFundingCommand(): Command {
           outcome: isBridgeTerminal(order) ? (isBridgeSuccess(order) ? 'completed' : 'failed') : 'pending',
           amount: options.amount,
           from_proxy: proxyAddress,
-          to_recipient: options.recipient,
+          to_recipient: recipient,
           quote_id: quote.quoteId,
           tx_hash: order.txHash ?? order.txSignature ?? null,
         },

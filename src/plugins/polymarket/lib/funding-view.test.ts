@@ -3,11 +3,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   findUsdc,
-  buildDepositPreview,
-  buildWithdrawPreview,
   buildTransferStatus,
 } from './funding-view.js';
-import type { BridgeSupportedAsset, BridgeQuote, BridgeOrder } from '../api/bridge.js';
+import type { BridgeSupportedAsset, BridgeOrder } from '../api/bridge.js';
 
 const FX = path.join(__dirname, '..', '__fixtures__');
 function load<T>(name: string): T {
@@ -15,7 +13,6 @@ function load<T>(name: string): T {
 }
 
 const assets = load<{ data: BridgeSupportedAsset[] }>('bridge-supported-assets.json').data;
-const quote = load<{ data: BridgeQuote }>('bridge-quote.json').data;
 const orders = load<{ data: BridgeOrder[] }>('bridge-orders.json').data;
 
 describe('findUsdc (real supported-assets fixture)', () => {
@@ -24,48 +21,6 @@ describe('findUsdc (real supported-assets fixture)', () => {
     expect(u?.symbol).toBe('USDC');
     expect(u?.minDepositAmount).toBe('10');
     expect(u?.minWithdrawAmount).toBe('5');
-  });
-});
-
-describe('buildDepositPreview', () => {
-  it('assembles deposit preview; meets_minimum reflects min', () => {
-    const asset = findUsdc(assets);
-    const p = buildDepositPreview({
-      amount: '20',
-      asset,
-      quote,
-      depositAddress: 'SoLDepositAddr1111111111111111111111111111',
-      proxyAddress: '0xPROXY',
-    });
-    expect(p.direction).toBe('deposit');
-    expect(p.min_deposit).toBe('10');
-    expect(p.meets_minimum).toBe(true);
-    expect(p.from.amount).toBe('20');
-    expect(p.to.proxy_wallet).toBe('0xPROXY');
-    expect(p.deposit_address).toBe('SoLDepositAddr1111111111111111111111111111');
-    expect(p.quote.to_amount).toBe('19.94');
-  });
-
-  it('flags below-minimum deposits', () => {
-    const p = buildDepositPreview({ amount: '5', asset: findUsdc(assets), quote: null, depositAddress: null, proxyAddress: '0xP' });
-    expect(p.meets_minimum).toBe(false);
-  });
-});
-
-describe('buildWithdrawPreview', () => {
-  it('targets a Solana recipient; min from minWithdrawAmount', () => {
-    const w = buildWithdrawPreview({
-      amount: '10',
-      asset: findUsdc(assets),
-      quote,
-      recipientSolana: 'SoLRecipient1111111111111111111111111111111',
-      proxyAddress: '0xPROXY',
-    });
-    expect(w.direction).toBe('withdraw');
-    expect(w.to.chain).toBe('solana');
-    expect(w.to.recipient).toBe('SoLRecipient1111111111111111111111111111111');
-    expect(w.min_withdraw).toBe('5');
-    expect(w.meets_minimum).toBe(true);
   });
 });
 

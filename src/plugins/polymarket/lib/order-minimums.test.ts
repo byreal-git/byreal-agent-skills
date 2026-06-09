@@ -2,20 +2,19 @@ import { describe, it, expect } from 'vitest';
 import { checkOrderMinimum, MIN_NOTIONAL_USD } from './order-minimums.js';
 
 describe('checkOrderMinimum', () => {
-  // ---- market SELL: notional (size × signedPrice) must clear the min ----
-  it('rejects a market SELL whose notional is below the minimum (the live 47.5sh @0.005 = $0.24 case)', () => {
+  // ---- market SELL: frontend allows small partial sells; let CLOB decide. ----
+  it('does NOT reject a small market SELL below book min_order_size or $1 notional', () => {
     const v = checkOrderMinimum({
       kind: 'market',
       side: 'SELL',
-      shares: 47.5,
-      notionalUsd: 47.5 * 0.005, // ≈ 0.2375
+      shares: 1.5,
+      notionalUsd: 1.5 * 0.1615,
       minOrderSize: 5,
     });
-    expect(v.ok).toBe(false);
-    expect(v.reason).toMatch(/minimum order value|\$1/i);
+    expect(v.ok).toBe(true);
   });
 
-  it('passes a market SELL whose notional clears the minimum (the live 6.3795sh @0.616 = $3.93 case)', () => {
+  it('passes a market SELL whose notional clears the old local minimum', () => {
     const v = checkOrderMinimum({
       kind: 'market',
       side: 'SELL',
@@ -43,9 +42,15 @@ describe('checkOrderMinimum', () => {
     expect(v.ok).toBe(true);
   });
 
-  // ---- limit: shares vs book min_order_size (mirror frontend) ----
-  it('rejects a limit order below the book min_order_size (shares)', () => {
+  // ---- limit: shares vs book min_order_size ----
+  it('rejects a limit BUY below the book min_order_size (shares)', () => {
     const v = checkOrderMinimum({ kind: 'limit', side: 'BUY', shares: 3, notionalUsd: 3 * 0.05, minOrderSize: 5 });
+    expect(v.ok).toBe(false);
+    expect(v.reason).toMatch(/shares|minimum/i);
+  });
+
+  it('rejects a limit SELL below the book min_order_size (verified by CLOB rejection)', () => {
+    const v = checkOrderMinimum({ kind: 'limit', side: 'SELL', shares: 1, notionalUsd: 1 * 0.05, minOrderSize: 5 });
     expect(v.ok).toBe(false);
     expect(v.reason).toMatch(/shares|minimum/i);
   });

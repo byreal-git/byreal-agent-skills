@@ -55,6 +55,20 @@ describe('runOrderPlace', () => {
     expect(r.ok && r.value.outcome).toBe('settled');
   });
 
+  it('keeps polling when the order status endpoint briefly returns null after submit', async () => {
+    const r = await runOrderPlace(baseParams, makeDeps({
+      polls: [
+        ok(null as unknown as OpenOrder),
+        ok<OpenOrder>({ id: 'o1', status: 'matched' }),
+      ],
+    }));
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.outcome).toBe('settled');
+      expect(r.value.status).toBe('matched');
+    }
+  });
+
   it('returns pending when poll never terminal within budget', async () => {
     const r = await runOrderPlace(
       { ...baseParams, pollBudgetMs: 3000, pollIntervalMs: 1500 },
