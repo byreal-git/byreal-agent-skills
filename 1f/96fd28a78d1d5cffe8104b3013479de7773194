@@ -1,0 +1,32 @@
+src/plugins/polymarket/commands/order.ts
+  11bf0c6c1ad47f5a 32,206-229
+src/plugins/polymarket/lib/order-minimums.ts
+  11bf0c6c1ad47f5a 1-73
+src/plugins/polymarket/lib/order-minimums.test.ts
+  11bf0c6c1ad47f5a 1-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.2-bit.9+daa2e24",
+  "base_commit_sha": "1f96fd28a78d1d5cffe8104b3013479de7773194",
+  "prompts": {
+    "11bf0c6c1ad47f5a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a1aea0d8-fac9-4aee-b84d-187f808ec745",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "er.wang",
+      "messages": [],
+      "total_additions": 165,
+      "total_deletions": 0,
+      "accepted_lines": 256,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_b319a956e42fac": {
+      "author": "er.wang"
+    }
+  }
+}
