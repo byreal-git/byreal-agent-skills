@@ -117,7 +117,12 @@ export async function runOrderPlace(
         didBalanceSync = true;
         continue;
       }
-      return err(apiError(`order rejected: ${sub.value.errorMsg ?? sub.value.status ?? 'unknown'}`));
+      const reason =
+        sub.value.errorMsg ||
+        (sub.value as { error?: string }).error ||
+        sub.value.status ||
+        JSON.stringify(sub.value).slice(0, 200);
+      return err(apiError(`order rejected: ${reason}`));
     }
     resp = sub.value;
     break;
