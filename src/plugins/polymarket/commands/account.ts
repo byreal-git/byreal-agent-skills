@@ -8,11 +8,11 @@ import { Command } from 'commander';
 import type { GlobalOptions } from '../../../core/types.js';
 import { validationError, type ByrealError } from '../../../core/errors.js';
 import { safeResolveExecutionMode } from '../../../cli/output/formatters.js';
-import { printPrivySignBanner } from '../../../core/confirm.js';
 import { requireEvmPrivyContext } from '../../../privy/execute.js';
 import { getWalletStatus, deployWallet } from '../api/wallet.js';
 import { resolveEoa } from '../account.js';
 import { gatherReadiness } from '../readiness-gather.js';
+import { printPmDeploySubmitBanner } from '../banner.js';
 import {
   outputPmError,
   outputPmSuccess,
@@ -98,7 +98,7 @@ export function createAccountCommand(): Command {
         return;
       }
 
-      printPrivySignBanner();
+      printPmDeploySubmitBanner();
       let auth: { token: string; evmAddress: string };
       try {
         const ctx = requireEvmPrivyContext(options.evmWalletAddress);

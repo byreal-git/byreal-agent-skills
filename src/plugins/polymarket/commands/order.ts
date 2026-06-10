@@ -8,7 +8,7 @@ import {
   type ByrealError,
 } from '../../../core/errors.js';
 import { safeResolveExecutionMode } from '../../../cli/output/formatters.js';
-import { printDryRunBanner, printPrivySignBanner } from '../../../core/confirm.js';
+import { printDryRunBanner } from '../../../core/confirm.js';
 import {
   getEvmPrivyContext,
   requireEvmPrivyContext,
@@ -33,6 +33,7 @@ import { checkOrderMinimum } from '../lib/order-minimums.js';
 import { gatherReadiness } from '../readiness-gather.js';
 import { runOrderPlace, type PlaceDeps } from '../order-exec.js';
 import { getPmConfig } from '../config.js';
+import { printPmCancelSubmitBanner, printPmOrderSubmitBanner } from '../banner.js';
 import {
   outputPmError,
   outputPmSuccess,
@@ -307,7 +308,7 @@ export function createOrderCommand(): Command {
       }
 
       // ---- execute: readiness gate → encode → sign → submit → poll/accept ----
-      printPrivySignBanner();
+      printPmOrderSubmitBanner();
       const rr = await gatherReadiness({
         auth,
         tokenId: options.tokenId,
@@ -434,7 +435,7 @@ export function createOrderCommand(): Command {
         return;
       }
 
-      printPrivySignBanner();
+      printPmCancelSubmitBanner();
       if (targets.length === 0) {
         outputPmError(output, validationError('no matching open orders to cancel', 'order-id'));
       }

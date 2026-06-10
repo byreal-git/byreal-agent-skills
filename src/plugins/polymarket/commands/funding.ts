@@ -5,7 +5,7 @@ import { getAssociatedTokenAddressSync } from '@solana/spl-token';
 import type { GlobalOptions } from '../../../core/types.js';
 import { validationError, sourceUnavailableError, type ByrealError } from '../../../core/errors.js';
 import { safeResolveExecutionMode } from '../../../cli/output/formatters.js';
-import { printDryRunBanner, printPrivySignBanner } from '../../../core/confirm.js';
+import { printDryRunBanner } from '../../../core/confirm.js';
 import { getConnection } from '../../../core/solana.js';
 import { getPrivyContext, getEvmPrivyContext, requireEvmPrivyContext, privySignMany } from '../../../privy/execute.js';
 import { getBalanceAllowance } from '../api/clob-account.js';
@@ -20,6 +20,7 @@ import {
   submitWithdraw,
 } from '../api/bridge.js';
 import { resolveProxy } from '../account.js';
+import { printPmDepositSubmitBanner, printPmWithdrawSubmitBanner } from '../banner.js';
 import { buildUnsignedSplTransfer } from '../lib/deposit-tx.js';
 import { isBridgeTerminal, isBridgeSuccess } from '../lib/bridge-terminal.js';
 import { buildFundingBalance } from '../lib/portfolio-view.js';
@@ -237,7 +238,7 @@ export function createFundingCommand(): Command {
       }
 
       // execute: sign Solana tx (no broadcast) → submit (backend broadcasts) → poll
-      printPrivySignBanner();
+      printPmDepositSubmitBanner();
       let evmAuth: { token: string; evmAddress: string };
       try {
         const evmCtx = requireEvmPrivyContext(options.evmWalletAddress);
@@ -394,7 +395,7 @@ export function createFundingCommand(): Command {
       }
 
       // submit (no client signing) → poll 3s × ≤30s → terminal | pending
-      printPrivySignBanner();
+      printPmWithdrawSubmitBanner();
       const subR = await submitWithdraw(submitBody, evmAuth);
       if (!subR.ok) {
         // The backend signs the withdraw typed-data server-side via Privy. A 40902
