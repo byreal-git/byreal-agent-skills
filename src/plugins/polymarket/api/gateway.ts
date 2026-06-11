@@ -19,6 +19,7 @@ import {
   PM_GATEWAY_HOST_DEFAULT,
   PM_GATEWAY_BASE_PATH,
 } from '../../../core/constants.js';
+import { loadRealclawConfig } from '../../../privy/config.js';
 import { ok, err } from '../../../core/types.js';
 import type { Result } from '../../../core/types.js';
 import type { ByrealError } from '../../../core/errors.js';
@@ -29,14 +30,42 @@ export type PmBase = 'v1' | 'clob' | 'gamma' | 'data';
 export type PmQueryParams = Record<string, string | number | boolean | undefined>;
 
 export interface PmGetOptions {
-  /** Override the gateway host (defaults to PM_GATEWAY_HOST_DEFAULT). */
+  /** Override the gateway host (defaults to `resolvePmGatewayHost()`). */
   host?: string;
   /** Extra request headers (Phase B write auth). */
   headers?: Record<string, string>;
 }
 
+/**
+ * Pure host precedence: env → realclaw-config `baseUrl` → hardcoded default.
+ * Trailing slashes are stripped so concatenation with PM_GATEWAY_BASE_PATH never
+ * produces a double slash. Exported for unit tests.
+ */
+export function pickGatewayHost(
+  envHost: string | undefined,
+  configBaseUrl: string | undefined,
+): string {
+  const raw = envHost?.trim() || configBaseUrl?.trim() || PM_GATEWAY_HOST_DEFAULT;
+  return raw.replace(/\/+$/, '');
+}
+
+/**
+ * Resolve the effective PM gateway host at call time. Precedence (highest first):
+ *   1. PM_GATEWAY_HOST env var
+ *   2. ~/.openclaw/realclaw-config.json `baseUrl` (matches the active agent token
+ *      + proxy wallet, which are per-environment)
+ *   3. PM_GATEWAY_HOST_DEFAULT (prod)
+ *
+ * Resolved per request (not memoized) so env/config changes take effect without a
+ * process restart; the cost is one small sync file read per gateway call, which is
+ * negligible against the network round-trip it precedes.
+ */
+export function resolvePmGatewayHost(): string {
+  return pickGatewayHost(process.env.PM_GATEWAY_HOST, loadRealclawConfig()?.baseUrl);
+}
+
 function buildUrl(base: PmBase, path: string, params?: PmQueryParams, host?: string): string {
-  const root = `${host ?? PM_GATEWAY_HOST_DEFAULT}${PM_GATEWAY_BASE_PATH}/${base}${path}`;
+  const root = `${host ?? resolvePmGatewayHost()}${PM_GATEWAY_BASE_PATH}/${base}${path}`;
   if (!params) return root;
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {

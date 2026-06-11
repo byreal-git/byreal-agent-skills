@@ -1,5 +1,59 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { pmGet, pmWrite } from './gateway.js';
+import { pmGet, pmWrite, pickGatewayHost, resolvePmGatewayHost } from './gateway.js';
+import { PM_GATEWAY_HOST_DEFAULT } from '../../../core/constants.js';
+import { loadRealclawConfig } from '../../../privy/config.js';
+
+vi.mock('../../../privy/config.js', () => ({
+  loadRealclawConfig: vi.fn(() => null),
+}));
+
+describe('pickGatewayHost (pure precedence)', () => {
+  it('prefers env host over config baseUrl and default', () => {
+    expect(pickGatewayHost('https://env.host', 'https://cfg.host')).toBe('https://env.host');
+  });
+
+  it('falls back to config baseUrl when env is unset/empty/blank', () => {
+    expect(pickGatewayHost(undefined, 'https://cfg.host')).toBe('https://cfg.host');
+    expect(pickGatewayHost('', 'https://cfg.host')).toBe('https://cfg.host');
+    expect(pickGatewayHost('   ', 'https://cfg.host')).toBe('https://cfg.host');
+  });
+
+  it('falls back to the hardcoded default when env and config are both absent', () => {
+    expect(pickGatewayHost(undefined, undefined)).toBe(PM_GATEWAY_HOST_DEFAULT);
+    expect(pickGatewayHost('', '')).toBe(PM_GATEWAY_HOST_DEFAULT);
+  });
+
+  it('strips trailing slashes so base-path concatenation stays clean', () => {
+    expect(pickGatewayHost(undefined, 'https://cfg.host/')).toBe('https://cfg.host');
+    expect(pickGatewayHost('https://env.host///', undefined)).toBe('https://env.host');
+  });
+});
+
+describe('resolvePmGatewayHost (wired: env → realclaw baseUrl → default)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.mocked(loadRealclawConfig).mockReset();
+    vi.mocked(loadRealclawConfig).mockReturnValue(null);
+  });
+
+  it('reads PM_GATEWAY_HOST env first (config not even consulted)', () => {
+    vi.stubEnv('PM_GATEWAY_HOST', 'https://env.host');
+    vi.mocked(loadRealclawConfig).mockReturnValue({ baseUrl: 'https://cfg.host' });
+    expect(resolvePmGatewayHost()).toBe('https://env.host');
+  });
+
+  it('falls back to realclaw-config baseUrl when env is unset', () => {
+    vi.stubEnv('PM_GATEWAY_HOST', '');
+    vi.mocked(loadRealclawConfig).mockReturnValue({ baseUrl: 'https://cfg.host' });
+    expect(resolvePmGatewayHost()).toBe('https://cfg.host');
+  });
+
+  it('falls back to the hardcoded default when neither env nor config provides a host', () => {
+    vi.stubEnv('PM_GATEWAY_HOST', '');
+    vi.mocked(loadRealclawConfig).mockReturnValue(null);
+    expect(resolvePmGatewayHost()).toBe(PM_GATEWAY_HOST_DEFAULT);
+  });
+});
 
 describe('pmGet', () => {
   afterEach(() => vi.unstubAllGlobals());

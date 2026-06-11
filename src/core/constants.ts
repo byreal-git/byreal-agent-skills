@@ -160,15 +160,23 @@ export const POLYGON_MAINNET_CAIP2 = "eip155:137";
 // Same proxy + apiBasePath as Solana; only the terminal path differs.
 export const SIGN_EVM_TYPED_DATA_PATH = "/sign/evm-typed-data";
 
-// Byreal Polymarket gateway. Production (api2.byreal.io) went live ~2026-06-08
-// (verified: /byreal/api/gw/pm/* returns 200, categories/events/search all work)
-// and is now the default. Override with PM_GATEWAY_HOST to point back at the test
-// host (api2.sbu-test-5.bybit.com) — but note the agent token + proxy wallet are
-// per-environment, so the gateway host must match the active realclaw-config
-// (test config → test host, prod config → prod host).
+// Byreal Polymarket gateway host fallback. Production (api2.byreal.io) went live
+// ~2026-06-08 (verified: /byreal/api/gw/pm/* returns 200, categories/events/search
+// all work) and is the final hardcoded fallback.
+//
+// The EFFECTIVE host is resolved at call time by `resolvePmGatewayHost()` in
+// plugins/polymarket/api/gateway.ts, with this precedence:
+//   1. PM_GATEWAY_HOST env var
+//   2. ~/.openclaw/realclaw-config.json `baseUrl` — keeps the gateway host in sync
+//      with the active agent token + proxy wallet (both per-environment). NOTE this
+//      assumes `baseUrl` IS the gateway origin, which holds in prod (the PM gateway
+//      and the Privy proxy are both api2.byreal.io) but NOT in test, where the
+//      gateway (api2.sbu-test-5.bybit.com) and the Privy-proxy `baseUrl`
+//      (byreal-privy-proxy-sbu-test-5.devtest.bybit-ops.com) are different hosts —
+//      so test still requires PM_GATEWAY_HOST (precedence 1).
+//   3. this hardcoded default (prod)
 // See docs/polymarket-cli/02-backend-gateway.md + 04 §2.1.
-export const PM_GATEWAY_HOST_DEFAULT =
-  process.env.PM_GATEWAY_HOST ?? "https://api2.byreal.io";
+export const PM_GATEWAY_HOST_DEFAULT = "https://api2.byreal.io";
 // Common context-path prefix; concrete clients append /v1 | /clob | /gamma.
 export const PM_GATEWAY_BASE_PATH = "/byreal/api/gw/pm";
 
