@@ -34,7 +34,7 @@ export function createEventCommand(): Command {
       const startTime = Date.now();
       const limit = options.limit ? parseInt(options.limit, 10) : 10;
 
-      const r = await getPmData(options.categoryId, 1, Math.max(limit * 2, 50));
+      const r = await getPmData(options.categoryId, 1, 100);
       if (!r.ok) outputPmError(output, r.error);
       const records = r.value.records ?? [];
       if (records.length === 0) outputPmError(output, noTradableEventsError(options.categoryId));
