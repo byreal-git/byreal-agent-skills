@@ -21,6 +21,11 @@ import { createStatsCommand } from './cli/commands/stats.js';
 import { checkForUpdate, printUpdateNotice } from './core/update-check.js';
 import { showPreviousUpdateResult, triggerBackgroundUpdate, isAutoUpdateEnabled, isAutoUpdateSuppressed } from './core/auto-updater.js';
 
+// The CLMM SDK logs diagnostics ("Compute unit limit: N", "Transaction sent: ...")
+// via console.info, which Node writes to stdout. Route them to stderr so stdout
+// carries only the command output (JSON payload / unsigned transactions).
+console.info = console.error;
+
 // ============================================
 // Main Program
 // ============================================

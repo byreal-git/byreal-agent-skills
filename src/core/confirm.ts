@@ -43,15 +43,15 @@ export function requireExecutionMode(mode: ExecutionMode, commandName: string): 
 }
 
 /**
- * Print dry-run banner
+ * Print dry-run banner (stderr — stdout is reserved for the JSON payload)
  */
 export function printDryRunBanner(): void {
-  console.log(chalk.yellow.bold('\n[DRY RUN] No transaction will be executed\n'));
+  console.error(chalk.yellow.bold('\n[DRY RUN] No transaction will be executed\n'));
 }
 
 /**
- * Print confirm banner
+ * Print confirm banner (stderr — stdout is reserved for the JSON payload)
  */
 export function printConfirmBanner(): void {
-  console.log(chalk.green.bold('\n[CONFIRM] Executing transaction...\n'));
+  console.error(chalk.green.bold('\n[CONFIRM] Executing transaction...\n'));
 }
